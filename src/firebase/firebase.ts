@@ -28,6 +28,7 @@ const customConfig = getSavedCustomConfig();
 const firebaseConfig = {
   apiKey: customConfig?.apiKey || env.VITE_FIREBASE_API_KEY || firebaseConfigJson.apiKey || "",
   authDomain: customConfig?.authDomain || env.VITE_FIREBASE_AUTH_DOMAIN || firebaseConfigJson.authDomain || "",
+  databaseURL: customConfig?.databaseURL || env.VITE_FIREBASE_DATABASE_URL || (firebaseConfigJson as any).databaseURL || "",
   projectId: customConfig?.projectId || env.VITE_FIREBASE_PROJECT_ID || firebaseConfigJson.projectId || "",
   storageBucket: customConfig?.storageBucket || env.VITE_FIREBASE_STORAGE_BUCKET || firebaseConfigJson.storageBucket || "",
   messagingSenderId: customConfig?.messagingSenderId || env.VITE_FIREBASE_MESSAGING_SENDER_ID || firebaseConfigJson.messagingSenderId || "",

@@ -1,12 +1,13 @@
 {
-  "projectId": "vickytex---qualidade",
-  "appId": "1:1072814779864:web:945758d9b7b6c9a680d6ad",
-  "apiKey": "AIzaSyBdXXqS5XTpewSFiRpxIvi-CiNnhdFhJ8Q",
-  "authDomain": "vickytex---qualidade.firebaseapp.com",
-  "firestoreDatabaseId": "ai-studio-sgqwebvickytex-76a29e23-b007-4b15-8451-a5c845668dd4",
-  "storageBucket": "vickytex---qualidade.firebasestorage.app",
-  "messagingSenderId": "1072814779864",
+  "projectId": "sgq-vickytex-web",
+  "appId": "1:737693119979:web:60296933c7a457f48bd5ae",
+  "apiKey": "AIzaSyC-KEW16aVtqzhYDxTViIr2Kcd773JMmJs",
+  "authDomain": "sgq-vickytex-web.firebaseapp.com",
+  "databaseURL": "https://sgq-vickytex-web-default-rtdb.firebaseio.com",
+  "firestoreDatabaseId": "(default)",
+  "storageBucket": "sgq-vickytex-web.firebasestorage.app",
+  "messagingSenderId": "737693119979",
   "measurementId": "",
-  "oAuthClientId": "1072814779864-shvjf33p0vll7dvmpmvnmmde0a9j184h.apps.googleusercontent.com",
+  "oAuthClientId": "",
   "recaptchaSiteKey": ""
 }
