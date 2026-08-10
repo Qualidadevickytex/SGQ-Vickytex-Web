@@ -22,6 +22,8 @@ import {
 } from 'lucide-react';
 import { Documento, ActivityLog, Auditoria, NaoConformidade, PlanoAcao, RiscoOportunidade, Auditoria5S, UserAccount, RolePermission } from '../types';
 import { INITIAL_FORNECEDORES } from '../utils/mockData';
+import { db } from '../firebase/firebase';
+import { collection, getDocs } from 'firebase/firestore';
 
 interface DatabaseViewerProps {
   documents: Documento[];
@@ -71,6 +73,7 @@ export const DatabaseViewer: React.FC<DatabaseViewerProps> = ({
     return {
       apiKey: '',
       authDomain: '',
+      databaseURL: '',
       projectId: '',
       storageBucket: '',
       messagingSenderId: '',
@@ -92,6 +95,7 @@ export const DatabaseViewer: React.FC<DatabaseViewerProps> = ({
     const parsed = {
       apiKey: extractVal('apiKey') || cloudFields.apiKey,
       authDomain: extractVal('authDomain') || cloudFields.authDomain,
+      databaseURL: extractVal('databaseURL') || cloudFields.databaseURL,
       projectId: extractVal('projectId') || cloudFields.projectId,
       storageBucket: extractVal('storageBucket') || cloudFields.storageBucket,
       messagingSenderId: extractVal('messagingSenderId') || cloudFields.messagingSenderId,
@@ -104,8 +108,10 @@ export const DatabaseViewer: React.FC<DatabaseViewerProps> = ({
   const handleSaveCloudConfig = () => {
     try {
       localStorage.setItem('vickytex_custom_firebase_config', JSON.stringify(cloudFields));
-      setSaveSuccessMsg('Configuração salva com sucesso! Sincronização ativada.');
-      setTimeout(() => setSaveSuccessMsg(''), 4000);
+      setSaveSuccessMsg('Configuração salva com sucesso! Reiniciando aplicação para conectar ao novo projeto...');
+      setTimeout(() => {
+        window.location.reload();
+      }, 1200);
     } catch {
       alert('Erro ao salvar no navegador');
     }
@@ -115,6 +121,7 @@ export const DatabaseViewer: React.FC<DatabaseViewerProps> = ({
     const codeToCopy = `const firebaseConfig = {
   apiKey: "${cloudFields.apiKey || ''}",
   authDomain: "${cloudFields.authDomain || ''}",
+  databaseURL: "${cloudFields.databaseURL || ''}",
   projectId: "${cloudFields.projectId || ''}",
   storageBucket: "${cloudFields.storageBucket || ''}",
   messagingSenderId: "${cloudFields.messagingSenderId || ''}",
@@ -141,19 +148,28 @@ export const DatabaseViewer: React.FC<DatabaseViewerProps> = ({
     return Math.max(0.2, Number(totalMB));
   };
 
-  const handleTestConnections = () => {
+  const handleTestConnections = async () => {
     setIsRefreshing(true);
     const start = performance.now();
-    setTimeout(() => {
+    const nowStr = new Date().toLocaleTimeString('pt-BR');
+    const dateStr = new Date().toISOString().substring(0, 10);
+    try {
+      const snap = await getDocs(collection(db, 'documents'));
       const duration = Math.round(performance.now() - start);
       setPingLatency(Math.max(2, duration));
-      const nowStr = new Date().toLocaleTimeString('pt-BR');
       setLastCheckTime(nowStr);
-      setIsRefreshing(false);
       
-      const newLog = `[${new Date().toISOString().substring(0, 10)} ${nowStr}] [INFO] Cloud Firestore health check OK (${duration}ms latency, query success)`;
+      const newLog = `[${dateStr} ${nowStr}] [INFO] Conexão Cloud Firestore OK - Projeto Ativo: "${db.app.options.projectId}" (${duration}ms, ${snap.size} documentos lidos)`;
       setCustomLogs(prev => [newLog, ...prev]);
-    }, 300);
+    } catch (err: any) {
+      const duration = Math.round(performance.now() - start);
+      setPingLatency(duration);
+      setLastCheckTime(nowStr);
+      const errLog = `[${dateStr} ${nowStr}] [ERRO] Falha no teste Firestore: ${err?.message || err}`;
+      setCustomLogs(prev => [errLog, ...prev]);
+    } finally {
+      setIsRefreshing(false);
+    }
   };
 
   const getCollectionData = () => {
