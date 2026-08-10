@@ -1,0 +1,24 @@
+# Configuração de Deploy para Netlify
+# Vickytex - Sistema de Gestão da Qualidade (SGQ WEB)
+
+[build]
+  # Diretório contendo os arquivos estáticos após o build do Vite
+  publish = "dist"
+  
+  # Comando de build padrão para converter a aplicação TypeScript/React em estáticos
+  command = "npm run build"
+
+# Regra de Redirecionamento SPA (Single Page Application)
+# Redireciona todas as rotas internas do React Router de volta para o index.html com status 200.
+# Isso impede erros 404 ao atualizar a página (F5) ou acessar links diretos.
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+  force = false
+
+[context.production.environment]
+  # Defina as variáveis de ambiente de Produção diretamente no painel do Netlify,
+  # ou utilize este bloco para declarar variáveis não confidenciais.
+  # VITE_API_URL = "https://sua-instancia-sgq-api.vickytex.com.br"
+  NODE_VERSION = "20"

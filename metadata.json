@@ -1,0 +1,6 @@
+{
+  "name": "SGQ Web Vickytex",
+  "description": "SGQ Web Vickytex v1.0.0 — Sistema de Gestão da Qualidade profissional para a Vickytex, integrando ISO 9001:2015, controle de documentos, auditorias, 5S e relatórios integrados.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

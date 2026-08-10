@@ -1,0 +1,29 @@
+@import "tailwindcss";
+
+@variant dark (&:where(.dark, .dark *));
+
+@media print {
+  /* Oculta botões e componentes de interface comuns */
+  button, .no-print, .no-print *, [role="button"], header, nav, aside, footer, #brand-footer, #top-navbar {
+    display: none !important;
+  }
+  
+  /* Garante que o container principal ocupe toda a largura sem barras de rolagem */
+  body, #root, #main-content-panel, #main-scroll-view {
+    background: white !important;
+    color: black !important;
+    width: 100% !important;
+    height: auto !important;
+    min-height: auto !important;
+    overflow: visible !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    position: static !important;
+  }
+
+  /* Força a impressão de cores de fundo de badges, tabelas e gráficos */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+}
