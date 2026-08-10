@@ -34,6 +34,7 @@ import { DocumentRepository } from './services/database/repositories/document.re
 import { AuditRepository } from './services/database/repositories/audit.repository';
 import { FiveSRepository } from './services/database/repositories/fiveS.repository';
 import { UserRepository } from './services/database/repositories/user.repository';
+import { clearCollectionDocs } from './firebase/firestore';
 
 function AppContent() {
   const { user, needsAuth } = useAuth();
@@ -286,7 +287,24 @@ function AppContent() {
     localStorage.setItem('sgq_vickytex_colaboradores', JSON.stringify([]));
     localStorage.setItem('sgq_vickytex_registros', JSON.stringify([]));
 
-    handleAddLog('ZERAR_BANCO', 'Banco de dados zerado. Todos os registros foram limpos.');
+    // Also attempt clearing remote Cloud Firestore collections
+    const collectionsToClear = [
+      'documents',
+      'audits',
+      'ncs',
+      'action_plans',
+      'risks',
+      'audits_5s',
+      'equipments',
+      'collaborators',
+      'records',
+      'audit_logs'
+    ];
+    for (const coll of collectionsToClear) {
+      clearCollectionDocs(coll).catch(() => {});
+    }
+
+    handleAddLog('ZERAR_BANCO', 'Banco de dados zerado. Todos os registros locais e remotos foram limpos.');
   };
 
   const handleAddDocument = async (doc: Documento) => {

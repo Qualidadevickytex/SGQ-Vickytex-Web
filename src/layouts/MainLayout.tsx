@@ -176,19 +176,30 @@ export const MainLayout: React.FC<MainLayoutProps> = ({
               </div>
             </div>
 
-            {/* Profile Simulator Selector */}
-            <div className="space-y-1">
-              <label className="text-[9px] text-blue-300 font-bold">Trocar Nível Técnico:</label>
-              <select
-                value={user?.role}
-                onChange={(e) => switchProfile(e.target.value as UserRole)}
-                className="w-full text-[10px] bg-[#092B4B] text-blue-100 border border-white/10 rounded-md p-1 font-semibold focus:outline-hidden"
-              >
-                {PRESET_ROLES.map((r) => (
-                  <option key={r.role} value={r.role}>{r.name}</option>
-                ))}
-              </select>
-            </div>
+            {/* Profile Simulator Selector - Restricted to Administrador */}
+            {user?.role === 'Administrador' ? (
+              <div className="space-y-1 border-t border-white/10 pt-2 mt-1">
+                <div className="flex items-center justify-between">
+                  <label className="text-[9px] text-blue-300 font-bold">Simular Outro Perfil (TI):</label>
+                  <span className="text-[8px] bg-amber-500/30 text-amber-200 px-1 rounded font-mono">DEV/ADMIN</span>
+                </div>
+                <select
+                  value={user?.role}
+                  onChange={(e) => switchProfile(e.target.value as UserRole)}
+                  className="w-full text-[10px] bg-[#092B4B] text-blue-100 border border-white/10 rounded-md p-1 font-semibold focus:outline-hidden"
+                >
+                  {PRESET_ROLES.map((r) => (
+                    <option key={r.role} value={r.role}>{r.name}</option>
+                  ))}
+                </select>
+              </div>
+            ) : (
+              <div className="border-t border-white/10 pt-1.5 mt-1">
+                <p className="text-[9px] text-blue-200/60 font-medium italic">
+                  🔒 Nível de acesso fixado pelo login corporativo
+                </p>
+              </div>
+            )}
           </div>
 
           <button 
@@ -330,15 +341,17 @@ export const MainLayout: React.FC<MainLayoutProps> = ({
                 </div>
               </div>
 
-              <select
-                value={user?.role}
-                onChange={(e) => switchProfile(e.target.value as UserRole)}
-                className="w-full text-xs bg-[#092B4B] text-blue-100 border border-white/10 rounded-md p-1.5 focus:outline-hidden"
-              >
-                {PRESET_ROLES.map((r) => (
-                  <option key={r.role} value={r.role}>{r.name}</option>
-                ))}
-              </select>
+              {user?.role === 'Administrador' && (
+                <select
+                  value={user?.role}
+                  onChange={(e) => switchProfile(e.target.value as UserRole)}
+                  className="w-full text-xs bg-[#092B4B] text-blue-100 border border-white/10 rounded-md p-1.5 focus:outline-hidden"
+                >
+                  {PRESET_ROLES.map((r) => (
+                    <option key={r.role} value={r.role}>{r.name}</option>
+                  ))}
+                </select>
+              )}
 
               <button 
                 onClick={logout}

@@ -65,3 +65,12 @@ export const queryDocs = async <T = DocumentData>(collectionName: string, ...con
   });
   return items;
 };
+
+export const clearCollectionDocs = async (collectionName: string): Promise<void> => {
+  try {
+    const docs = await getAllDocs(collectionName);
+    await Promise.all(docs.map(d => deleteDocById(collectionName, d.id)));
+  } catch (err) {
+    console.warn(`[Firestore] Failed to clear collection ${collectionName}:`, err);
+  }
+};
