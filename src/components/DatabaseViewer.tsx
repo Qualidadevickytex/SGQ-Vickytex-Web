@@ -33,7 +33,6 @@ interface DatabaseViewerProps {
   auditorias5s: Auditoria5S[];
   users?: UserAccount[];
   permissions?: RolePermission[];
-  onResetToDemoData?: () => void;
   onClearAllData?: () => void;
 }
 
@@ -47,7 +46,6 @@ export const DatabaseViewer: React.FC<DatabaseViewerProps> = ({
   auditorias5s,
   users = [],
   permissions = [],
-  onResetToDemoData,
   onClearAllData
 }) => {
   const [viewMode, setViewMode] = useState<'admin_panel' | 'collections' | 'cloud_integration'>('admin_panel');
@@ -438,54 +436,31 @@ export const DatabaseViewer: React.FC<DatabaseViewerProps> = ({
             <div className="flex items-center space-x-2">
               <ShieldAlert className="w-5 h-5 text-rose-500" />
               <div>
-                <h4 className="text-xs font-bold text-rose-400 uppercase tracking-wider font-mono">Manutenção e Reset do Banco de Dados</h4>
-                <p className="text-[11px] text-slate-400">Opções administrativas para redefinir registros de teste ou zerar o sistema em produção</p>
+                <h4 className="text-xs font-bold text-rose-400 uppercase tracking-wider font-mono">Manutenção e Zerar Banco de Dados</h4>
+                <p className="text-[11px] text-slate-400">Opção administrativa para zerar e limpar todos os registros do sistema</p>
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
-              <div className="bg-slate-900/80 p-3.5 rounded-lg border border-slate-800 space-y-2 flex flex-col justify-between">
-                <div>
-                  <h5 className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
-                    <RotateCcw className="w-3.5 h-3.5 text-blue-400" />
-                    Restaurar Dados Demonstrativos
-                  </h5>
-                  <p className="text-[10px] text-slate-400 mt-1">
-                    Restaura os dados de exemplo do SGQ Vickytex (Documentos ISO 9001, Auditorias e Planos de Ação padrão).
-                  </p>
-                </div>
-                <button
-                  onClick={() => {
-                    if (window.confirm('Tem certeza que deseja restaurar os dados de demonstração padrão do SGQ Vickytex?')) {
-                      onResetToDemoData?.();
-                    }
-                  }}
-                  className="w-full text-xs font-bold bg-blue-600/20 hover:bg-blue-600/30 text-blue-300 border border-blue-500/30 px-3 py-2 rounded-lg transition-colors flex items-center justify-center gap-2 cursor-pointer mt-2"
-                >
-                  <RotateCcw className="w-3.5 h-3.5" />
-                  Restaurar Padrão de Fábrica
-                </button>
-              </div>
-
-              <div className="bg-slate-900/80 p-3.5 rounded-lg border border-rose-900/30 space-y-2 flex flex-col justify-between">
+            <div className="pt-1">
+              <div className="bg-slate-900/80 p-4 rounded-lg border border-rose-900/30 space-y-2 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                 <div>
                   <h5 className="text-xs font-bold text-rose-300 flex items-center gap-1.5">
-                    <Trash2 className="w-3.5 h-3.5 text-rose-400" />
+                    <Trash2 className="w-4 h-4 text-rose-400" />
                     Zerar Banco de Dados (Limpar Tudo)
                   </h5>
-                  <p className="text-[10px] text-slate-400 mt-1">
-                    Apaga permanentemente todos os registros locais do banco de dados para iniciar o sistema 100% limpo do zero.
+                  <p className="text-[11px] text-slate-400 mt-1">
+                    Apaga permanentemente todos os registros do banco de dados (armazenamento local) para iniciar o sistema 100% limpo.
                   </p>
                 </div>
                 <button
                   onClick={() => {
-                    if (window.confirm('ATENÇÃO: Deseja apagar TODOS os registros locais do banco de dados e iniciar com um banco totalmente zerado? Esta ação limpa o armazenamento local.')) {
+                    if (window.confirm('ATENÇÃO: Deseja apagar TODOS os registros do banco de dados e iniciar com o sistema 100% zerado? Esta ação limpa todos os dados salvos.')) {
                       onClearAllData?.();
                     }
                   }}
-                  className="w-full text-xs font-bold bg-rose-600/20 hover:bg-rose-600 text-rose-200 border border-rose-500/30 px-3 py-2 rounded-lg transition-colors flex items-center justify-center gap-2 cursor-pointer mt-2"
+                  className="w-full sm:w-auto text-xs font-bold bg-rose-600/20 hover:bg-rose-600 text-rose-200 border border-rose-500/30 px-4 py-2.5 rounded-lg transition-colors flex items-center justify-center gap-2 cursor-pointer shrink-0"
                 >
-                  <Trash2 className="w-3.5 h-3.5" />
+                  <Trash2 className="w-4 h-4" />
                   Zerar Todos os Dados
                 </button>
               </div>

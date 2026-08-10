@@ -247,40 +247,6 @@ function AppContent() {
     setLogs((prev) => [newLog, ...prev]);
   };
 
-  const handleResetToDemoData = () => {
-    const keysToRemove = [
-      'sgq_vickytex_documents',
-      'sgq_vickytex_equipamentos',
-      'sgq_vickytex_colaboradores',
-      'sgq_vickytex_logs',
-      'sgq_vickytex_audits',
-      'sgq_vickytex_ncs',
-      'sgq_vickytex_planos',
-      'sgq_vickytex_riscos',
-      'sgq_vickytex_auditorias5s',
-      'sgq_vickytex_auditorias_5s',
-      'sgq_vickytex_users',
-      'sgq_vickytex_permissions',
-      'sgq_vickytex_registros'
-    ];
-    keysToRemove.forEach(k => localStorage.removeItem(k));
-
-    setDocuments(INITIAL_DOCUMENTS);
-    setLogs(INITIAL_LOGS);
-    setAudits(INITIAL_AUDITORIAS);
-    setNcs(INITIAL_NAO_CONFORMIDADES);
-    setPlanos(INITIAL_PLANOS_ACAO);
-    setRiscos(INITIAL_RISCOS);
-    setAuditorias5s(INITIAL_5S_AUDITS);
-    setUsers(INITIAL_USER_ACCOUNTS);
-    setPermissions(INITIAL_ROLE_PERMISSIONS);
-    setEquipamentos(INITIAL_EQUIPAMENTOS);
-    setColaboradores(INITIAL_COLABORADORES);
-    setRegistros(INITIAL_REGISTROS);
-
-    handleAddLog('RESTAURAR_BANCO', 'Banco de dados restaurado para os dados demonstrativos padrão ISO 9001.');
-  };
-
   const handleClearAllData = () => {
     const keysToRemove = [
       'sgq_vickytex_documents',
@@ -309,7 +275,18 @@ function AppContent() {
     setColaboradores([]);
     setRegistros([]);
 
-    handleAddLog('ZERAR_BANCO', 'Banco de dados zerado. Todos os registros locais foram limpos.');
+    // Save empty array to localStorage to prevent fallback to initial mock data
+    localStorage.setItem('sgq_vickytex_documents', JSON.stringify([]));
+    localStorage.setItem('sgq_vickytex_audits', JSON.stringify([]));
+    localStorage.setItem('sgq_vickytex_ncs', JSON.stringify([]));
+    localStorage.setItem('sgq_vickytex_planos', JSON.stringify([]));
+    localStorage.setItem('sgq_vickytex_riscos', JSON.stringify([]));
+    localStorage.setItem('sgq_vickytex_auditorias5s', JSON.stringify([]));
+    localStorage.setItem('sgq_vickytex_equipamentos', JSON.stringify([]));
+    localStorage.setItem('sgq_vickytex_colaboradores', JSON.stringify([]));
+    localStorage.setItem('sgq_vickytex_registros', JSON.stringify([]));
+
+    handleAddLog('ZERAR_BANCO', 'Banco de dados zerado. Todos os registros foram limpos.');
   };
 
   const handleAddDocument = async (doc: Documento) => {
@@ -647,7 +624,6 @@ function AppContent() {
           auditorias5s={auditorias5s}
           users={users}
           permissions={permissions}
-          onResetToDemoData={handleResetToDemoData}
           onClearAllData={handleClearAllData}
         />
       )}
