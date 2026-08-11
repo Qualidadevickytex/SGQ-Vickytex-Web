@@ -331,10 +331,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ personalizacao: propPe
                   </div>
 
                   <div className="space-y-1">
-                    <div className="flex justify-between items-center">
-                      <label className="text-[11px] font-bold text-slate-500 dark:text-slate-400 block">Senha do Portal</label>
-                      <a href="#" className="text-[10px] text-slate-400 hover:text-blue-500 font-medium">Esqueceu?</a>
-                    </div>
+                    <label className="text-[11px] font-bold text-slate-500 dark:text-slate-400 block">Senha do Portal</label>
                     <div className="relative">
                       <KeyRound className="absolute left-3.5 top-3 w-4 h-4 text-slate-400" />
                       <input 
