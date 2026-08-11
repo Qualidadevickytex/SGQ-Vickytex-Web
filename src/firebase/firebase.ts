@@ -38,6 +38,10 @@ const firebaseConfig = {
 export const app: FirebaseApp = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
 export const auth: Auth = getAuth(app);
 
-const dbId = (firebaseConfigJson as any).firestoreDatabaseId;
+const dbId = customConfig?.firestoreDatabaseId || env.VITE_FIREBASE_FIRESTORE_DATABASE_ID || (firebaseConfigJson as any).firestoreDatabaseId;
 export const db: Firestore = (dbId && dbId !== '(default)') ? getFirestore(app, dbId) : getFirestore(app);
 export const googleProvider = new GoogleAuthProvider();
+
+if (typeof window !== 'undefined') {
+  console.log(`[Firebase Init] Conectado ao projeto: "${firebaseConfig.projectId}" | Firestore Database ID: "${dbId || '(default)'}"`);
+}
