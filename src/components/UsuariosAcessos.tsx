@@ -242,7 +242,7 @@ export const UsuariosAcessos: React.FC<UsuariosAcessosProps> = ({
       sector: u.sector,
       photoURL: u.photoURL || PRESET_AVATARS[0],
       status: u.status,
-      password: u.passwordHash,
+      password: u.passwordHash || '',
       telefone: u.telefone || ''
     });
     setIsFormOpen(true);
@@ -252,6 +252,11 @@ export const UsuariosAcessos: React.FC<UsuariosAcessosProps> = ({
   const handleSaveUser = (e: React.FormEvent) => {
     e.preventDefault();
     if (editingUserId) {
+      const existingUser = users.find(u => u.id === editingUserId);
+      const finalPassword = formData.password.trim() !== '' 
+        ? formData.password.trim() 
+        : (existingUser?.passwordHash || 'vickytex123');
+
       const updatedUser: UserAccount = {
         id: editingUserId,
         name: formData.name,
@@ -260,7 +265,7 @@ export const UsuariosAcessos: React.FC<UsuariosAcessosProps> = ({
         sector: formData.sector,
         photoURL: formData.photoURL,
         status: formData.status,
-        passwordHash: formData.password || 'vickytex123',
+        passwordHash: finalPassword,
         telefone: formData.telefone
       };
       onUpdateUser(updatedUser);
@@ -277,6 +282,7 @@ export const UsuariosAcessos: React.FC<UsuariosAcessosProps> = ({
         });
       }
     } else {
+      const finalPassword = formData.password.trim() !== '' ? formData.password.trim() : 'vickytex123';
       const newUser: UserAccount = {
         id: `user-${Date.now()}`,
         name: formData.name,
@@ -285,7 +291,7 @@ export const UsuariosAcessos: React.FC<UsuariosAcessosProps> = ({
         sector: formData.sector,
         photoURL: formData.photoURL,
         status: formData.status,
-        passwordHash: formData.password || 'vickytex123',
+        passwordHash: finalPassword,
         telefone: formData.telefone,
         lastLogin: 'Nunca'
       };

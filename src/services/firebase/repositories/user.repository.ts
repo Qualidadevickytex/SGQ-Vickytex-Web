@@ -36,7 +36,7 @@ class UserRepositoryClass extends BaseRepository<UserAccount> {
       sector: rec.sector || rec.setor || 'Geral',
       photoURL: rec.photoURL || rec.photo_url || '',
       status: rec.status || 'Ativo',
-      passwordHash: '',
+      passwordHash: rec.passwordHash || rec.password_hash || rec.password || 'vickytex123',
       lastLogin: rec.last_login || rec.lastLogin,
       telefone: rec.telefone
     };
@@ -49,6 +49,8 @@ class UserRepositoryClass extends BaseRepository<UserAccount> {
       role: data.role,
       sector: data.sector,
       status: data.status,
+      passwordHash: data.passwordHash || '',
+      password_hash: data.passwordHash || '',
       photo_url: data.photoURL,
       telefone: data.telefone
     };

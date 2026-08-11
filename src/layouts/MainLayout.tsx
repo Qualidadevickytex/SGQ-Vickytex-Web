@@ -49,20 +49,9 @@ export const MainLayout: React.FC<MainLayoutProps> = ({
   onOpenSearch,
   personalizacao
 }) => {
-  const { user, switchProfile, logout } = useAuth();
+  const { user, logout } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-
-  // Perfis disponíveis na Vickytex para simular
-  const PRESET_ROLES: { role: UserRole; name: string }[] = [
-    { role: 'Administrador', name: 'Administrador (TI)' },
-    { role: 'Qualidade', name: 'Mariana (Qualidade)' },
-    { role: 'Gestor', name: 'Fernando (Gestor)' },
-    { role: 'Supervisor', name: 'Roberto (Supervisor)' },
-    { role: 'Colaborador', name: 'Ana (Operadora)' },
-    { role: 'Auditor', name: 'Carlos (Auditor)' },
-    { role: 'Visitante', name: 'Visitante Externo' }
-  ];
 
   const allowedSections = React.useMemo(() => {
     try {
@@ -159,9 +148,8 @@ export const MainLayout: React.FC<MainLayoutProps> = ({
         </div>
 
         {/* Footer Sidebar with Active Profile details */}
-        <div id="sidebar-footer" className="p-4 border-t border-white/10 space-y-4">
-          <div className="bg-white/5 rounded-xl p-3 space-y-2.5">
-            <p className="text-[9px] font-mono font-bold text-blue-200 uppercase tracking-widest">PERFIL SIMULADO (SSO)</p>
+        <div id="sidebar-footer" className="p-4 border-t border-white/10 space-y-3">
+          <div className="bg-white/5 rounded-xl p-3">
             <div className="flex items-center space-x-2.5">
               <img 
                 src={user?.photoURL || 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150'} 
@@ -171,35 +159,10 @@ export const MainLayout: React.FC<MainLayoutProps> = ({
               <div className="min-w-0">
                 <p className="text-[11px] font-bold text-white truncate leading-tight">{user?.name}</p>
                 <span className="text-[9px] bg-blue-500/30 text-blue-100 font-bold px-1.5 py-0.5 rounded-sm font-mono mt-0.5 inline-block">
-                  {user?.role.toUpperCase()}
+                  {user?.role ? user.role.toUpperCase() : 'USUÁRIO'}
                 </span>
               </div>
             </div>
-
-            {/* Profile Simulator Selector - Restricted to Administrador */}
-            {user?.role === 'Administrador' ? (
-              <div className="space-y-1 border-t border-white/10 pt-2 mt-1">
-                <div className="flex items-center justify-between">
-                  <label className="text-[9px] text-blue-300 font-bold">Simular Outro Perfil (TI):</label>
-                  <span className="text-[8px] bg-amber-500/30 text-amber-200 px-1 rounded font-mono">DEV/ADMIN</span>
-                </div>
-                <select
-                  value={user?.role}
-                  onChange={(e) => switchProfile(e.target.value as UserRole)}
-                  className="w-full text-[10px] bg-[#092B4B] text-blue-100 border border-white/10 rounded-md p-1 font-semibold focus:outline-hidden"
-                >
-                  {PRESET_ROLES.map((r) => (
-                    <option key={r.role} value={r.role}>{r.name}</option>
-                  ))}
-                </select>
-              </div>
-            ) : (
-              <div className="border-t border-white/10 pt-1.5 mt-1">
-                <p className="text-[9px] text-blue-200/60 font-medium italic">
-                  🔒 Nível de acesso fixado pelo login corporativo
-                </p>
-              </div>
-            )}
           </div>
 
           <button 
@@ -337,21 +300,9 @@ export const MainLayout: React.FC<MainLayoutProps> = ({
                 />
                 <div className="min-w-0">
                   <p className="text-xs font-bold leading-none">{user?.name}</p>
-                  <span className="text-[9px] text-blue-200 font-mono mt-0.5 block">{user?.role.toUpperCase()}</span>
+                  <span className="text-[9px] text-blue-200 font-mono mt-0.5 block">{user?.role ? user.role.toUpperCase() : 'USUÁRIO'}</span>
                 </div>
               </div>
-
-              {user?.role === 'Administrador' && (
-                <select
-                  value={user?.role}
-                  onChange={(e) => switchProfile(e.target.value as UserRole)}
-                  className="w-full text-xs bg-[#092B4B] text-blue-100 border border-white/10 rounded-md p-1.5 focus:outline-hidden"
-                >
-                  {PRESET_ROLES.map((r) => (
-                    <option key={r.role} value={r.role}>{r.name}</option>
-                  ))}
-                </select>
-              )}
 
               <button 
                 onClick={logout}
