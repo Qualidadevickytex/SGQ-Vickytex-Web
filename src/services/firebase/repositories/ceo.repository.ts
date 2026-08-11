@@ -204,8 +204,8 @@ class CEOProjectsRepositoryClass extends BaseRepository<ProjetoCEO> {
         console.error('Failed to parse CEO local projects', e);
       }
     }
-    localStorage.setItem('sgq_vickytex_ceo_projects', JSON.stringify(INITIAL_CEO_PROJECTS));
-    return INITIAL_CEO_PROJECTS;
+    const isDemoMode = import.meta.env.VITE_DEMO_MODE === 'true';
+    return isDemoMode ? INITIAL_CEO_PROJECTS : [];
   }
 
   protected saveLocalData(data: ProjetoCEO[]): void {
@@ -298,9 +298,15 @@ class CEOSugestoesRepositoryClass extends BaseRepository<SugestaoCEO> {
 
   protected getLocalData(): SugestaoCEO[] {
     const saved = localStorage.getItem('sgq_vickytex_ceo_ideas');
-    if (saved) return JSON.parse(saved);
-    localStorage.setItem('sgq_vickytex_ceo_ideas', JSON.stringify(INITIAL_CEO_IDEAS));
-    return INITIAL_CEO_IDEAS;
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch {
+        return [];
+      }
+    }
+    const isDemoMode = import.meta.env.VITE_DEMO_MODE === 'true';
+    return isDemoMode ? INITIAL_CEO_IDEAS : [];
   }
 
   protected saveLocalData(data: SugestaoCEO[]): void {

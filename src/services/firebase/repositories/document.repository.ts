@@ -12,9 +12,15 @@ class DocumentRepositoryClass extends BaseRepository<Documento> {
 
   protected getLocalData(): Documento[] {
     const saved = localStorage.getItem('sgq_vickytex_documents');
-    if (saved) return JSON.parse(saved);
-    localStorage.setItem('sgq_vickytex_documents', JSON.stringify(INITIAL_DOCUMENTS));
-    return INITIAL_DOCUMENTS;
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch {
+        return [];
+      }
+    }
+    const isDemoMode = import.meta.env.VITE_DEMO_MODE === 'true';
+    return isDemoMode ? INITIAL_DOCUMENTS : [];
   }
 
   protected saveLocalData(data: Documento[]): void {

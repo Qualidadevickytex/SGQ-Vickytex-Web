@@ -12,9 +12,15 @@ class AuditRepositoryClass extends BaseRepository<Auditoria> {
 
   protected getLocalData(): Auditoria[] {
     const saved = localStorage.getItem('sgq_vickytex_auditorias');
-    if (saved) return JSON.parse(saved);
-    localStorage.setItem('sgq_vickytex_auditorias', JSON.stringify(INITIAL_AUDITORIAS));
-    return INITIAL_AUDITORIAS;
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch {
+        return [];
+      }
+    }
+    const isDemoMode = import.meta.env.VITE_DEMO_MODE === 'true';
+    return isDemoMode ? INITIAL_AUDITORIAS : [];
   }
 
   protected saveLocalData(data: Auditoria[]): void {

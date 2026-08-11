@@ -32,9 +32,15 @@ class NotificationRepositoryClass extends BaseRepository<Notification> {
 
   protected getLocalData(): Notification[] {
     const saved = localStorage.getItem('sgq_vickytex_notifications');
-    if (saved) return JSON.parse(saved);
-    localStorage.setItem('sgq_vickytex_notifications', JSON.stringify(INITIAL_NOTIFICATIONS));
-    return INITIAL_NOTIFICATIONS;
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch {
+        return [];
+      }
+    }
+    const isDemoMode = import.meta.env.VITE_DEMO_MODE === 'true';
+    return isDemoMode ? INITIAL_NOTIFICATIONS : [];
   }
 
   protected saveLocalData(data: Notification[]): void {

@@ -22,7 +22,7 @@ export abstract class BaseRepository<T extends { id: string }> implements BaseSe
     const timestamp = new Date().toISOString();
     try {
       const docs = await getAllDocs<any>(this.collectionName);
-      if (docs && docs.length > 0) {
+      if (Array.isArray(docs)) {
         const mapped = docs.map((rec: any) => this.mapRecord(rec));
         const seen = new Set<string>();
         const unique = mapped.filter((a: T) => {
@@ -31,10 +31,19 @@ export abstract class BaseRepository<T extends { id: string }> implements BaseSe
           return true;
         });
         this.saveLocalData(unique);
+
+        if (import.meta.env.DEV || import.meta.env.VITE_DEBUG === 'true') {
+          console.log(`[FIREBASE] projectId: sgq-vickytex-web`);
+          console.log(`[FIREBASE] Firestore conectado: true`);
+          console.log(`[FIREBASE] collection: ${this.collectionName}`);
+          console.log(`[FIREBASE] documentos encontrados: ${unique.length}`);
+          console.log(`[FIREBASE] fallback mock utilizado: NÃO`);
+        }
+
         return { success: true, data: unique, timestamp };
       }
     } catch (dbErr) {
-      console.warn(`[BaseRepository] Firestore fetch failed for ${this.collectionName}, falling back to local storage:`, dbErr);
+      console.error(`[FIREBASE] Error fetching collection "${this.collectionName}":`, dbErr);
     }
     const local = this.getLocalData();
     const seen = new Set<string>();
@@ -54,8 +63,9 @@ export abstract class BaseRepository<T extends { id: string }> implements BaseSe
         const mapped = this.mapRecord(docData);
         return { success: true, data: mapped, timestamp };
       }
+      return { success: true, data: null, timestamp };
     } catch (dbErr) {
-      console.warn(`[BaseRepository] Firestore findById failed for ${this.collectionName}/${id}:`, dbErr);
+      console.error(`[FIREBASE] Error fetching document "${this.collectionName}/${id}":`, dbErr);
     }
     const item = this.getLocalData().find(i => i.id === id) || null;
     return { success: true, data: item, timestamp };

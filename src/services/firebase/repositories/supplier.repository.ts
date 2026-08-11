@@ -12,8 +12,15 @@ class SupplierRepositoryClass extends BaseRepository<Fornecedor> {
 
   protected getLocalData(): Fornecedor[] {
     const saved = localStorage.getItem('sgq_vickytex_suppliers');
-    if (saved) return JSON.parse(saved);
-    return INITIAL_FORNECEDORES;
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch {
+        return [];
+      }
+    }
+    const isDemoMode = import.meta.env.VITE_DEMO_MODE === 'true';
+    return isDemoMode ? INITIAL_FORNECEDORES : [];
   }
 
   protected saveLocalData(data: Fornecedor[]): void {

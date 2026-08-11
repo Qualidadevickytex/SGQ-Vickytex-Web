@@ -5,6 +5,7 @@
 
 import { Auditoria5S } from '../../../types/fiveS';
 import { BaseRepository } from './base.repository';
+import { INITIAL_5S_AUDITS } from '../../../utils/mockData';
 
 class FiveSRepositoryClass extends BaseRepository<Auditoria5S> {
   protected collectionName = 'fives_audits';
@@ -24,7 +25,8 @@ class FiveSRepositoryClass extends BaseRepository<Auditoria5S> {
         return [];
       }
     }
-    return [];
+    const isDemoMode = import.meta.env.VITE_DEMO_MODE === 'true';
+    return isDemoMode ? INITIAL_5S_AUDITS : [];
   }
 
   protected saveLocalData(data: Auditoria5S[]): void {

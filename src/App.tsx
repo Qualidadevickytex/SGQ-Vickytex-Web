@@ -45,71 +45,112 @@ function AppContent() {
   // Estado Ativo das Páginas/Seções do SGQ
   const [activeSection, setActiveSection] = useState<'dashboard' | 'documentos' | 'auditorias' | 'riscos' | '5s' | 'integracao' | 'database' | 'treinamentos' | 'calibracao' | 'planos' | 'configuracoes' | 'usuarios' | 'registros' | 'fornecedores' | 'indicadores' | 'ceo'>('dashboard');
   
-  // Estado Ativo das Entidades (Persistidos localmente na sessão do browser para interatividade perfeita)
+  // Flag de ambiente para modo demonstração
+  const IS_DEMO_MODE = import.meta.env.VITE_DEMO_MODE === 'true';
+
+  // Estado Ativo das Entidades (Persistidos localmente na sessão do browser)
   const [documents, setDocuments] = useState<Documento[]>(() => {
     const saved = localStorage.getItem('sgq_vickytex_documents');
-    return saved ? JSON.parse(saved) : INITIAL_DOCUMENTS;
+    if (saved) {
+      try { return JSON.parse(saved); } catch { /* ignore */ }
+    }
+    return IS_DEMO_MODE ? INITIAL_DOCUMENTS : [];
   });
 
   const [users, setUsers] = useState<UserAccount[]>(() => {
     const saved = localStorage.getItem('sgq_vickytex_users');
-    return saved ? JSON.parse(saved) : INITIAL_USER_ACCOUNTS;
+    if (saved) {
+      try { return JSON.parse(saved); } catch { /* ignore */ }
+    }
+    return IS_DEMO_MODE ? INITIAL_USER_ACCOUNTS : [];
   });
 
   const [permissions, setPermissions] = useState<RolePermission[]>(() => {
     const saved = localStorage.getItem('sgq_vickytex_permissions');
-    return saved ? JSON.parse(saved) : INITIAL_ROLE_PERMISSIONS;
+    if (saved) {
+      try { return JSON.parse(saved); } catch { /* ignore */ }
+    }
+    return INITIAL_ROLE_PERMISSIONS;
   });
 
   const [logs, setLogs] = useState<ActivityLog[]>(() => {
     const saved = localStorage.getItem('sgq_vickytex_logs');
-    return saved ? JSON.parse(saved) : INITIAL_LOGS;
+    if (saved) {
+      try { return JSON.parse(saved); } catch { /* ignore */ }
+    }
+    return IS_DEMO_MODE ? INITIAL_LOGS : [];
   });
 
   const [audits, setAudits] = useState<Auditoria[]>(() => {
     const saved = localStorage.getItem('sgq_vickytex_audits');
-    return saved ? JSON.parse(saved) : INITIAL_AUDITORIAS;
+    if (saved) {
+      try { return JSON.parse(saved); } catch { /* ignore */ }
+    }
+    return IS_DEMO_MODE ? INITIAL_AUDITORIAS : [];
   });
 
   const [ncs, setNcs] = useState<NaoConformidade[]>(() => {
     const saved = localStorage.getItem('sgq_vickytex_ncs');
-    return saved ? JSON.parse(saved) : INITIAL_NAO_CONFORMIDADES;
+    if (saved) {
+      try { return JSON.parse(saved); } catch { /* ignore */ }
+    }
+    return IS_DEMO_MODE ? INITIAL_NAO_CONFORMIDADES : [];
   });
 
   const [planos, setPlanos] = useState<PlanoAcao[]>(() => {
     const saved = localStorage.getItem('sgq_vickytex_planos');
-    return saved ? JSON.parse(saved) : INITIAL_PLANOS_ACAO;
+    if (saved) {
+      try { return JSON.parse(saved); } catch { /* ignore */ }
+    }
+    return IS_DEMO_MODE ? INITIAL_PLANOS_ACAO : [];
   });
 
   const [riscos, setRiscos] = useState<RiscoOportunidade[]>(() => {
     const saved = localStorage.getItem('sgq_vickytex_riscos');
-    return saved ? JSON.parse(saved) : INITIAL_RISCOS;
+    if (saved) {
+      try { return JSON.parse(saved); } catch { /* ignore */ }
+    }
+    return IS_DEMO_MODE ? INITIAL_RISCOS : [];
   });
 
   const [auditorias5s, setAuditorias5s] = useState<Auditoria5S[]>(() => {
     const saved = localStorage.getItem('sgq_vickytex_auditorias5s') || localStorage.getItem('sgq_vickytex_auditorias_5s');
-    const parsed: Auditoria5S[] = saved ? JSON.parse(saved) : INITIAL_5S_AUDITS;
-    const seen = new Set<string>();
-    return parsed.filter((a) => {
-      if (!a || !a.id || seen.has(a.id)) return false;
-      seen.add(a.id);
-      return true;
-    });
+    if (saved) {
+      try {
+        const parsed: Auditoria5S[] = JSON.parse(saved);
+        const seen = new Set<string>();
+        return parsed.filter((a) => {
+          if (!a || !a.id || seen.has(a.id)) return false;
+          seen.add(a.id);
+          return true;
+        });
+      } catch { /* ignore */ }
+    }
+    return IS_DEMO_MODE ? INITIAL_5S_AUDITS : [];
   });
 
   const [equipamentos, setEquipamentos] = useState<Equipamento[]>(() => {
     const saved = localStorage.getItem('sgq_vickytex_equipamentos');
-    return saved ? JSON.parse(saved) : INITIAL_EQUIPAMENTOS;
+    if (saved) {
+      try { return JSON.parse(saved); } catch { /* ignore */ }
+    }
+    return IS_DEMO_MODE ? INITIAL_EQUIPAMENTOS : [];
   });
 
   const [colaboradores, setColaboradores] = useState<ColaboradorCompetencia[]>(() => {
     const saved = localStorage.getItem('sgq_vickytex_colaboradores');
-    return saved ? JSON.parse(saved) : INITIAL_COLABORADORES;
+    if (saved) {
+      try { return JSON.parse(saved); } catch { /* ignore */ }
+    }
+    return IS_DEMO_MODE ? INITIAL_COLABORADORES : [];
   });
 
   const [registros, setRegistros] = useState<Registro[]>(() => {
     const saved = localStorage.getItem('sgq_vickytex_registros');
-    return saved ? JSON.parse(saved) : INITIAL_REGISTROS;
+    if (saved) {
+      try { return JSON.parse(saved); } catch { /* ignore */ }
+    }
+    return IS_DEMO_MODE ? INITIAL_REGISTROS : [];
   });
 
   const [selectedDocId, setSelectedDocId] = useState<string | undefined>(undefined);

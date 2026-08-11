@@ -12,9 +12,15 @@ class UserRepositoryClass extends BaseRepository<UserAccount> {
 
   protected getLocalData(): UserAccount[] {
     const saved = localStorage.getItem('sgq_vickytex_users');
-    if (saved) return JSON.parse(saved);
-    localStorage.setItem('sgq_vickytex_users', JSON.stringify(INITIAL_USER_ACCOUNTS));
-    return INITIAL_USER_ACCOUNTS;
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch {
+        return [];
+      }
+    }
+    const isDemoMode = import.meta.env.VITE_DEMO_MODE === 'true';
+    return isDemoMode ? INITIAL_USER_ACCOUNTS : [];
   }
 
   protected saveLocalData(data: UserAccount[]): void {
