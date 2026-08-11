@@ -98,8 +98,8 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ personalizacao: propPe
   const { theme, toggleTheme } = useTheme();
   const personalizacao = propPersonalizacao || getPersonalizacaoGeral();
   
-  // Tabs: SSO, E-mail/Senha, Acesso Rápido
-  const [activeTab, setActiveTab] = useState<'sso' | 'password' | 'quick'>('sso');
+  // Tab: E-mail/Senha por padrão
+  const [activeTab, setActiveTab] = useState<'password' | 'quick'>('password');
   
   // State do formulário
   const [email, setEmail] = useState('');
@@ -277,30 +277,6 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ personalizacao: propPe
             </p>
           </div>
 
-          {/* Toggle de Métodos de Login */}
-          <div className="bg-slate-100 dark:bg-slate-800/60 p-1 rounded-xl flex border border-slate-200/50 dark:border-slate-700/50">
-            <button
-              onClick={() => setActiveTab('sso')}
-              className={`flex-1 text-center py-2.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                activeTab === 'sso'
-                  ? 'bg-white dark:bg-slate-900 text-[#0B3A63] dark:text-white shadow-xs border border-slate-200/30'
-                  : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
-              }`}
-            >
-              Google SSO
-            </button>
-            <button
-              onClick={() => setActiveTab('password')}
-              className={`flex-1 text-center py-2.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                activeTab === 'password'
-                  ? 'bg-white dark:bg-slate-900 text-[#0B3A63] dark:text-white shadow-xs border border-slate-200/30'
-                  : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
-              }`}
-            >
-              E-mail & Senha
-            </button>
-          </div>
-
           {/* Mensagens de Feedback */}
           <AnimatePresence mode="wait">
             {errorMsg && (
@@ -328,60 +304,18 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ personalizacao: propPe
             )}
           </AnimatePresence>
 
-          {/* Conteúdo das Tabs com animações fluidas */}
+          {/* Formulário E-mail e Senha */}
           <div className="min-h-[220px]">
             <AnimatePresence mode="wait">
-              
-              {/* TAB 1: GOOGLE WORKSPACE SSO */}
-              {activeTab === 'sso' && (
-                <motion.div
-                  key="tab-sso"
-                  initial={{ opacity: 0, x: -10 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: 10 }}
-                  transition={{ duration: 0.15 }}
-                  className="space-y-5 py-2"
-                >
-                  <div className="bg-slate-50 dark:bg-slate-800/30 border border-slate-200/60 dark:border-slate-800 p-4 rounded-xl text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-                    {personalizacao?.loginSsoDescricao || "A Vickytex utiliza a plataforma corporativa do Google Workspace. Clique no botão abaixo para acessar usando sua conta de e-mail @vickytex.com.br sem precisar de nova senha."}
-                  </div>
-
-                  <button 
-                    onClick={loginWithGoogle}
-                    disabled={isLoggingIn}
-                    className="w-full flex items-center justify-center space-x-3 py-3 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-xl transition-all font-bold text-slate-700 dark:text-slate-200 text-xs shadow-xs hover:shadow-md cursor-pointer relative group"
-                  >
-                    {isLoggingIn ? (
-                      <RefreshCw className="w-4 h-4 text-slate-400 animate-spin" />
-                    ) : (
-                      <svg className="w-5 h-5 shrink-0" version="1.1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48">
-                        <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"></path>
-                        <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"></path>
-                        <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"></path>
-                        <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"></path>
-                      </svg>
-                    )}
-                    <span>{isLoggingIn ? 'Autenticando via Google Workspace...' : 'Entrar com o Google Workspace'}</span>
-                  </button>
-
-                  <div className="flex items-center space-x-1.5 text-[11px] text-slate-400 justify-center">
-                    <Lock className="w-3.5 h-3.5 text-emerald-500" />
-                    <span>Conexão criptografada via protocolo corporativo.</span>
-                  </div>
-                </motion.div>
-              )}
-
-              {/* TAB 2: EMAIL E SENHA DO SGQ */}
-              {activeTab === 'password' && (
-                <motion.form
-                  key="tab-password"
-                  onSubmit={handlePasswordSubmit}
-                  initial={{ opacity: 0, x: -10 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: 10 }}
-                  transition={{ duration: 0.15 }}
-                  className="space-y-4 py-2"
-                >
+              <motion.form
+                key="form-password"
+                onSubmit={handlePasswordSubmit}
+                initial={{ opacity: 0, y: 5 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -5 }}
+                transition={{ duration: 0.15 }}
+                className="space-y-4 py-2"
+              >
                   <div className="space-y-1">
                     <label className="text-[11px] font-bold text-slate-500 dark:text-slate-400 block">E-mail Corporativo</label>
                     <div className="relative">
@@ -435,7 +369,6 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ personalizacao: propPe
                     )}
                   </button>
                 </motion.form>
-              )}
 
             </AnimatePresence>
           </div>

@@ -97,29 +97,46 @@ const recordAuditLog = async (userId: string, action: string, moduleName: string
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<UserProfile | null>(() => {
-    const saved = localStorage.getItem('sgq_vickytex_role');
-    const role = (saved as UserRole) || 'Qualidade';
-    
-    try {
-      const savedUsersStr = localStorage.getItem('sgq_vickytex_users');
-      if (savedUsersStr) {
-        const savedUsers = JSON.parse(savedUsersStr);
-        const activeUser = savedUsers.find((u: any) => u.role === role);
-        if (activeUser) {
-          return {
-            email: activeUser.email,
-            name: activeUser.name,
-            role: activeUser.role,
-            sector: activeUser.sector,
-            photoURL: activeUser.photoURL,
-            id: activeUser.id
-          };
-        }
-      }
-    } catch (e) {
-      // ignore
+    const isLoggedIn = localStorage.getItem('sgq_vickytex_logged_in');
+    if (isLoggedIn === 'false') {
+      return null;
     }
-    return { ...PRESET_USERS[role], id: 'preset_' + role.toLowerCase() };
+
+    const savedActiveUser = localStorage.getItem('sgq_vickytex_active_user');
+    if (savedActiveUser) {
+      try {
+        return JSON.parse(savedActiveUser);
+      } catch (e) {
+        // ignore
+      }
+    }
+
+    const savedRole = localStorage.getItem('sgq_vickytex_role');
+    if (savedRole && isLoggedIn === 'true') {
+      const role = savedRole as UserRole;
+      try {
+        const savedUsersStr = localStorage.getItem('sgq_vickytex_users');
+        if (savedUsersStr) {
+          const savedUsers = JSON.parse(savedUsersStr);
+          const activeUser = savedUsers.find((u: any) => u.role === role);
+          if (activeUser) {
+            return {
+              email: activeUser.email,
+              name: activeUser.name,
+              role: activeUser.role,
+              sector: activeUser.sector,
+              photoURL: activeUser.photoURL,
+              id: activeUser.id
+            };
+          }
+        }
+      } catch (e) {
+        // ignore
+      }
+      return { ...PRESET_USERS[role], id: 'preset_' + role.toLowerCase() };
+    }
+
+    return null;
   });
 
   const [accessToken, setAccessToken] = useState<string | null>(null);
@@ -238,15 +255,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       
       const found = userList.find((u: any) => u.email.toLowerCase() === email.toLowerCase() && u.passwordHash === passwordHash);
       if (found) {
-        localStorage.setItem('sgq_vickytex_role', found.role);
-        setUser({
+        const userProfile: UserProfile = {
           email: found.email,
           name: found.name,
           role: found.role as UserRole,
           sector: found.sector as SectorType,
           photoURL: found.photoURL,
           id: found.id
-        });
+        };
+        localStorage.setItem('sgq_vickytex_logged_in', 'true');
+        localStorage.setItem('sgq_vickytex_role', found.role);
+        localStorage.setItem('sgq_vickytex_active_user', JSON.stringify(userProfile));
+        setUser(userProfile);
         setAccessToken('mock_google_oauth_token_' + found.role);
         setNeedsAuth(false);
         await recordAuditLog(found.id, 'Login', 'Autenticação', 'Login por e-mail e senha');
@@ -301,6 +321,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setUser(null);
     setAccessToken(null);
     setNeedsAuth(true);
+    localStorage.removeItem('sgq_vickytex_logged_in');
+    localStorage.removeItem('sgq_vickytex_active_user');
     localStorage.removeItem('sgq_vickytex_role');
   };
 
