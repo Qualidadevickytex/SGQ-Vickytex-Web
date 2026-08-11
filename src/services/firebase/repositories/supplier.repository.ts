@@ -11,21 +11,10 @@ class SupplierRepositoryClass extends BaseRepository<Fornecedor> {
   protected collectionName = 'suppliers';
 
   protected getLocalData(): Fornecedor[] {
-    const saved = localStorage.getItem('sgq_vickytex_suppliers');
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch {
-        return [];
-      }
-    }
-    const isDemoMode = import.meta.env.VITE_DEMO_MODE === 'true';
-    return isDemoMode ? INITIAL_FORNECEDORES : [];
+    return [];
   }
 
-  protected saveLocalData(data: Fornecedor[]): void {
-    localStorage.setItem('sgq_vickytex_suppliers', JSON.stringify(data));
-  }
+  protected saveLocalData(_data: Fornecedor[]): void {}
 
   protected mapRecord(rec: any): Fornecedor {
     return {

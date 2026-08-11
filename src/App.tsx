@@ -28,12 +28,19 @@ import { Indicadores } from './components/Indicadores';
 import { CentroExcelencia } from './components/CentroExcelencia';
 import { CEOProvider } from './contexts/CEOContext';
 
-import { Documento, ActivityLog, Auditoria, NaoConformidade, PlanoAcao, RiscoOportunidade, Auditoria5S, UserAccount, RolePermission, Equipamento, ColaboradorCompetencia, Registro } from './types';
-import { INITIAL_DOCUMENTS, INITIAL_LOGS, INITIAL_AUDITORIAS, INITIAL_NAO_CONFORMIDADES, INITIAL_PLANOS_ACAO, INITIAL_RISCOS, INITIAL_5S_AUDITS, INITIAL_USER_ACCOUNTS, INITIAL_ROLE_PERMISSIONS, getPersonalizacaoGeral, PersonalizacaoGeral } from './utils/mockData';
+import { Documento, ActivityLog, Auditoria, NaoConformidade, PlanoAcao, RiscoOportunidade, Auditoria5S, UserAccount, RolePermission, Equipamento, ColaboradorCompetencia, Registro, Fornecedor } from './types';
+import { INITIAL_DOCUMENTS, INITIAL_LOGS, INITIAL_AUDITORIAS, INITIAL_NAO_CONFORMIDADES, INITIAL_PLANOS_ACAO, INITIAL_RISCOS, INITIAL_5S_AUDITS, INITIAL_USER_ACCOUNTS, INITIAL_ROLE_PERMISSIONS, INITIAL_FORNECEDORES, getPersonalizacaoGeral, PersonalizacaoGeral } from './utils/mockData';
 import { DocumentRepository } from './services/database/repositories/document.repository';
 import { AuditRepository } from './services/database/repositories/audit.repository';
 import { FiveSRepository } from './services/database/repositories/fiveS.repository';
 import { UserRepository } from './services/database/repositories/user.repository';
+import { NCRepository } from './services/database/repositories/nc.repository';
+import { ActionPlanRepository } from './services/database/repositories/actionPlan.repository';
+import { RiskRepository } from './services/database/repositories/risk.repository';
+import { EquipmentRepository } from './services/database/repositories/equipment.repository';
+import { CollaboratorRepository } from './services/database/repositories/collaborator.repository';
+import { RecordRepository } from './services/database/repositories/record.repository';
+import { SupplierRepository } from './services/database/repositories/supplier.repository';
 import { clearCollectionDocs } from './firebase/firestore';
 
 function AppContent() {
@@ -48,191 +55,63 @@ function AppContent() {
   // Flag de ambiente para modo demonstração
   const IS_DEMO_MODE = import.meta.env.VITE_DEMO_MODE === 'true';
 
-  // Estado Ativo das Entidades (Persistidos localmente na sessão do browser)
-  const [documents, setDocuments] = useState<Documento[]>(() => {
-    const saved = localStorage.getItem('sgq_vickytex_documents');
-    if (saved) {
-      try { return JSON.parse(saved); } catch { /* ignore */ }
-    }
-    return IS_DEMO_MODE ? INITIAL_DOCUMENTS : [];
-  });
-
-  const [users, setUsers] = useState<UserAccount[]>(() => {
-    const saved = localStorage.getItem('sgq_vickytex_users');
-    if (saved) {
-      try { return JSON.parse(saved); } catch { /* ignore */ }
-    }
-    return IS_DEMO_MODE ? INITIAL_USER_ACCOUNTS : [];
-  });
-
-  const [permissions, setPermissions] = useState<RolePermission[]>(() => {
-    const saved = localStorage.getItem('sgq_vickytex_permissions');
-    if (saved) {
-      try { return JSON.parse(saved); } catch { /* ignore */ }
-    }
-    return INITIAL_ROLE_PERMISSIONS;
-  });
-
-  const [logs, setLogs] = useState<ActivityLog[]>(() => {
-    const saved = localStorage.getItem('sgq_vickytex_logs');
-    if (saved) {
-      try { return JSON.parse(saved); } catch { /* ignore */ }
-    }
-    return IS_DEMO_MODE ? INITIAL_LOGS : [];
-  });
-
-  const [audits, setAudits] = useState<Auditoria[]>(() => {
-    const saved = localStorage.getItem('sgq_vickytex_audits');
-    if (saved) {
-      try { return JSON.parse(saved); } catch { /* ignore */ }
-    }
-    return IS_DEMO_MODE ? INITIAL_AUDITORIAS : [];
-  });
-
-  const [ncs, setNcs] = useState<NaoConformidade[]>(() => {
-    const saved = localStorage.getItem('sgq_vickytex_ncs');
-    if (saved) {
-      try { return JSON.parse(saved); } catch { /* ignore */ }
-    }
-    return IS_DEMO_MODE ? INITIAL_NAO_CONFORMIDADES : [];
-  });
-
-  const [planos, setPlanos] = useState<PlanoAcao[]>(() => {
-    const saved = localStorage.getItem('sgq_vickytex_planos');
-    if (saved) {
-      try { return JSON.parse(saved); } catch { /* ignore */ }
-    }
-    return IS_DEMO_MODE ? INITIAL_PLANOS_ACAO : [];
-  });
-
-  const [riscos, setRiscos] = useState<RiscoOportunidade[]>(() => {
-    const saved = localStorage.getItem('sgq_vickytex_riscos');
-    if (saved) {
-      try { return JSON.parse(saved); } catch { /* ignore */ }
-    }
-    return IS_DEMO_MODE ? INITIAL_RISCOS : [];
-  });
-
-  const [auditorias5s, setAuditorias5s] = useState<Auditoria5S[]>(() => {
-    const saved = localStorage.getItem('sgq_vickytex_auditorias5s') || localStorage.getItem('sgq_vickytex_auditorias_5s');
-    if (saved) {
-      try {
-        const parsed: Auditoria5S[] = JSON.parse(saved);
-        const seen = new Set<string>();
-        return parsed.filter((a) => {
-          if (!a || !a.id || seen.has(a.id)) return false;
-          seen.add(a.id);
-          return true;
-        });
-      } catch { /* ignore */ }
-    }
-    return IS_DEMO_MODE ? INITIAL_5S_AUDITS : [];
-  });
-
-  const [equipamentos, setEquipamentos] = useState<Equipamento[]>(() => {
-    const saved = localStorage.getItem('sgq_vickytex_equipamentos');
-    if (saved) {
-      try { return JSON.parse(saved); } catch { /* ignore */ }
-    }
-    return IS_DEMO_MODE ? INITIAL_EQUIPAMENTOS : [];
-  });
-
-  const [colaboradores, setColaboradores] = useState<ColaboradorCompetencia[]>(() => {
-    const saved = localStorage.getItem('sgq_vickytex_colaboradores');
-    if (saved) {
-      try { return JSON.parse(saved); } catch { /* ignore */ }
-    }
-    return IS_DEMO_MODE ? INITIAL_COLABORADORES : [];
-  });
-
-  const [registros, setRegistros] = useState<Registro[]>(() => {
-    const saved = localStorage.getItem('sgq_vickytex_registros');
-    if (saved) {
-      try { return JSON.parse(saved); } catch { /* ignore */ }
-    }
-    return IS_DEMO_MODE ? INITIAL_REGISTROS : [];
-  });
+  // Estado Ativo das Entidades (Carregados do Firestore em Produção)
+  const [documents, setDocuments] = useState<Documento[]>(() => IS_DEMO_MODE ? INITIAL_DOCUMENTS : []);
+  const [users, setUsers] = useState<UserAccount[]>(() => IS_DEMO_MODE ? INITIAL_USER_ACCOUNTS : []);
+  const [permissions, setPermissions] = useState<RolePermission[]>(() => INITIAL_ROLE_PERMISSIONS);
+  const [logs, setLogs] = useState<ActivityLog[]>(() => IS_DEMO_MODE ? INITIAL_LOGS : []);
+  const [audits, setAudits] = useState<Auditoria[]>(() => IS_DEMO_MODE ? INITIAL_AUDITORIAS : []);
+  const [ncs, setNcs] = useState<NaoConformidade[]>(() => IS_DEMO_MODE ? INITIAL_NAO_CONFORMIDADES : []);
+  const [planos, setPlanos] = useState<PlanoAcao[]>(() => IS_DEMO_MODE ? INITIAL_PLANOS_ACAO : []);
+  const [riscos, setRiscos] = useState<RiscoOportunidade[]>(() => IS_DEMO_MODE ? INITIAL_RISCOS : []);
+  const [auditorias5s, setAuditorias5s] = useState<Auditoria5S[]>(() => IS_DEMO_MODE ? INITIAL_5S_AUDITS : []);
+  const [equipamentos, setEquipamentos] = useState<Equipamento[]>(() => IS_DEMO_MODE ? INITIAL_EQUIPAMENTOS : []);
+  const [colaboradores, setColaboradores] = useState<ColaboradorCompetencia[]>(() => IS_DEMO_MODE ? INITIAL_COLABORADORES : []);
+  const [registros, setRegistros] = useState<Registro[]>(() => IS_DEMO_MODE ? INITIAL_REGISTROS : []);
+  const [suppliers, setSuppliers] = useState<Fornecedor[]>(() => IS_DEMO_MODE ? INITIAL_FORNECEDORES : []);
 
   const [selectedDocId, setSelectedDocId] = useState<string | undefined>(undefined);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
 
-  useEffect(() => {
-    localStorage.setItem('sgq_vickytex_registros', JSON.stringify(registros));
-  }, [registros]);
-
-  // Sincronizar estados no localStorage para excelente persistência cliente-servidor emulada
+  // Carregar dados reais dos repositórios Firestore
   useEffect(() => {
     const loadRealData = async () => {
       try {
-        const [docRes, auditRes, fiveSRes, userRes] = await Promise.all([
+        const [
+          docRes, auditRes, fiveSRes, userRes,
+          ncRes, planoRes, riscoRes, equipRes,
+          colabRes, regRes, supRes
+        ] = await Promise.all([
           DocumentRepository.findAll(),
           AuditRepository.findAll(),
           FiveSRepository.findAll(),
-          UserRepository.findAll()
+          UserRepository.findAll(),
+          NCRepository.findAll(),
+          ActionPlanRepository.findAll(),
+          RiskRepository.findAll(),
+          EquipmentRepository.findAll(),
+          CollaboratorRepository.findAll(),
+          RecordRepository.findAll(),
+          SupplierRepository.findAll()
         ]);
         
-        if (docRes.success && docRes.data) {
-          setDocuments(docRes.data);
-        }
-        if (auditRes.success && auditRes.data) {
-          setAudits(auditRes.data);
-        }
-        if (fiveSRes.success && fiveSRes.data) {
-          setAuditorias5s(fiveSRes.data);
-        }
-        if (userRes.success && userRes.data) {
-          setUsers(userRes.data);
-        }
+        if (docRes.success && docRes.data) setDocuments(docRes.data);
+        if (auditRes.success && auditRes.data) setAudits(auditRes.data);
+        if (fiveSRes.success && fiveSRes.data) setAuditorias5s(fiveSRes.data);
+        if (userRes.success && userRes.data) setUsers(userRes.data);
+        if (ncRes.success && ncRes.data) setNcs(ncRes.data);
+        if (planoRes.success && planoRes.data) setPlanos(planoRes.data);
+        if (riscoRes.success && riscoRes.data) setRiscos(riscoRes.data);
+        if (equipRes.success && equipRes.data) setEquipamentos(equipRes.data);
+        if (colabRes.success && colabRes.data) setColaboradores(colabRes.data);
+        if (regRes.success && regRes.data) setRegistros(regRes.data);
+        if (supRes.success && supRes.data) setSuppliers(supRes.data);
       } catch (err) {
         console.error('Falha ao carregar dados reais dos repositórios:', err);
       }
     };
     loadRealData();
   }, []);
-
-  useEffect(() => {
-    localStorage.setItem('sgq_vickytex_documents', JSON.stringify(documents));
-  }, [documents]);
-
-  useEffect(() => {
-    localStorage.setItem('sgq_vickytex_equipamentos', JSON.stringify(equipamentos));
-  }, [equipamentos]);
-
-  useEffect(() => {
-    localStorage.setItem('sgq_vickytex_colaboradores', JSON.stringify(colaboradores));
-  }, [colaboradores]);
-
-  useEffect(() => {
-    localStorage.setItem('sgq_vickytex_logs', JSON.stringify(logs));
-  }, [logs]);
-
-  useEffect(() => {
-    localStorage.setItem('sgq_vickytex_audits', JSON.stringify(audits));
-  }, [audits]);
-
-  useEffect(() => {
-    localStorage.setItem('sgq_vickytex_ncs', JSON.stringify(ncs));
-  }, [ncs]);
-
-  useEffect(() => {
-    localStorage.setItem('sgq_vickytex_planos', JSON.stringify(planos));
-  }, [planos]);
-
-  useEffect(() => {
-    localStorage.setItem('sgq_vickytex_riscos', JSON.stringify(riscos));
-  }, [riscos]);
-
-  useEffect(() => {
-    localStorage.setItem('sgq_vickytex_auditorias5s', JSON.stringify(auditorias5s));
-  }, [auditorias5s]);
-
-  useEffect(() => {
-    localStorage.setItem('sgq_vickytex_users', JSON.stringify(users));
-  }, [users]);
-
-  useEffect(() => {
-    localStorage.setItem('sgq_vickytex_permissions', JSON.stringify(permissions));
-  }, [permissions]);
 
   // Evento Global de Atalho Cmd+K / Ctrl+K
   useEffect(() => {
@@ -316,17 +195,7 @@ function AppContent() {
     setEquipamentos([]);
     setColaboradores([]);
     setRegistros([]);
-
-    // Save empty array to localStorage to prevent fallback to initial mock data
-    localStorage.setItem('sgq_vickytex_documents', JSON.stringify([]));
-    localStorage.setItem('sgq_vickytex_audits', JSON.stringify([]));
-    localStorage.setItem('sgq_vickytex_ncs', JSON.stringify([]));
-    localStorage.setItem('sgq_vickytex_planos', JSON.stringify([]));
-    localStorage.setItem('sgq_vickytex_riscos', JSON.stringify([]));
-    localStorage.setItem('sgq_vickytex_auditorias5s', JSON.stringify([]));
-    localStorage.setItem('sgq_vickytex_equipamentos', JSON.stringify([]));
-    localStorage.setItem('sgq_vickytex_colaboradores', JSON.stringify([]));
-    localStorage.setItem('sgq_vickytex_registros', JSON.stringify([]));
+    setSuppliers([]);
 
     // Also attempt clearing remote Cloud Firestore collections
     const collectionsToClear = [
@@ -564,6 +433,7 @@ function AppContent() {
           equipamentos={equipamentos}
           colaboradores={colaboradores}
           registros={registros}
+          fornecedores={suppliers}
           onNavigateToDocs={() => setActiveSection('documentos')}
           onSelectDocument={handleSelectDocument}
           onNavigateToSection={setActiveSection}

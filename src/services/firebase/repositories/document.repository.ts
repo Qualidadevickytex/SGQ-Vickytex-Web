@@ -11,21 +11,10 @@ class DocumentRepositoryClass extends BaseRepository<Documento> {
   protected collectionName = 'documents';
 
   protected getLocalData(): Documento[] {
-    const saved = localStorage.getItem('sgq_vickytex_documents');
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch {
-        return [];
-      }
-    }
-    const isDemoMode = import.meta.env.VITE_DEMO_MODE === 'true';
-    return isDemoMode ? INITIAL_DOCUMENTS : [];
+    return [];
   }
 
-  protected saveLocalData(data: Documento[]): void {
-    localStorage.setItem('sgq_vickytex_documents', JSON.stringify(data));
-  }
+  protected saveLocalData(_data: Documento[]): void {}
 
   protected mapRecord(rec: any): Documento {
     return {

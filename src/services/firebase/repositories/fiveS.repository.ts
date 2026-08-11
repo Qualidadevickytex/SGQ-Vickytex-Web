@@ -11,35 +11,10 @@ class FiveSRepositoryClass extends BaseRepository<Auditoria5S> {
   protected collectionName = 'fives_audits';
 
   protected getLocalData(): Auditoria5S[] {
-    const saved = localStorage.getItem('sgq_vickytex_auditorias5s') || localStorage.getItem('sgq_vickytex_auditorias_5s');
-    if (saved) {
-      try {
-        const parsed: Auditoria5S[] = JSON.parse(saved);
-        const seen = new Set<string>();
-        return parsed.filter(item => {
-          if (!item || !item.id || seen.has(item.id)) return false;
-          seen.add(item.id);
-          return true;
-        });
-      } catch {
-        return [];
-      }
-    }
-    const isDemoMode = import.meta.env.VITE_DEMO_MODE === 'true';
-    return isDemoMode ? INITIAL_5S_AUDITS : [];
+    return [];
   }
 
-  protected saveLocalData(data: Auditoria5S[]): void {
-    const seen = new Set<string>();
-    const unique = data.filter(item => {
-      if (!item || !item.id || seen.has(item.id)) return false;
-      seen.add(item.id);
-      return true;
-    });
-    const serialized = JSON.stringify(unique);
-    localStorage.setItem('sgq_vickytex_auditorias5s', serialized);
-    localStorage.setItem('sgq_vickytex_auditorias_5s', serialized);
-  }
+  protected saveLocalData(_data: Auditoria5S[]): void {}
 
   protected mapRecord(rec: any): Auditoria5S {
     return {

@@ -11,21 +11,10 @@ class UserRepositoryClass extends BaseRepository<UserAccount> {
   protected collectionName = 'users';
 
   protected getLocalData(): UserAccount[] {
-    const saved = localStorage.getItem('sgq_vickytex_users');
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch {
-        return [];
-      }
-    }
-    const isDemoMode = import.meta.env.VITE_DEMO_MODE === 'true';
-    return isDemoMode ? INITIAL_USER_ACCOUNTS : [];
+    return [];
   }
 
-  protected saveLocalData(data: UserAccount[]): void {
-    localStorage.setItem('sgq_vickytex_users', JSON.stringify(data));
-  }
+  protected saveLocalData(_data: UserAccount[]): void {}
 
   protected mapRecord(rec: any): UserAccount {
     return {

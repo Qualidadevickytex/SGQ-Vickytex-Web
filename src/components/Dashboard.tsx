@@ -98,6 +98,7 @@ interface DashboardProps {
   equipamentos?: Equipamento[];
   colaboradores?: ColaboradorCompetencia[];
   registros?: any[];
+  fornecedores?: any[];
   onNavigateToDocs: () => void;
   onSelectDocument: (docId: string) => void;
   onNavigateToSection?: (section: any) => void;
@@ -115,6 +116,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
   equipamentos,
   colaboradores,
   registros,
+  fornecedores,
   onNavigateToDocs,
   onSelectDocument,
   onNavigateToSection,
@@ -133,20 +135,14 @@ export const Dashboard: React.FC<DashboardProps> = ({
   const totalAuditorias = audits.length;
   const ncsAbertas = ncs.filter(n => n.status === 'Aberta' || n.status === 'Em Execução').length;
 
-  // Reactivamente usa os equipamentos passados por props ou fallback para localStorage / mock data
-  const listEquipamentos = equipamentos || (() => {
-    const savedEquips = localStorage.getItem('sgq_vickytex_equipamentos');
-    return savedEquips ? JSON.parse(savedEquips) : [];
-  })();
+  // Reactivamente usa os equipamentos passados por props
+  const listEquipamentos = equipamentos || [];
   const totalEquips = listEquipamentos.length;
   const calibrados = listEquipamentos.filter((e: any) => e.status === 'Calibrado').length;
   const calibrationConformity = totalEquips > 0 ? Math.round((calibrados / totalEquips) * 100) : 0;
 
-  // Reactivamente usa os colaboradores passados por props ou fallback para localStorage / mock data
-  const listColabs = colaboradores || (() => {
-    const savedColabs = localStorage.getItem('sgq_vickytex_colaboradores');
-    return savedColabs ? JSON.parse(savedColabs) : [];
-  })();
+  // Reactivamente usa os colaboradores passados por props
+  const listColabs = colaboradores || [];
   const totalColabs = listColabs.length;
   const aptos = listColabs.filter((c: any) => c.status === 'Apto').length;
   const competenceIndex = totalColabs > 0 ? Math.round((aptos / totalColabs) * 100) : 0;
@@ -175,34 +171,14 @@ export const Dashboard: React.FC<DashboardProps> = ({
   const average5s = Number(((compliance5sPercentage / 100) * 5).toFixed(1));
 
   // Cálculos dinâmicos de Controle de Registros (ISO 7.5.3)
-  const listRegistros = registros && registros.length > 0 ? registros : (() => {
-    const savedRegistros = localStorage.getItem('sgq_vickytex_registros');
-    if (savedRegistros) {
-      try {
-        return JSON.parse(savedRegistros);
-      } catch (e) {
-        console.error('Erro ao ler registros no dashboard', e);
-      }
-    }
-    return [];
-  })();
+  const listRegistros = registros || [];
   const totalRegistros = listRegistros.length;
   const registrosAtivos = listRegistros.filter((r: any) => r.statusControle === 'Ativo').length;
   const registrosDigitais = listRegistros.filter((r: any) => r.tipoMidia === 'Digital' || r.tipoMidia === 'Misto').length;
   const digitalPercentage = totalRegistros > 0 ? Math.round((registrosDigitais / totalRegistros) * 100) : 0;
 
   // Cálculos dinâmicos de Avaliação de Fornecedores (ISO 8.4)
-  const listFornecedores = (() => {
-    const savedFornecedores = localStorage.getItem('sgq_vickytex_fornecedores');
-    if (savedFornecedores) {
-      try {
-        return JSON.parse(savedFornecedores);
-      } catch (e) {
-        console.error('Erro ao ler fornecedores no dashboard', e);
-      }
-    }
-    return [];
-  })();
+  const listFornecedores = fornecedores || [];
   const totalFornecedores = listFornecedores.length;
   const fornecedoresQualificados = listFornecedores.filter((f: any) => f.statusQualificacao === 'Qualificado' || f.statusQualificacao === 'Qualificado com Restrições').length;
   const fornecedoresTaxaHomologados = totalFornecedores > 0 ? Math.round((fornecedoresQualificados / totalFornecedores) * 100) : 0;

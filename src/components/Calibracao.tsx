@@ -156,7 +156,6 @@ export const CalibracaoComponent: React.FC<CalibracaoProps> = ({
 
   const saveEquipamentos = (newEquips: Equipamento[]) => {
     setEquipamentos(newEquips);
-    localStorage.setItem('sgq_vickytex_equipamentos', JSON.stringify(newEquips));
   };
 
   const handleDeleteEquipamento = (id: string) => {

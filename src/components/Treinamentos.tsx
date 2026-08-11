@@ -27,6 +27,7 @@ import {
 import { Documento, Treinamento, ColaboradorCompetencia, SectorType } from '../types';
 import { SECTORS, getSectors, PersonalizacaoGeral } from '../utils/mockData';
 import { TrainingRepository } from '../services/database/repositories/training.repository';
+import { CollaboratorRepository } from '../services/database/repositories/collaborator.repository';
 
 interface TreinamentosProps {
   documents: Documento[];
@@ -118,13 +119,10 @@ export const Treinamentos: React.FC<TreinamentosProps> = ({
 
   const saveColaboradores = (newColabs: ColaboradorCompetencia[]) => {
     setColaboradores(newColabs);
-    localStorage.setItem('sgq_vickytex_colaboradores', JSON.stringify(newColabs));
   };
 
   const saveTreinamentos = (newTreins: Treinamento[]) => {
     setTreinamentos(newTreins);
-    localStorage.setItem('sgq_vickytex_trainings', JSON.stringify(newTreins));
-    localStorage.setItem('sgq_vickytex_treinamentos', JSON.stringify(newTreins));
   };
 
   const handleDeleteColaborador = (id: string) => {

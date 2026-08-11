@@ -291,20 +291,11 @@ const mapFromRepo = (repoInd: any): Indicador => {
 
 export const Indicadores: React.FC<IndicadoresProps> = ({ onAddLog, personalizacao }) => {
   const [indicadores, setIndicadores] = useState<Indicador[]>(() => {
-    const saved = localStorage.getItem('sgq_vickytex_indicators') || localStorage.getItem('sgq_vickytex_indicadores');
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch (e) {
-        console.error('Falha ao ler indicadores locais:', e);
-      }
-    }
-    return INITIAL_INDICADORES;
+    return import.meta.env.VITE_DEMO_MODE === 'true' ? INITIAL_INDICADORES : [];
   });
 
   const [analises, setAnalises] = useState<AnaliseCritica[]>(() => {
-    const saved = localStorage.getItem('sgq_vickytex_analises_kpi');
-    return saved ? JSON.parse(saved) : INITIAL_ANALISES;
+    return import.meta.env.VITE_DEMO_MODE === 'true' ? INITIAL_ANALISES : [];
   });
 
   // Carregar dados reais remotamente usando o IndicatorRepository na montagem
@@ -312,7 +303,7 @@ export const Indicadores: React.FC<IndicadoresProps> = ({ onAddLog, personalizac
     const fetchIndicators = async () => {
       try {
         const res = await IndicatorRepository.findAll();
-        if (res.success && res.data && res.data.length > 0) {
+        if (res.success && res.data) {
           const mapped = res.data.map(mapFromRepo);
           setIndicadores(mapped);
           if (mapped.length > 0 && !selectedKpiId) {
@@ -365,15 +356,6 @@ export const Indicadores: React.FC<IndicadoresProps> = ({ onAddLog, personalizac
     linkPlanoId: ''
   });
 
-  // Salvar no LocalStorage para preservação redundante
-  useEffect(() => {
-    localStorage.setItem('sgq_vickytex_indicators', JSON.stringify(indicadores));
-    localStorage.setItem('sgq_vickytex_indicadores', JSON.stringify(indicadores));
-  }, [indicadores]);
-
-  useEffect(() => {
-    localStorage.setItem('sgq_vickytex_analises_kpi', JSON.stringify(analises));
-  }, [analises]);
 
   const activeKpi = indicadores.find(k => k.id === selectedKpiId) || indicadores[0];
 

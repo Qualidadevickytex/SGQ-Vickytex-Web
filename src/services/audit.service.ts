@@ -164,7 +164,7 @@ class AuditServiceClass {
       const res = await fetch(`${baseUrl}/api/audit-logs`);
       if (res.ok) {
         const result = await res.json();
-        if (result.success && Array.isArray(result.data) && result.data.length > 0) {
+        if (result.success && Array.isArray(result.data)) {
           return result.data.map((rec: any) => ({
             id: rec.id,
             usuarioEmail: rec.usuarioEmail || '',

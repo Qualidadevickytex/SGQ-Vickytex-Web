@@ -41,23 +41,15 @@ interface FornecedoresProps {
 
 export const Fornecedores: React.FC<FornecedoresProps> = ({ onAddLog, personalizacao }) => {
   const [fornecedores, setFornecedores] = useState<Fornecedor[]>(() => {
-    const saved = localStorage.getItem('sgq_vickytex_suppliers') || localStorage.getItem('sgq_vickytex_fornecedores');
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch (e) {
-        console.error('Erro ao ler fornecedores do localStorage', e);
-      }
-    }
-    return INITIAL_FORNECEDORES;
+    return import.meta.env.VITE_DEMO_MODE === 'true' ? INITIAL_FORNECEDORES : [];
   });
 
-  // Carregar os fornecedores reais do Banco de Dados/Cache via SupplierRepository na montagem
+  // Carregar os fornecedores reais do Banco de Dados via SupplierRepository na montagem
   useEffect(() => {
     const fetchSuppliers = async () => {
       try {
         const res = await SupplierRepository.findAll();
-        if (res.success && res.data && res.data.length > 0) {
+        if (res.success && res.data) {
           setFornecedores(res.data);
         }
       } catch (err) {
@@ -66,12 +58,6 @@ export const Fornecedores: React.FC<FornecedoresProps> = ({ onAddLog, personaliz
     };
     fetchSuppliers();
   }, []);
-
-  // Salvar no localStorage sempre que houver mudanças para consistência local
-  useEffect(() => {
-    localStorage.setItem('sgq_vickytex_suppliers', JSON.stringify(fornecedores));
-    localStorage.setItem('sgq_vickytex_fornecedores', JSON.stringify(fornecedores));
-  }, [fornecedores]);
 
   // Estados de busca, filtros e modais
   const [categorias, setCategorias] = useState<string[]>(() => {

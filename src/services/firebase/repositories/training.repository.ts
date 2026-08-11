@@ -10,14 +10,10 @@ class TrainingRepositoryClass extends BaseRepository<Treinamento> {
   protected collectionName = 'trainings';
 
   protected getLocalData(): Treinamento[] {
-    const saved = localStorage.getItem('sgq_vickytex_trainings');
-    if (saved) return JSON.parse(saved);
     return [];
   }
 
-  protected saveLocalData(data: Treinamento[]): void {
-    localStorage.setItem('sgq_vickytex_trainings', JSON.stringify(data));
-  }
+  protected saveLocalData(_data: Treinamento[]): void {}
 
   protected mapRecord(rec: any): Treinamento {
     return {
