@@ -165,7 +165,11 @@ export const DatabaseViewer: React.FC<DatabaseViewerProps> = ({
       const duration = Math.round(performance.now() - start);
       setPingLatency(duration);
       setLastCheckTime(nowStr);
-      const errLog = `[${dateStr} ${nowStr}] [ERRO] Falha no teste Firestore: ${err?.message || err}`;
+      let errMsg = err?.message || String(err);
+      if (err?.code === 'permission-denied' || errMsg.includes('insufficient permissions')) {
+        errMsg = 'Permissão negada. Verifique as Regras de Segurança (firestore.rules) do seu projeto Firebase.';
+      }
+      const errLog = `[${dateStr} ${nowStr}] [ERRO] Falha no teste Firestore: ${errMsg}`;
       setCustomLogs(prev => [errLog, ...prev]);
     } finally {
       setIsRefreshing(false);
