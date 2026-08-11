@@ -25,10 +25,10 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 const PRESET_USERS: Record<UserRole, UserProfile> = {
   Qualidade: {
     email: 'qualidade@vickytex.com.br',
-    name: 'Mariana Silva (Qualidade)',
-    role: 'Qualidade',
+    name: 'Rodrigo Berto',
+    role: 'Administrador',
     sector: 'Qualidade',
-    photoURL: 'https://api.dicebear.com/7.x/adventurer/svg?seed=Mariana'
+    photoURL: 'https://api.dicebear.com/7.x/adventurer/svg?seed=Rodrigo'
   },
   Gestor: {
     email: 'gestor@vickytex.com.br',
@@ -170,12 +170,44 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setIsLoggingIn(true);
     try {
       await new Promise((resolve) => setTimeout(resolve, 500));
-      const targetUser = PRESET_USERS.Qualidade;
-      const loggedProfile = { ...targetUser, id: 'preset_qualidade' };
-      setUser(loggedProfile);
+      
+      let activeUserProfile: UserProfile | null = null;
+      try {
+        const savedUsersStr = localStorage.getItem('sgq_vickytex_users');
+        if (savedUsersStr) {
+          const savedUsers = JSON.parse(savedUsersStr);
+          const found = savedUsers.find((u: any) => u.email.toLowerCase() === 'qualidade@vickytex.com.br');
+          if (found) {
+            activeUserProfile = {
+              email: found.email,
+              name: found.name,
+              role: found.role as UserRole,
+              sector: found.sector as SectorType,
+              photoURL: found.photoURL || 'https://api.dicebear.com/7.x/adventurer/svg?seed=Rodrigo',
+              id: found.id
+            };
+          }
+        }
+      } catch (e) {
+        // ignore
+      }
+
+      if (!activeUserProfile) {
+        activeUserProfile = {
+          email: 'qualidade@vickytex.com.br',
+          name: 'Rodrigo Berto',
+          role: 'Administrador',
+          sector: 'Qualidade',
+          photoURL: 'https://api.dicebear.com/7.x/adventurer/svg?seed=Rodrigo',
+          id: 'user-1'
+        };
+      }
+
+      localStorage.setItem('sgq_vickytex_role', activeUserProfile.role);
+      setUser(activeUserProfile);
       setAccessToken('google_sso_oauth_token_active');
       setNeedsAuth(false);
-      await recordAuditLog('preset_qualidade', 'Login', 'Autenticação', 'SSO Google com sucesso (@vickytex.com.br)');
+      await recordAuditLog(activeUserProfile.id, 'Login', 'Autenticação', `SSO Google com sucesso (${activeUserProfile.email})`);
     } catch (err) {
       console.error('Google Workspace SSO Error:', err);
       await recordAuditLog('guest', 'Falha de autenticação', 'Autenticação', String(err));
@@ -195,7 +227,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         userList = JSON.parse(savedUsersStr);
       } else {
         userList = [
-          { email: 'qualidade@vickytex.com.br', name: 'Mariana Silva (Qualidade)', role: 'Qualidade', sector: 'Qualidade', photoURL: 'https://api.dicebear.com/7.x/adventurer/svg?seed=Mariana', passwordHash: 'mariana2026', id: 'preset_qualidade' },
+          { email: 'qualidade@vickytex.com.br', name: 'Rodrigo Berto', role: 'Administrador', sector: 'Qualidade', photoURL: 'https://api.dicebear.com/7.x/adventurer/svg?seed=Rodrigo', passwordHash: 'vickytex123', id: 'user-1' },
           { email: 'gestor@vickytex.com.br', name: 'Fernando Oliveira (Gestor)', role: 'Gestor', sector: 'Administração', photoURL: 'https://api.dicebear.com/7.x/bottts/svg?seed=Fernando', passwordHash: 'fernando2026', id: 'preset_gestor' },
           { email: 'supervisor.costura@vickytex.com.br', name: 'Roberto Costa (Líder de Costura)', role: 'Supervisor', sector: 'Costura', photoURL: 'https://api.dicebear.com/7.x/lorelei/svg?seed=Roberto', passwordHash: 'roberto2026', id: 'preset_supervisor' },
           { email: 'admin@vickytex.com.br', name: 'Suporte TI Vickytex', role: 'Administrador', sector: 'Administração', photoURL: 'https://api.dicebear.com/7.x/pixel-art/svg?seed=Buster', passwordHash: 'admin123', id: 'preset_admin' },

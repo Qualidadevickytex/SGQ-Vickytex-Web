@@ -716,15 +716,15 @@ export const savePersonalizacaoGeral = (config: PersonalizacaoGeral): void => {
 export const INITIAL_USER_ACCOUNTS: UserAccount[] = [
   {
     id: 'user-1',
-    name: 'Mariana Silva (Qualidade)',
+    name: 'Rodrigo Berto',
     email: 'qualidade@vickytex.com.br',
-    role: 'Qualidade',
+    role: 'Administrador',
     sector: 'Qualidade',
-    photoURL: 'https://api.dicebear.com/7.x/adventurer/svg?seed=Mariana',
+    photoURL: 'https://api.dicebear.com/7.x/adventurer/svg?seed=Rodrigo',
     status: 'Ativo',
-    passwordHash: 'mariana2026',
+    passwordHash: 'vickytex123',
     lastLogin: '2026-07-10 08:30',
-    telefone: '(11) 98765-4321'
+    telefone: '47992774430'
   },
   {
     id: 'user-2',
