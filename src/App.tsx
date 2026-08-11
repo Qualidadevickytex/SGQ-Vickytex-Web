@@ -58,7 +58,20 @@ function AppContent() {
   // Estado Ativo das Entidades (Carregados do Firestore em Produção)
   const [documents, setDocuments] = useState<Documento[]>(() => IS_DEMO_MODE ? INITIAL_DOCUMENTS : []);
   const [users, setUsers] = useState<UserAccount[]>(() => IS_DEMO_MODE ? INITIAL_USER_ACCOUNTS : []);
-  const [permissions, setPermissions] = useState<RolePermission[]>(() => INITIAL_ROLE_PERMISSIONS);
+  const [permissions, setPermissions] = useState<RolePermission[]>(() => {
+    const saved = localStorage.getItem('sgq_vickytex_permissions');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed;
+        }
+      } catch (e) {
+        console.error('Erro ao carregar permissões do localStorage:', e);
+      }
+    }
+    return INITIAL_ROLE_PERMISSIONS;
+  });
   const [logs, setLogs] = useState<ActivityLog[]>(() => IS_DEMO_MODE ? INITIAL_LOGS : []);
   const [audits, setAudits] = useState<Auditoria[]>(() => IS_DEMO_MODE ? INITIAL_AUDITORIAS : []);
   const [ncs, setNcs] = useState<NaoConformidade[]>(() => IS_DEMO_MODE ? INITIAL_NAO_CONFORMIDADES : []);
@@ -400,6 +413,7 @@ function AppContent() {
 
   const handleUpdatePermissions = (updatedPerms: RolePermission[]) => {
     setPermissions(updatedPerms);
+    localStorage.setItem('sgq_vickytex_permissions', JSON.stringify(updatedPerms));
   };
 
   // Callback de Seleção de Documento (vindo da pesquisa global ou dashboards)
@@ -418,6 +432,7 @@ function AppContent() {
       setActiveSection={setActiveSection}
       onOpenSearch={() => setIsSearchOpen(true)}
       personalizacao={personalizacao}
+      permissions={permissions}
     >
       
       {/* 1. Dashboard Executivo */}

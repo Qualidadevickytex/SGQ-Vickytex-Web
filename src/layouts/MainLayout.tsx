@@ -31,7 +31,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
-import { UserRole } from '../types';
+import { UserRole, RolePermission } from '../types';
 import { PersonalizacaoGeral } from '../utils/mockData';
 
 interface MainLayoutProps {
@@ -40,6 +40,7 @@ interface MainLayoutProps {
   setActiveSection: (section: 'dashboard' | 'documentos' | 'auditorias' | 'riscos' | '5s' | 'integracao' | 'database' | 'treinamentos' | 'calibracao' | 'planos' | 'configuracoes' | 'usuarios' | 'registros' | 'fornecedores' | 'indicadores' | 'ceo') => void;
   onOpenSearch: () => void;
   personalizacao?: PersonalizacaoGeral;
+  permissions?: RolePermission[];
 }
 
 export const MainLayout: React.FC<MainLayoutProps> = ({
@@ -47,13 +48,20 @@ export const MainLayout: React.FC<MainLayoutProps> = ({
   activeSection,
   setActiveSection,
   onOpenSearch,
-  personalizacao
+  personalizacao,
+  permissions
 }) => {
   const { user, logout } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   const allowedSections = React.useMemo(() => {
+    if (permissions && permissions.length > 0 && user) {
+      const userPerm = permissions.find((p) => p.role === user.role);
+      if (userPerm) {
+        return userPerm.allowedSections;
+      }
+    }
     try {
       const saved = localStorage.getItem('sgq_vickytex_permissions');
       if (saved && user) {
@@ -83,7 +91,7 @@ export const MainLayout: React.FC<MainLayoutProps> = ({
       return ['dashboard', 'documentos', 'auditorias', 'riscos', '5s', 'planos', 'registros', 'fornecedores', 'indicadores', 'ceo'];
     }
     return ['dashboard', 'documentos', 'registros', 'indicadores', 'ceo'];
-  }, [user]);
+  }, [user, permissions]);
 
   const MENU_ITEMS = [
     { id: 'dashboard' as const, label: 'Painel Geral', icon: LayoutDashboard },
