@@ -273,7 +273,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ personalizacao: propPe
               <Sparkles className="w-5 h-5 text-amber-500 fill-amber-500 animate-pulse" />
             </h3>
             <p className="text-xs text-slate-400 dark:text-slate-400">
-              {personalizacao?.loginDireitaSubtitulo || "Escolha a forma de acesso corporativo mais adequada para seu perfil de colaborador ou auditor."}
+              {personalizacao?.loginDireitaSubtitulo || "Informe suas credenciais de e-mail e senha corporativa para acessar o portal."}
             </p>
           </div>
 
@@ -428,7 +428,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ personalizacao: propPe
               </div>
 
               <div className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed bg-slate-50 dark:bg-slate-800/20 p-4 rounded-xl border border-slate-100 dark:border-slate-800 font-light">
-                {personalizacao?.loginSuporteContatoTexto || "Se você perdeu sua senha de acesso, precisa redefinir suas credenciais do Google Workspace corporativo, ou quer reportar uma instabilidade, fale com o suporte pelo e-mail suporte@vickytex.com.br ou abra um chamado pelo ramal interno 4100."}
+                {personalizacao?.loginSuporteContatoTexto || "Se você perdeu sua senha de acesso, precisa redefinir suas credenciais corporativas, ou quer reportar uma instabilidade, fale com o suporte pelo e-mail suporte@vickytex.com.br ou abra um chamado pelo ramal interno 4100."}
               </div>
 
               <div className="flex justify-end pt-2">

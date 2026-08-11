@@ -1899,16 +1899,6 @@ export const Configuracoes: React.FC<ConfiguracoesProps> = ({
                             className="w-full bg-white dark:bg-slate-800 text-xs border border-slate-200 dark:border-slate-700 rounded-lg p-2 text-slate-800 dark:text-slate-100 focus:outline-hidden font-medium"
                           />
                         </div>
-                        <div className="space-y-1">
-                          <label className="text-[9px] font-bold text-slate-500">Texto de Informação SSO (Tab Google)</label>
-                          <textarea
-                            rows={2}
-                            required
-                            value={configGeral.loginSsoDescricao || ''}
-                            onChange={(e) => setConfigGeral({ ...configGeral, loginSsoDescricao: e.target.value })}
-                            className="w-full bg-white dark:bg-slate-800 text-xs border border-slate-200 dark:border-slate-700 rounded-lg p-2 text-slate-800 dark:text-slate-100 focus:outline-hidden font-medium resize-none"
-                          />
-                        </div>
                       </div>
 
                       {/* Configurações do Suporte TI */}
