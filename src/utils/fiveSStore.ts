@@ -96,22 +96,58 @@ export const INITIAL_CICLOS: CicloAuditoria[] = [
   { id: "ciclo-1", nome: "Ciclo 2026 - Q3", dataInicio: "2026-07-01", dataFim: "2026-09-30", ativo: true }
 ];
 
-// --- STORAGE IMPLEMENTATION ---
+import { SystemSettingsRepository } from '../services/database/repositories/systemSettings.repository';
+
+// --- IN-MEMORY CACHE & FIRESTORE REALTIME SYNC ---
+
+const inMemoryStore: Record<string, any> = {
+  sgq_5s_setores: INITIAL_SETORES,
+  sgq_5s_sensos: INITIAL_SENSOS,
+  sgq_5s_requisitos: INITIAL_REQUISITOS,
+  sgq_5s_classificacoes: INITIAL_CLASSIFICACOES,
+  sgq_5s_configuracao: INITIAL_CONFIG,
+  sgq_5s_ciclos: INITIAL_CICLOS,
+  sgq_5s_itens: [],
+  sgq_5s_fotos: [],
+  sgq_5s_planos: []
+};
+
+let isSubscribed = false;
+
+export const initFiveSStoreSync = () => {
+  if (isSubscribed) return;
+  isSubscribed = true;
+
+  SystemSettingsRepository.subscribe((records) => {
+    records.forEach(rec => {
+      if (rec.id.startsWith('sgq_5s_') || rec.id.startsWith('fives_')) {
+        const key = rec.id.startsWith('fives_') ? `sgq_5s_${rec.id.replace('fives_', '')}` : rec.id;
+        if (rec.items !== undefined) {
+          inMemoryStore[key] = rec.items;
+        } else if (rec.data !== undefined) {
+          inMemoryStore[key] = rec.data;
+        }
+      }
+    });
+  });
+};
+
+initFiveSStoreSync();
 
 export const getStoreData = <T>(key: string, fallback: T): T => {
-  const saved = localStorage.getItem(key);
-  if (saved) {
-    try {
-      return JSON.parse(saved);
-    } catch {
-      return fallback;
-    }
+  if (inMemoryStore[key] !== undefined) {
+    return inMemoryStore[key] as T;
   }
   return fallback;
 };
 
 export const setStoreData = <T>(key: string, data: T): void => {
-  localStorage.setItem(key, JSON.stringify(data));
+  inMemoryStore[key] = data;
+  const isArray = Array.isArray(data);
+  const payload = isArray ? { id: key, items: data } : { id: key, data };
+  SystemSettingsRepository.create(payload).catch(err => {
+    console.error(`[FiveSStore] Error persisting ${key} to Firestore:`, err);
+  });
 };
 
 // --- DATA ACCESSORS ---
@@ -125,6 +161,7 @@ export const getCiclos = () => getStoreData<CicloAuditoria[]>('sgq_5s_ciclos', I
 export const getItensAuditados = () => getStoreData<ItemAuditado[]>('sgq_5s_itens', []);
 export const getFotografias = () => getStoreData<Fotografia5S[]>('sgq_5s_fotos', []);
 export const getPlanosAcao5S = () => getStoreData<PlanoAcao5S[]>('sgq_5s_planos', []);
+
 
 // --- CALCULATION HELPERS ---
 
@@ -298,107 +335,5 @@ export const seedMockDataIfEmpty = (propAudits: Auditoria5S[] = []) => {
   let activeItens = getItensAuditados();
   let activePlanos = getPlanosAcao5S();
   let activeFotos = getFotografias();
-
-  // If items or store are empty, populate them
-  let needSave = false;
-
-  if (localStorage.getItem('sgq_5s_setores') === null) {
-    setStoreData('sgq_5s_setores', INITIAL_SETORES);
-    activeSetores = INITIAL_SETORES;
-    needSave = true;
-  }
-  if (localStorage.getItem('sgq_5s_sensos') === null) {
-    setStoreData('sgq_5s_sensos', INITIAL_SENSOS);
-    needSave = true;
-  }
-  if (localStorage.getItem('sgq_5s_requisitos') === null) {
-    setStoreData('sgq_5s_requisitos', INITIAL_REQUISITOS);
-    activeReqs = INITIAL_REQUISITOS;
-    needSave = true;
-  }
-  if (localStorage.getItem('sgq_5s_classificacoes') === null) {
-    setStoreData('sgq_5s_classificacoes', INITIAL_CLASSIFICACOES);
-    activeClassificacoes = INITIAL_CLASSIFICACOES;
-    needSave = true;
-  }
-  if (localStorage.getItem('sgq_5s_configuracao') === null) {
-    setStoreData('sgq_5s_configuracao', INITIAL_CONFIG);
-    activeConfig = INITIAL_CONFIG;
-    needSave = true;
-  }
-  if (localStorage.getItem('sgq_5s_ciclos') === null) {
-    setStoreData('sgq_5s_ciclos', INITIAL_CICLOS);
-    activeCiclos = INITIAL_CICLOS;
-    needSave = true;
-  }
-
-  // Pre-generate items for existing propAudits if items are completely empty
-  if (activeItens.length === 0 && propAudits.length > 0) {
-    const generatedItems: ItemAuditado[] = [];
-    const generatedPlanos: PlanoAcao5S[] = [];
-
-    propAudits.forEach(audit => {
-      // Determine sector id from names or defaults
-      const sectorMatched = activeSetores.find(s => s.nome.toLowerCase() === audit.setor.toLowerCase()) || activeSetores[0];
-      const sectorId = sectorMatched.id;
-      
-      // Update sector id & cycle id if not present
-      audit.setorId = sectorId;
-      audit.cicloId = activeCiclos[0].id;
-
-      // Distribute evaluation based on audit score (e.g. 80% or 4.0 out of 5)
-      const targetPct = audit.mediaGeral <= 5 ? audit.mediaGeral * 20 : audit.mediaGeral;
-      
-      activeReqs.forEach((req, idx) => {
-        let evalVal: 'Atende Totalmente' | 'Atende Parcialmente' | 'Não Atende' = 'Atende Totalmente';
-        let pontos = 2;
-
-        if (targetPct < 70 && idx % 4 === 0) {
-          evalVal = 'Não Atende';
-          pontos = 0;
-        } else if (targetPct < 90 && idx % 6 === 0) {
-          evalVal = 'Atende Parcialmente';
-          pontos = 1;
-        }
-
-        const itemId = `item-${audit.id}-${req.id}`;
-        
-        // Create plan if 'Não Atende' or 'Atende Parcialmente'
-        let planoId = undefined;
-        if (evalVal === 'Não Atende' || evalVal === 'Atende Parcialmente') {
-          planoId = `plano5s-${audit.id}-${req.id}`;
-          generatedPlanos.push({
-            id: planoId,
-            auditoriaId: audit.id,
-            requisitoId: req.id,
-            descricao: `Tratar desvio encontrado no requisito ${req.codigo}: ${req.descricao}.`,
-            responsavel: `supervisor.${sectorMatched.nome.toLowerCase().replace(/[^a-z]/g, '')}@vickytex.com.br`,
-            prazo: new Date(new Date(audit.dataAuditoria).getTime() + 15 * 24 * 3600 * 1000).toISOString().split('T')[0], // 15 days later
-            status: targetPct < 70 ? 'Pendente' : 'Concluído',
-            dataConclusao: targetPct >= 70 ? audit.dataAuditoria : undefined,
-            fotosCorrecao: [],
-            comentarios: ["Plano de ação gerado automaticamente pelo sistema de auditoria 5S."],
-            historico: [
-              { data: audit.dataAuditoria, usuario: "Sistema", acao: "Criação", detalhes: "Plano gerado por reprovação na auditoria" }
-            ]
-          });
-        }
-
-        generatedItems.push({
-          id: itemId,
-          auditoriaId: audit.id,
-          requisitoId: req.id,
-          avaliacao: evalVal,
-          pontos: pontos,
-          observacoes: evalVal !== 'Atende Totalmente' ? `Identificado desvio na auditoria: ${req.descricao}` : '',
-          planoAcaoId: planoId,
-          reincidenciaCount: 0,
-          penalidadeAplicada: 0
-        });
-      });
-    });
-
-    setStoreData('sgq_5s_itens', generatedItems);
-    setStoreData('sgq_5s_planos', generatedPlanos);
-  }
 };
+

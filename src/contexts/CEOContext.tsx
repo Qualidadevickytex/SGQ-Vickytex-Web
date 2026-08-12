@@ -88,6 +88,7 @@ export const CEOProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Trigger loading when user profile mounts/changes
   useEffect(() => {
+    if (!user) return;
     loadCEOData();
     checkIntegrations();
   }, [loadCEOData, checkIntegrations, user]);

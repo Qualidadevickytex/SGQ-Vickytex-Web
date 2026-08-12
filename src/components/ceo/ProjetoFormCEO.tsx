@@ -20,6 +20,8 @@ import { ProjetoCEO, MetodologiaCEO, StatusProjetoCEO } from '../../types/ceo';
 import { SectorType } from '../../types/department';
 import { Indicator } from '../../types/indicator';
 
+import { SystemSettingsRepository } from '../../services/database/repositories/systemSettings.repository';
+
 interface ProjetoFormCEOProps {
   project?: ProjetoCEO; // If present, edit mode. Otherwise, create mode.
   onSave: (data: Partial<ProjetoCEO>) => Promise<boolean>;
@@ -42,6 +44,18 @@ export const ProjetoFormCEO: React.FC<ProjetoFormCEOProps> = ({
   const [patrocinador, setPatrocinador] = useState(project?.patrocinador || 'qualidade@vickytex.com.br');
   const [status, setStatus] = useState<StatusProjetoCEO>(project?.status || 'Planejado');
   const [metodologia, setMetodologia] = useState<MetodologiaCEO>(project?.metodologia || 'PDCA');
+  const [metodologiasConfig, setMetodologiasConfig] = useState<any[]>([]);
+
+  useEffect(() => {
+    const unsub = SystemSettingsRepository.subscribe((records) => {
+      const found = records.find(r => r.id === 'sgq_vickytex_metodologias_config');
+      if (found && Array.isArray(found.items)) {
+        setMetodologiasConfig(found.items);
+      }
+    });
+    return () => unsub();
+  }, []);
+
   const [isConfirmDeleteOpen, setIsConfirmDeleteOpen] = useState(false);
   const [dataInicio, setDataInicio] = useState(project?.dataInicio || new Date().toISOString().split('T')[0]);
   const [dataFimPlanejada, setDataFimPlanejada] = useState(project?.dataFimPlanejada || new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]);
@@ -175,65 +189,57 @@ export const ProjetoFormCEO: React.FC<ProjetoFormCEOProps> = ({
 
               {/* Explicação dinâmica e educativa sobre a metodologia selecionada */}
               {(() => {
-                const explanations = (() => {
-                  const saved = localStorage.getItem('sgq_vickytex_metodologias_config');
-                  if (saved) {
-                    try {
-                      return JSON.parse(saved);
-                    } catch (e) {}
+                const explanations = metodologiasConfig.length > 0 ? metodologiasConfig : [
+                  {
+                    id: 'PDCA',
+                    nome: 'PDCA (Plan, Do, Check, Act)',
+                    etapas: 'Planejar, Executar, Verificar, Agir',
+                    explicacao: 'Ciclo de melhoria contínua de quatro etapas para controle e aprendizado contínuo. Focado em solução de problemas de rotina e padronização rápida.',
+                    ferramentas: 'Brainstorming, 5 Whys, Ishikawa, Plano de Ação, Gráfico de Pareto'
+                  },
+                  {
+                    id: 'DMAIC',
+                    nome: 'DMAIC (Define, Measure, Analyze, Improve, Control)',
+                    etapas: 'Definir, Medir, Analisar, Melhorar, Controlar',
+                    explicacao: 'Método rigoroso de cinco fases baseado em dados para redução de variabilidade, controle estatístico de processos e eliminação de defeitos (Seis Sigma).',
+                    ferramentas: 'SIPOC, VOC, Matriz GUT, Pareto, 5 Porquês, Ishikawa, Fluxograma'
+                  },
+                  {
+                    id: 'Kaizen',
+                    nome: 'Kaizen (Melhoria Contínua Rápida)',
+                    etapas: 'Identificar Desperdício, Desenhar Solução, Implementar, Validar',
+                    explicacao: 'Foco em melhorias incrementais diárias e rápidas através da eliminação de desperdícios no local de trabalho (Gemba), engajando diretamente os operadores.',
+                    ferramentas: '5S, PICK, Diagrama Ishikawa, Cronograma Rápido'
+                  },
+                  {
+                    id: 'A3',
+                    nome: 'A3 (Toyota Problem Solving)',
+                    etapas: 'Contexto, Situação Atual, Objetivos, Análise de Causa, Contramedidas, Acompanhamento',
+                    explicacao: 'Abordagem estruturada de resolução de problemas em uma única página, baseada no pensamento enxuto da Toyota, focando em causa raiz e contramedidas visuais.',
+                    ferramentas: 'Fluxograma, Ishikawa, 5 Whys, Swot, Plano de Ação'
+                  },
+                  {
+                    id: 'Projeto Lean',
+                    nome: 'Projeto Lean Manufacturing',
+                    etapas: 'Mapear Valor (VSM), Identificar Gargalos, Fluxo Contínuo, Puxar Produção, Perfeição',
+                    explicacao: 'Focado no mapeamento do fluxo de valor (VSM) e eliminação sistemática dos 8 desperdícios clássicos para aumentar a velocidade, reduzir custos e simplificar operações.',
+                    ferramentas: 'SIPOC, Kanban, Lead Time, VSM, 5S'
+                  },
+                  {
+                    id: 'Projeto Estratégico',
+                    nome: 'Projeto Estratégico Organizacional',
+                    etapas: 'Diagnóstico, Formulação, Desdobramento, Execução, Avaliação',
+                    explicacao: 'Alinhamento de diretrizes executivas de liderança com metas operacionais da fábrica, focado em alta competitividade utilizando Hoshin Kanri ou BSC.',
+                    ferramentas: 'SWOT, Matriz GUT, Indicadores de Desempenho (KPIs)'
+                  },
+                  {
+                    id: 'Projeto Personalizado',
+                    nome: 'Projeto Personalizado',
+                    etapas: 'Iniciação, Planejamento, Execução, Monitoramento, Encerramento',
+                    explicacao: 'Fluxo de trabalho totalmente flexível para melhorias estruturadas que necessitam de fases, ferramentas e cronogramas customizados por setor.',
+                    ferramentas: 'Customizável conforme necessidade do projeto'
                   }
-                  return [
-                    {
-                      id: 'PDCA',
-                      nome: 'PDCA (Plan, Do, Check, Act)',
-                      etapas: 'Planejar, Executar, Verificar, Agir',
-                      explicacao: 'Ciclo de melhoria contínua de quatro etapas para controle e aprendizado contínuo. Focado em solução de problemas de rotina e padronização rápida.',
-                      ferramentas: 'Brainstorming, 5 Whys, Ishikawa, Plano de Ação, Gráfico de Pareto'
-                    },
-                    {
-                      id: 'DMAIC',
-                      nome: 'DMAIC (Define, Measure, Analyze, Improve, Control)',
-                      etapas: 'Definir, Medir, Analisar, Melhorar, Controlar',
-                      explicacao: 'Método rigoroso de cinco fases baseado em dados para redução de variabilidade, controle estatístico de processos e eliminação de defeitos (Seis Sigma).',
-                      ferramentas: 'SIPOC, VOC, Matriz GUT, Pareto, 5 Porquês, Ishikawa, Fluxograma'
-                    },
-                    {
-                      id: 'Kaizen',
-                      nome: 'Kaizen (Melhoria Contínua Rápida)',
-                      etapas: 'Identificar Desperdício, Desenhar Solução, Implementar, Validar',
-                      explicacao: 'Foco em melhorias incrementais diárias e rápidas através da eliminação de desperdícios no local de trabalho (Gemba), engajando diretamente os operadores.',
-                      ferramentas: '5S, PICK, Diagrama Ishikawa, Cronograma Rápido'
-                    },
-                    {
-                      id: 'A3',
-                      nome: 'A3 (Toyota Problem Solving)',
-                      etapas: 'Contexto, Situação Atual, Objetivos, Análise de Causa, Contramedidas, Acompanhamento',
-                      explicacao: 'Abordagem estruturada de resolução de problemas em uma única página, baseada no pensamento enxuto da Toyota, focando em causa raiz e contramedidas visuais.',
-                      ferramentas: 'Fluxograma, Ishikawa, 5 Whys, Swot, Plano de Ação'
-                    },
-                    {
-                      id: 'Projeto Lean',
-                      nome: 'Projeto Lean Manufacturing',
-                      etapas: 'Mapear Valor (VSM), Identificar Gargalos, Fluxo Contínuo, Puxar Produção, Perfeição',
-                      explicacao: 'Focado no mapeamento do fluxo de valor (VSM) e eliminação sistemática dos 8 desperdícios clássicos para aumentar a velocidade, reduzir custos e simplificar operações.',
-                      ferramentas: 'SIPOC, Kanban, Lead Time, VSM, 5S'
-                    },
-                    {
-                      id: 'Projeto Estratégico',
-                      nome: 'Projeto Estratégico Organizacional',
-                      etapas: 'Diagnóstico, Formulação, Desdobramento, Execução, Avaliação',
-                      explicacao: 'Alinhamento de diretrizes executivas de liderança com metas operacionais da fábrica, focado em alta competitividade utilizando Hoshin Kanri ou BSC.',
-                      ferramentas: 'SWOT, Matriz GUT, Indicadores de Desempenho (KPIs)'
-                    },
-                    {
-                      id: 'Projeto Personalizado',
-                      nome: 'Projeto Personalizado',
-                      etapas: 'Iniciação, Planejamento, Execução, Monitoramento, Encerramento',
-                      explicacao: 'Fluxo de trabalho totalmente flexível para melhorias estruturadas que necessitam de fases, ferramentas e cronogramas customizados por setor.',
-                      ferramentas: 'Customizável conforme necessidade do projeto'
-                    }
-                  ];
-                })();
+                ];
                 const details = explanations.find((m: any) => m.id === metodologia) || explanations[0];
                 return (
                   <div className="mt-2.5 p-3.5 bg-blue-50/70 dark:bg-slate-900 rounded-xl border border-blue-100/40 dark:border-slate-800 text-xs text-slate-600 dark:text-slate-350 space-y-1.5 leading-relaxed">

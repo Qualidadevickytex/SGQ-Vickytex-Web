@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { 
   CheckSquare, 
   AlertTriangle, 
@@ -25,6 +25,7 @@ import {
 import { Auditoria, NaoConformidade, SectorType, Documento } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { SECTORS, getSectors, PersonalizacaoGeral } from '../utils/mockData';
+import { SystemSettingsRepository } from '../services/database/repositories/systemSettings.repository';
 
 interface AuditoriasNCProps {
   audits: Auditoria[];
@@ -55,18 +56,26 @@ export const AuditoriasNC: React.FC<AuditoriasNCProps> = ({
 }) => {
   const { user } = useAuth();
   const [sectorsList] = useState<string[]>(() => getSectors());
-  const [origens] = useState<string[]>(() => {
-    const saved = localStorage.getItem('sgq_vickytex_auditorias_origens');
-    return saved ? JSON.parse(saved) : [
-      "Auditoria Interna",
-      "Auditoria Externa ISO 9001",
-      "Reclamação de Cliente",
-      "Inspeção de Segurança",
-      "Desvio de Processo Interno",
-      "Feedback de Colaborador",
-      "Outros"
-    ];
-  });
+  const [origens, setOrigens] = useState<string[]>([
+    "Auditoria Interna",
+    "Auditoria Externa ISO 9001",
+    "Reclamação de Cliente",
+    "Inspeção de Segurança",
+    "Desvio de Processo Interno",
+    "Feedback de Colaborador",
+    "Outros"
+  ]);
+
+  useEffect(() => {
+    const unsub = SystemSettingsRepository.subscribe((records) => {
+      const found = records.find(r => r.id === 'sgq_vickytex_auditorias_origens');
+      if (found && Array.isArray(found.items)) {
+        setOrigens(found.items);
+      }
+    });
+    return () => unsub();
+  }, []);
+
   const [activeTab, setActiveTab] = useState<'auditorias' | 'ncs'>('auditorias');
 
   // Modais

@@ -22,4 +22,5 @@ export * from './rolePermission.repository';
 export * from './supplier.repository';
 export * from './training.repository';
 export * from './user.repository';
+export * from './systemSettings.repository';
 

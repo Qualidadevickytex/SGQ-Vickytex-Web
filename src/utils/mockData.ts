@@ -4,6 +4,7 @@
  */
 
 import { Documento, ActivityLog, Auditoria, NaoConformidade, SectorType, DocumentType, PlanoAcao, RiscoOportunidade, Auditoria5S, UserAccount, RolePermission } from '../types';
+import { SystemSettingsRepository } from '../services/database/repositories/systemSettings.repository';
 
 export const SECTORS: SectorType[] = [
   'Administração',
@@ -15,20 +16,6 @@ export const SECTORS: SectorType[] = [
   'Qualidade'
 ];
 
-export const getSectors = (): SectorType[] => {
-  if (typeof window !== 'undefined') {
-    const saved = localStorage.getItem('sgq_vickytex_setores');
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch (e) {
-        // ignore
-      }
-    }
-  }
-  return SECTORS;
-};
-
 export const DOCUMENT_TYPES: { type: DocumentType; name: string; description: string }[] = [
   { type: 'POP', name: 'Procedimento Operacional Padrão', description: 'Padronização detalhada de processos rotineiros.' },
   { type: 'FOR', name: 'Formulário / Registro da Qualidade', description: 'Coleta de dados e evidência de conformidade.' },
@@ -37,19 +24,33 @@ export const DOCUMENT_TYPES: { type: DocumentType; name: string; description: st
   { type: 'LIST', name: 'Lista de Verificação / Mestra', description: 'Checklists de conferência de conformidades.' }
 ];
 
-export const getDocumentTypes = (): { type: DocumentType; name: string; description: string }[] => {
-  if (typeof window !== 'undefined') {
-    const saved = localStorage.getItem('sgq_vickytex_tipos_documentos');
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch (e) {
-        // ignore
+// In-memory cache for system configuration settings synced with Firestore
+const systemConfigCache: Record<string, any> = {
+  sgq_vickytex_setores: SECTORS,
+  sgq_vickytex_tipos_documentos: DOCUMENT_TYPES
+};
+
+// Sync system config settings with Firestore
+SystemSettingsRepository.subscribe((records) => {
+  records.forEach((rec) => {
+    if (rec.id.startsWith('sgq_vickytex_')) {
+      if (rec.items !== undefined) {
+        systemConfigCache[rec.id] = rec.items;
+      } else if (rec.data !== undefined) {
+        systemConfigCache[rec.id] = rec.data;
       }
     }
-  }
-  return DOCUMENT_TYPES;
+  });
+});
+
+export const getSectors = (): SectorType[] => {
+  return systemConfigCache['sgq_vickytex_setores'] || SECTORS;
 };
+
+export const getDocumentTypes = (): { type: DocumentType; name: string; description: string }[] => {
+  return systemConfigCache['sgq_vickytex_tipos_documentos'] || DOCUMENT_TYPES;
+};
+
 
 export const INITIAL_DOCUMENTS: Documento[] = [
   {

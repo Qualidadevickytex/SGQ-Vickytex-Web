@@ -77,6 +77,13 @@ function AppContent() {
 
   // Carregar dados reais dos repositórios Firestore e assinar atualizações em tempo real
   useEffect(() => {
+    // Garantir que chamadas ao Firestore SOMENTE sejam feitas após autenticação do usuário
+    if (needsAuth || !user) {
+      return;
+    }
+
+    let isMounted = true;
+
     const loadRealData = async () => {
       try {
         const [
@@ -99,21 +106,23 @@ function AppContent() {
           AuditService.getLogs()
         ]);
         
-        if (docRes.success && Array.isArray(docRes.data) && docRes.data.length > 0) setDocuments(docRes.data);
-        if (auditRes.success && Array.isArray(auditRes.data) && auditRes.data.length > 0) setAudits(auditRes.data);
-        if (fiveSRes.success && Array.isArray(fiveSRes.data) && fiveSRes.data.length > 0) setAuditorias5s(fiveSRes.data);
-        if (userRes.success && Array.isArray(userRes.data) && userRes.data.length > 0) setUsers(userRes.data);
-        if (ncRes.success && Array.isArray(ncRes.data) && ncRes.data.length > 0) setNcs(ncRes.data);
-        if (planoRes.success && Array.isArray(planoRes.data) && planoRes.data.length > 0) setPlanos(planoRes.data);
-        if (riscoRes.success && Array.isArray(riscoRes.data) && riscoRes.data.length > 0) setRiscos(riscoRes.data);
-        if (equipRes.success && Array.isArray(equipRes.data) && equipRes.data.length > 0) setEquipamentos(equipRes.data);
-        if (colabRes.success && Array.isArray(colabRes.data) && colabRes.data.length > 0) setColaboradores(colabRes.data);
-        if (regRes.success && Array.isArray(regRes.data) && regRes.data.length > 0) setRegistros(regRes.data);
-        if (supRes.success && Array.isArray(supRes.data) && supRes.data.length > 0) setSuppliers(supRes.data);
-        if (permRes.success && Array.isArray(permRes.data) && permRes.data.length > 0) {
+        if (!isMounted) return;
+
+        if (docRes.success && Array.isArray(docRes.data) && (docRes.data.length > 0 || !IS_DEMO_MODE)) setDocuments(docRes.data);
+        if (auditRes.success && Array.isArray(auditRes.data) && (auditRes.data.length > 0 || !IS_DEMO_MODE)) setAudits(auditRes.data);
+        if (fiveSRes.success && Array.isArray(fiveSRes.data) && (fiveSRes.data.length > 0 || !IS_DEMO_MODE)) setAuditorias5s(fiveSRes.data);
+        if (userRes.success && Array.isArray(userRes.data) && (userRes.data.length > 0 || !IS_DEMO_MODE)) setUsers(userRes.data);
+        if (ncRes.success && Array.isArray(ncRes.data) && (ncRes.data.length > 0 || !IS_DEMO_MODE)) setNcs(ncRes.data);
+        if (planoRes.success && Array.isArray(planoRes.data) && (planoRes.data.length > 0 || !IS_DEMO_MODE)) setPlanos(planoRes.data);
+        if (riscoRes.success && Array.isArray(riscoRes.data) && (riscoRes.data.length > 0 || !IS_DEMO_MODE)) setRiscos(riscoRes.data);
+        if (equipRes.success && Array.isArray(equipRes.data) && (equipRes.data.length > 0 || !IS_DEMO_MODE)) setEquipamentos(equipRes.data);
+        if (colabRes.success && Array.isArray(colabRes.data) && (colabRes.data.length > 0 || !IS_DEMO_MODE)) setColaboradores(colabRes.data);
+        if (regRes.success && Array.isArray(regRes.data) && (regRes.data.length > 0 || !IS_DEMO_MODE)) setRegistros(regRes.data);
+        if (supRes.success && Array.isArray(supRes.data) && (supRes.data.length > 0 || !IS_DEMO_MODE)) setSuppliers(supRes.data);
+        if (permRes.success && Array.isArray(permRes.data) && (permRes.data.length > 0 || !IS_DEMO_MODE)) {
           setPermissions(permRes.data as any);
         }
-        if (Array.isArray(logData) && logData.length > 0) setLogs(logData as any);
+        if (Array.isArray(logData) && (logData.length > 0 || !IS_DEMO_MODE)) setLogs(logData as any);
       } catch (err) {
         console.error('Falha ao carregar dados reais dos repositórios:', err);
       }
@@ -122,19 +131,20 @@ function AppContent() {
     loadRealData();
 
     // Assinaturas Firestore onSnapshot
-    const unsubDocs = DocumentRepository.subscribe((items) => items.length > 0 && setDocuments(items));
-    const unsubAudits = AuditRepository.subscribe((items) => items.length > 0 && setAudits(items));
-    const unsubUsers = UserRepository.subscribe((items) => items.length > 0 && setUsers(items));
-    const unsubNCs = NCRepository.subscribe((items) => items.length > 0 && setNcs(items));
-    const unsubPlanos = ActionPlanRepository.subscribe((items) => items.length > 0 && setPlanos(items));
-    const unsubRiscos = RiskRepository.subscribe((items) => items.length > 0 && setRiscos(items));
-    const unsubEquip = EquipmentRepository.subscribe((items) => items.length > 0 && setEquipamentos(items));
-    const unsubColab = CollaboratorRepository.subscribe((items) => items.length > 0 && setColaboradores(items));
-    const unsubReg = RecordRepository.subscribe((items) => items.length > 0 && setRegistros(items));
-    const unsubSup = SupplierRepository.subscribe((items) => items.length > 0 && setSuppliers(items));
-    const unsubPerms = RolePermissionsRepository.subscribe((items) => items.length > 0 && setPermissions(items as any));
+    const unsubDocs = DocumentRepository.subscribe((items) => (items.length > 0 || !IS_DEMO_MODE) && setDocuments(items));
+    const unsubAudits = AuditRepository.subscribe((items) => (items.length > 0 || !IS_DEMO_MODE) && setAudits(items));
+    const unsubUsers = UserRepository.subscribe((items) => (items.length > 0 || !IS_DEMO_MODE) && setUsers(items));
+    const unsubNCs = NCRepository.subscribe((items) => (items.length > 0 || !IS_DEMO_MODE) && setNcs(items));
+    const unsubPlanos = ActionPlanRepository.subscribe((items) => (items.length > 0 || !IS_DEMO_MODE) && setPlanos(items));
+    const unsubRiscos = RiskRepository.subscribe((items) => (items.length > 0 || !IS_DEMO_MODE) && setRiscos(items));
+    const unsubEquip = EquipmentRepository.subscribe((items) => (items.length > 0 || !IS_DEMO_MODE) && setEquipamentos(items));
+    const unsubColab = CollaboratorRepository.subscribe((items) => (items.length > 0 || !IS_DEMO_MODE) && setColaboradores(items));
+    const unsubReg = RecordRepository.subscribe((items) => (items.length > 0 || !IS_DEMO_MODE) && setRegistros(items));
+    const unsubSup = SupplierRepository.subscribe((items) => (items.length > 0 || !IS_DEMO_MODE) && setSuppliers(items));
+    const unsubPerms = RolePermissionsRepository.subscribe((items) => (items.length > 0 || !IS_DEMO_MODE) && setPermissions(items as any));
 
     return () => {
+      isMounted = false;
       unsubDocs();
       unsubAudits();
       unsubUsers();
@@ -147,7 +157,8 @@ function AppContent() {
       unsubSup();
       unsubPerms();
     };
-  }, []);
+  }, [user, needsAuth]);
+
 
   // Evento Global de Atalho Cmd+K / Ctrl+K
   useEffect(() => {

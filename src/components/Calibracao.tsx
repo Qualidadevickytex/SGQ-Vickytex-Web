@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Wrench, 
   Plus, 
@@ -27,6 +27,7 @@ import {
 } from 'lucide-react';
 import { Documento, Equipamento, Calibracao, SectorType } from '../types';
 import { SECTORS, getSectors, PersonalizacaoGeral } from '../utils/mockData';
+import { SystemSettingsRepository } from '../services/database/repositories/systemSettings.repository';
 
 interface CalibracaoProps {
   documents: Documento[];
@@ -188,19 +189,27 @@ export const CalibracaoComponent: React.FC<CalibracaoProps> = ({
   const [calibToDelete, setCalibToDelete] = useState<{ equipId: string; calibId: string; certNum: string } | null>(null);
 
   // Tipos de instrumentos dinâmicos
-  const [instrumentTypes] = useState<string[]>(() => {
-    const saved = localStorage.getItem('sgq_vickytex_calibracao_tipos');
-    return saved ? JSON.parse(saved) : [
-      "Balança de Precisão",
-      "Termômetro Digital",
-      "Termômetro Infravermelho",
-      "Paquímetro Analógico",
-      "Trena Metálica",
-      "Cronômetro Digital",
-      "Durômetro",
-      "Manômetro de Linha"
-    ];
-  });
+  const [instrumentTypes, setInstrumentTypes] = useState<string[]>([
+    "Balança de Precisão",
+    "Termômetro Digital",
+    "Termômetro Infravermelho",
+    "Paquímetro Analógico",
+    "Trena Metálica",
+    "Cronômetro Digital",
+    "Durômetro",
+    "Manômetro de Linha"
+  ]);
+
+  useEffect(() => {
+    const unsub = SystemSettingsRepository.subscribe((records) => {
+      const found = records.find(r => r.id === 'sgq_vickytex_calibracao_tipos');
+      if (found && Array.isArray(found.items)) {
+        setInstrumentTypes(found.items);
+      }
+    });
+    return () => unsub();
+  }, []);
+
 
   // Modal: Registrar Equipamento
   const [isEquipModalOpen, setIsEquipModalOpen] = useState(false);

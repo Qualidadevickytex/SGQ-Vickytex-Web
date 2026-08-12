@@ -33,6 +33,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Fornecedor, AvaliacaoFornecedor } from '../types';
 import { INITIAL_FORNECEDORES } from '../utils/mockData';
 import { SupplierRepository } from '../services/database/repositories/supplier.repository';
+import { SystemSettingsRepository } from '../services/database/repositories/systemSettings.repository';
 
 interface FornecedoresProps {
   onAddLog: (action: string, details: string) => void;
@@ -60,19 +61,27 @@ export const Fornecedores: React.FC<FornecedoresProps> = ({ onAddLog, personaliz
   }, []);
 
   // Estados de busca, filtros e modais
-  const [categorias, setCategorias] = useState<string[]>(() => {
-    const saved = localStorage.getItem('sgq_vickytex_fornecedores_categorias');
-    return saved ? JSON.parse(saved) : [
-      "Fios e Fibras",
-      "Serviços de Tinturaria",
-      "Embalagens",
-      "Produtos Químicos",
-      "Manutenção",
-      "Calibração",
-      "Serviços de Facção/Costura",
-      "Outros"
-    ];
-  });
+
+  const [categorias, setCategorias] = useState<string[]>([
+    "Fios e Fibras",
+    "Serviços de Tinturaria",
+    "Embalagens",
+    "Produtos Químicos",
+    "Manutenção",
+    "Calibração",
+    "Serviços de Facção/Costura",
+    "Outros"
+  ]);
+
+  useEffect(() => {
+    const unsub = SystemSettingsRepository.subscribe((records) => {
+      const found = records.find(r => r.id === 'sgq_vickytex_fornecedores_categorias');
+      if (found && Array.isArray(found.items)) {
+        setCategorias(found.items);
+      }
+    });
+    return () => unsub();
+  }, []);
 
   // Control inline category creation
   const [showInlineAddCategory, setShowInlineAddCategory] = useState(false);
@@ -85,7 +94,7 @@ export const Fornecedores: React.FC<FornecedoresProps> = ({ onAddLog, personaliz
       if (!updated.includes(clean)) {
         updated.push(clean);
         setCategorias(updated);
-        localStorage.setItem('sgq_vickytex_fornecedores_categorias', JSON.stringify(updated));
+        SystemSettingsRepository.create({ id: 'sgq_vickytex_fornecedores_categorias', items: updated }).catch(console.error);
       }
       setCategoria(clean);
       setNewCategoryText('');
@@ -103,21 +112,6 @@ export const Fornecedores: React.FC<FornecedoresProps> = ({ onAddLog, personaliz
   const [editingSupplier, setEditingSupplier] = useState<Fornecedor | null>(null);
   const [isEvaluating, setIsEvaluating] = useState<Fornecedor | null>(null);
   const [supplierToDelete, setSupplierToDelete] = useState<{ id: string; name: string } | null>(null);
-
-  // Synchronize categories from localStorage when modals open
-  useEffect(() => {
-    if (isAddingSupplier || editingSupplier) {
-      const saved = localStorage.getItem('sgq_vickytex_fornecedores_categorias');
-      if (saved) {
-        try {
-          const parsed = JSON.parse(saved);
-          setCategorias(parsed);
-        } catch (e) {
-          console.error(e);
-        }
-      }
-    }
-  }, [isAddingSupplier, editingSupplier]);
 
   // Form states para Fornecedor
   const [cnpj, setCnpj] = useState('');

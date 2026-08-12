@@ -111,7 +111,7 @@ export abstract class BaseRepository<T extends { id: string }> implements BaseSe
   }
 
 
-  subscribe(callback: (items: T[]) => void): () => void {
+  subscribe(callback: (items: T[]) => void, onError?: (error: Error) => void): () => void {
     return subscribeToCollection<any>(
       this.collectionName,
       (docs) => {
@@ -123,6 +123,10 @@ export abstract class BaseRepository<T extends { id: string }> implements BaseSe
           return true;
         });
         callback(unique);
+      },
+      (err) => {
+        console.warn(`[${this.collectionName}] Listener status:`, err?.message || err);
+        if (onError) onError(err);
       }
     );
   }

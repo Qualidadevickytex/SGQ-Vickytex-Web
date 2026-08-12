@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   ShieldAlert, 
   TrendingUp, 
@@ -25,6 +25,7 @@ import {
 } from 'lucide-react';
 import { RiscoOportunidade, SectorType, PlanoAcao } from '../types';
 import { SECTORS, getSectors, PersonalizacaoGeral } from '../utils/mockData';
+import { SystemSettingsRepository } from '../services/database/repositories/systemSettings.repository';
 import { useAuth } from '../contexts/AuthContext';
 
 interface RiscosOportunidadesProps {
@@ -48,19 +49,27 @@ export const RiscosOportunidadesComponent: React.FC<RiscosOportunidadesProps> = 
 }) => {
   const { user } = useAuth();
   const [sectorsList] = useState<string[]>(() => getSectors());
-  const [riscosCategorias] = useState<string[]>(() => {
-    const saved = localStorage.getItem('sgq_vickytex_riscos_categorias');
-    return saved ? JSON.parse(saved) : [
-      "Operacional",
-      "Qualidade do Produto",
-      "Segurança e Saúde",
-      "Ambiental",
-      "Financeiro",
-      "Prazo / Entrega",
-      "Tecnologia",
-      "Outros"
-    ];
-  });
+  const [riscosCategorias, setRiscosCategorias] = useState<string[]>([
+    "Operacional",
+    "Qualidade do Produto",
+    "Segurança e Saúde",
+    "Ambiental",
+    "Financeiro",
+    "Prazo / Entrega",
+    "Tecnologia",
+    "Outros"
+  ]);
+
+  useEffect(() => {
+    const unsub = SystemSettingsRepository.subscribe((records) => {
+      const found = records.find(r => r.id === 'sgq_vickytex_riscos_categorias');
+      if (found && Array.isArray(found.items)) {
+        setRiscosCategorias(found.items);
+      }
+    });
+    return () => unsub();
+  }, []);
+
 
   // Permissões de edição (Qualidade, Gerência, Supervisor, Administrador)
   const canModify = user?.role === 'Qualidade' || user?.role === 'Gestor' || user?.role === 'Supervisor' || user?.role === 'Administrador';

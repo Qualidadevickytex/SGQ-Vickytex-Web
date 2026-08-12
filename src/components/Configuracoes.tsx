@@ -26,6 +26,7 @@ import {
   ArrowDown
 } from 'lucide-react';
 import { getSectors, getDocumentTypes, PersonalizacaoGeral, savePersonalizacaoGeral } from '../utils/mockData';
+import { SystemSettingsRepository } from '../services/database/repositories/systemSettings.repository';
 import { useAuth } from '../contexts/AuthContext';
 import { DocumentType } from '../types';
 
@@ -64,66 +65,54 @@ export const Configuracoes: React.FC<ConfiguracoesProps> = ({
   // Controle de Abas Internas de Configuração
   const [activeSubTab, setActiveSubTab] = useState<string>('setores');
 
-  // Estados para novas tabelas solicitadas (Cadastro & Parâmetros por Módulo)
-  const [fornecedoresCategorias, setFornecedoresCategorias] = useState<string[]>(() => {
-    const saved = localStorage.getItem('sgq_vickytex_fornecedores_categorias');
-    return saved ? JSON.parse(saved) : [
-      "Fios e Fibras",
-      "Serviços de Tinturaria",
-      "Embalagens",
-      "Produtos Químicos",
-      "Manutenção",
-      "Calibração",
-      "Serviços de Facção/Costura",
-      "Outros"
-    ];
-  });
+  // Estados para tabelas de Cadastro & Parâmetros por Módulo
+  const [fornecedoresCategorias, setFornecedoresCategorias] = useState<string[]>([
+    "Fios e Fibras",
+    "Serviços de Tinturaria",
+    "Embalagens",
+    "Produtos Químicos",
+    "Manutenção",
+    "Calibração",
+    "Serviços de Facção/Costura",
+    "Outros"
+  ]);
   const [newFornecedoresCat, setNewFornecedoresCat] = useState('');
   const [editingFornecedoresCatIdx, setEditingFornecedoresCatIdx] = useState<number | null>(null);
   const [editingFornecedoresCatVal, setEditingFornecedoresCatVal] = useState('');
 
-  const [calibracaoTipos, setCalibracaoTipos] = useState<string[]>(() => {
-    const saved = localStorage.getItem('sgq_vickytex_calibracao_tipos');
-    return saved ? JSON.parse(saved) : [
-      "Balança de Precisão",
-      "Termômetro Digital",
-      "Paquímetro Digital",
-      "Micrômetro",
-      "Cronômetro",
-      "Manômetro",
-      "Trena Metálica"
-    ];
-  });
+  const [calibracaoTipos, setCalibracaoTipos] = useState<string[]>([
+    "Balança de Precisão",
+    "Termômetro Digital",
+    "Paquímetro Digital",
+    "Micrômetro",
+    "Cronômetro",
+    "Manômetro",
+    "Trena Metálica"
+  ]);
   const [newCalibracaoTipo, setNewCalibracaoTipo] = useState('');
   const [editingCalibracaoTipoIdx, setEditingCalibracaoTipoIdx] = useState<number | null>(null);
   const [editingCalibracaoTipoVal, setEditingCalibracaoTipoVal] = useState('');
 
-  const [auditoriasOrigens, setAuditoriasOrigens] = useState<string[]>(() => {
-    const saved = localStorage.getItem('sgq_vickytex_auditorias_origens');
-    return saved ? JSON.parse(saved) : [
-      "Auditoria Interna",
-      "Auditoria Externa",
-      "Reclamação de Cliente",
-      "Inspeção de Qualidade",
-      "Desvio de Processo",
-      "Autodeclaração"
-    ];
-  });
+  const [auditoriasOrigens, setAuditoriasOrigens] = useState<string[]>([
+    "Auditoria Interna",
+    "Auditoria Externa",
+    "Reclamação de Cliente",
+    "Inspeção de Qualidade",
+    "Desvio de Processo",
+    "Autodeclaração"
+  ]);
   const [newAuditoriasOrigem, setNewAuditoriasOrigem] = useState('');
   const [editingAuditoriasOrigemIdx, setEditingAuditoriasOrigemIdx] = useState<number | null>(null);
   const [editingAuditoriasOrigemVal, setEditingAuditoriasOrigemVal] = useState('');
 
-  const [riscosCategorias, setRiscosCategorias] = useState<string[]>(() => {
-    const saved = localStorage.getItem('sgq_vickytex_riscos_categorias');
-    return saved ? JSON.parse(saved) : [
-      "Operacional",
-      "Financeiro",
-      "Regulatório/Conformidade",
-      "Estratégico",
-      "Ambiental",
-      "Tecnológico"
-    ];
-  });
+  const [riscosCategorias, setRiscosCategorias] = useState<string[]>([
+    "Operacional",
+    "Financeiro",
+    "Regulatório/Conformidade",
+    "Estratégico",
+    "Ambiental",
+    "Tecnológico"
+  ]);
   const [newRiscosCategoria, setNewRiscosCategoria] = useState('');
   const [editingRiscosCategoriaIdx, setEditingRiscosCategoriaIdx] = useState<number | null>(null);
   const [editingRiscosCategoriaVal, setEditingRiscosCategoriaVal] = useState('');
@@ -181,20 +170,48 @@ export const Configuracoes: React.FC<ConfiguracoesProps> = ({
     }
   ];
 
-  const [metodologias, setMetodologias] = useState(() => {
-    const saved = localStorage.getItem('sgq_vickytex_metodologias_config');
-    return saved ? JSON.parse(saved) : DEFAULT_METODOLOGIAS;
-  });
+  const [metodologias, setMetodologias] = useState(DEFAULT_METODOLOGIAS);
 
   const [editingMetodologiaId, setEditingMetodologiaId] = useState<string | null>(null);
   const [editingMetodologiaVal, setEditingMetodologiaVal] = useState({ explicacao: '', ferramentas: '' });
+
+  // Inscrever para atualizações em tempo real do Firestore via SystemSettingsRepository
+  useEffect(() => {
+    const unsub = SystemSettingsRepository.subscribe((records) => {
+      records.forEach((rec) => {
+        if (rec.id === 'sgq_vickytex_fornecedores_categorias' && Array.isArray(rec.items)) {
+          setFornecedoresCategorias(rec.items);
+        } else if (rec.id === 'sgq_vickytex_calibracao_tipos' && Array.isArray(rec.items)) {
+          setCalibracaoTipos(rec.items);
+        } else if (rec.id === 'sgq_vickytex_auditorias_origens' && Array.isArray(rec.items)) {
+          setAuditoriasOrigens(rec.items);
+        } else if (rec.id === 'sgq_vickytex_riscos_categorias' && Array.isArray(rec.items)) {
+          setRiscosCategorias(rec.items);
+        } else if (rec.id === 'sgq_vickytex_metodologias_config' && Array.isArray(rec.items)) {
+          setMetodologias(rec.items);
+        } else if (rec.id === 'sgq_vickytex_setores' && Array.isArray(rec.items)) {
+          setSectors(rec.items);
+        } else if (rec.id === 'sgq_vickytex_tipos_documentos' && Array.isArray(rec.items)) {
+          setDocTypes(rec.items);
+        }
+      });
+    });
+
+    return () => unsub();
+  }, []);
+
+  const saveSettingToFirestore = (id: string, items: any) => {
+    SystemSettingsRepository.create({ id, items }).catch(err => {
+      console.error(`[Configuracoes] Error saving ${id} to Firestore:`, err);
+    });
+  };
 
   const handleSaveMetodologia = (id: string) => {
     const updated = metodologias.map((m: any) => 
       m.id === id ? { ...m, explicacao: editingMetodologiaVal.explicacao, ferramentas: editingMetodologiaVal.ferramentas } : m
     );
     setMetodologias(updated);
-    localStorage.setItem('sgq_vickytex_metodologias_config', JSON.stringify(updated));
+    saveSettingToFirestore('sgq_vickytex_metodologias_config', updated);
     setEditingMetodologiaId(null);
     onAddLog('Configurações', `Editou os parâmetros auxiliares da metodologia "${id}".`);
     setShowSyncNotice(true);
@@ -205,23 +222,6 @@ export const Configuracoes: React.FC<ConfiguracoesProps> = ({
   const [sectorToDeleteIdx, setSectorToDeleteIdx] = useState<number | null>(null);
   const [docTypeToDeleteIdx, setDocTypeToDeleteIdx] = useState<number | null>(null);
 
-  // Persistências redundantes para as novas tabelas
-  useEffect(() => {
-    localStorage.setItem('sgq_vickytex_fornecedores_categorias', JSON.stringify(fornecedoresCategorias));
-  }, [fornecedoresCategorias]);
-
-  useEffect(() => {
-    localStorage.setItem('sgq_vickytex_calibracao_tipos', JSON.stringify(calibracaoTipos));
-  }, [calibracaoTipos]);
-
-  useEffect(() => {
-    localStorage.setItem('sgq_vickytex_auditorias_origens', JSON.stringify(auditoriasOrigens));
-  }, [auditoriasOrigens]);
-
-  useEffect(() => {
-    localStorage.setItem('sgq_vickytex_riscos_categorias', JSON.stringify(riscosCategorias));
-  }, [riscosCategorias]);
-
   // Re-ordering Handlers
   const handleMoveSector = (idx: number, dir: 'up' | 'down') => {
     const targetIdx = dir === 'up' ? idx - 1 : idx + 1;
@@ -231,7 +231,7 @@ export const Configuracoes: React.FC<ConfiguracoesProps> = ({
     updated[idx] = updated[targetIdx];
     updated[targetIdx] = temp;
     setSectors(updated);
-    localStorage.setItem('sgq_vickytex_setores', JSON.stringify(updated));
+    saveSettingToFirestore('sgq_vickytex_setores', updated);
     setShowSyncNotice(true);
   };
 
@@ -243,7 +243,7 @@ export const Configuracoes: React.FC<ConfiguracoesProps> = ({
     updated[idx] = updated[targetIdx];
     updated[targetIdx] = temp;
     setDocTypes(updated);
-    localStorage.setItem('sgq_vickytex_tipos_documentos', JSON.stringify(updated));
+    saveSettingToFirestore('sgq_vickytex_tipos_documentos', updated);
     setShowSyncNotice(true);
   };
 
@@ -255,8 +255,10 @@ export const Configuracoes: React.FC<ConfiguracoesProps> = ({
     updated[idx] = updated[targetIdx];
     updated[targetIdx] = temp;
     setFornecedoresCategorias(updated);
+    saveSettingToFirestore('sgq_vickytex_fornecedores_categorias', updated);
     setShowSyncNotice(true);
   };
+
 
   const handleMoveCalibracaoTipo = (idx: number, dir: 'up' | 'down') => {
     const targetIdx = dir === 'up' ? idx - 1 : idx + 1;
@@ -443,7 +445,7 @@ export const Configuracoes: React.FC<ConfiguracoesProps> = ({
 
     const updated = [...sectors, cleanSector];
     setSectors(updated);
-    localStorage.setItem('sgq_vickytex_setores', JSON.stringify(updated));
+    saveSettingToFirestore('sgq_vickytex_setores', updated);
     setNewSector('');
     onAddLog('Configurações', `Adicionou o setor auxiliar "${cleanSector}" ao sistema.`);
     setShowSyncNotice(true);
@@ -468,7 +470,7 @@ export const Configuracoes: React.FC<ConfiguracoesProps> = ({
     updated[idx] = cleanVal;
     
     setSectors(updated);
-    localStorage.setItem('sgq_vickytex_setores', JSON.stringify(updated));
+    saveSettingToFirestore('sgq_vickytex_setores', updated);
     setEditingSectorIdx(null);
     onAddLog('Configurações', `Editou o setor auxiliar de "${oldName}" para "${cleanVal}".`);
     setShowSyncNotice(true);
@@ -497,7 +499,7 @@ export const Configuracoes: React.FC<ConfiguracoesProps> = ({
 
     const updated = [...docTypes, { type: typeUpper, name: cleanName, description: cleanDesc }];
     setDocTypes(updated);
-    localStorage.setItem('sgq_vickytex_tipos_documentos', JSON.stringify(updated));
+    saveSettingToFirestore('sgq_vickytex_tipos_documentos', updated);
     setNewDocType({ type: '', name: '', description: '' });
     onAddLog('Configurações', `Registrou novo tipo documental "${typeUpper} - ${cleanName}".`);
     setShowSyncNotice(true);
@@ -528,7 +530,8 @@ export const Configuracoes: React.FC<ConfiguracoesProps> = ({
     updated[idx] = { type: typeUpper, name: cleanName, description: cleanDesc };
 
     setDocTypes(updated);
-    localStorage.setItem('sgq_vickytex_tipos_documentos', JSON.stringify(updated));
+    saveSettingToFirestore('sgq_vickytex_tipos_documentos', updated);
+
     setEditingDocTypeIdx(null);
     onAddLog('Configurações', `Editou o tipo documental "${oldType.type}" para "${typeUpper} - ${cleanName}".`);
     setShowSyncNotice(true);
@@ -2573,7 +2576,7 @@ export const Configuracoes: React.FC<ConfiguracoesProps> = ({
                   const sectorName = sectors[sectorToDeleteIdx];
                   const updated = sectors.filter((_, i) => i !== sectorToDeleteIdx);
                   setSectors(updated);
-                  localStorage.setItem('sgq_vickytex_setores', JSON.stringify(updated));
+                  saveSettingToFirestore('sgq_vickytex_setores', updated);
                   onAddLog('Configurações', `Excluiu o setor auxiliar "${sectorName}" das listas do sistema.`);
                   setShowSyncNotice(true);
                   setSectorToDeleteIdx(null);
@@ -2629,11 +2632,12 @@ export const Configuracoes: React.FC<ConfiguracoesProps> = ({
                   const typeObj = docTypes[docTypeToDeleteIdx];
                   const updated = docTypes.filter((_, i) => i !== docTypeToDeleteIdx);
                   setDocTypes(updated);
-                  localStorage.setItem('sgq_vickytex_tipos_documentos', JSON.stringify(updated));
+                  saveSettingToFirestore('sgq_vickytex_tipos_documentos', updated);
                   onAddLog('Configurações', `Removeu o tipo documental "${typeObj.type}" do cadastro.`);
                   setShowSyncNotice(true);
                   setDocTypeToDeleteIdx(null);
                 }}
+
                 className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-bold transition-colors shadow-xs"
               >
                 Sim, Excluir Tipo
