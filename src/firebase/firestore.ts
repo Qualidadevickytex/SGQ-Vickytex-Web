@@ -13,6 +13,7 @@ import {
   updateDoc,
   deleteDoc,
   query,
+  onSnapshot,
   DocumentData,
   QueryConstraint
 } from 'firebase/firestore';
@@ -74,3 +75,25 @@ export const clearCollectionDocs = async (collectionName: string): Promise<void>
     console.warn(`[Firestore] Failed to clear collection ${collectionName}:`, err);
   }
 };
+
+export const subscribeToCollection = <T = DocumentData>(
+  collectionName: string,
+  callback: (items: (T & { id: string })[]) => void,
+  onError?: (error: Error) => void
+): (() => void) => {
+  return onSnapshot(
+    getCollectionRef(collectionName),
+    (snapshot) => {
+      const items: (T & { id: string })[] = [];
+      snapshot.forEach((docSnap) => {
+        items.push({ id: docSnap.id, ...(docSnap.data() as T) });
+      });
+      callback(items);
+    },
+    (err) => {
+      console.error(`[Firestore] subscribeToCollection error for ${collectionName}:`, err);
+      if (onError) onError(err);
+    }
+  );
+};
+

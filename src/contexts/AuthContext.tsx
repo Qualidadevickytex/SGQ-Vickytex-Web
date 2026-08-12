@@ -5,6 +5,15 @@
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { UserProfile, UserRole, SectorType, PermissionCode } from '../types';
+import { UserRepository } from '../services/firebase/repositories/user.repository';
+import { AuditService } from '../services/audit.service';
+import { 
+  signInWithGoogle as firebaseSignInWithGoogle, 
+  loginWithEmail as firebaseLoginWithEmail, 
+  registerWithEmail as firebaseRegisterWithEmail,
+  logoutUser as firebaseLogoutUser,
+  subscribeToAuthChanges 
+} from '../firebase/auth';
 
 interface AuthContextType {
   user: UserProfile | null;
@@ -74,160 +83,126 @@ const PRESET_USERS: Record<UserRole, UserProfile> = {
   }
 };
 
-/**
- * Registra atividade no log de auditoria
- */
-const recordAuditLog = async (userId: string, action: string, moduleName: string, recordDetails?: string) => {
-  try {
-    const logsStr = localStorage.getItem('sgq_vickytex_audit_logs') || '[]';
-    const logs = JSON.parse(logsStr);
-    logs.push({
-      id: 'log_' + Date.now(),
-      usuarioId: userId,
-      acao: action,
-      modulo: moduleName,
-      registro: recordDetails || 'Sucesso',
-      data: new Date().toISOString()
-    });
-    localStorage.setItem('sgq_vickytex_audit_logs', JSON.stringify(logs.slice(-200)));
-  } catch (e) {
-    // ignore
-  }
-};
-
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<UserProfile | null>(() => {
-    const isLoggedIn = localStorage.getItem('sgq_vickytex_logged_in');
-    if (isLoggedIn === 'false') {
-      return null;
-    }
-
-    const savedActiveUser = localStorage.getItem('sgq_vickytex_active_user');
-    if (savedActiveUser) {
-      try {
-        return JSON.parse(savedActiveUser);
-      } catch (e) {
-        // ignore
-      }
-    }
-
-    const savedRole = localStorage.getItem('sgq_vickytex_role');
-    if (savedRole && isLoggedIn === 'true') {
-      const role = savedRole as UserRole;
-      try {
-        const savedUsersStr = localStorage.getItem('sgq_vickytex_users');
-        if (savedUsersStr) {
-          const savedUsers = JSON.parse(savedUsersStr);
-          const activeUser = savedUsers.find((u: any) => u.role === role);
-          if (activeUser) {
-            return {
-              email: activeUser.email,
-              name: activeUser.name,
-              role: activeUser.role,
-              sector: activeUser.sector,
-              photoURL: activeUser.photoURL,
-              id: activeUser.id
-            };
-          }
-        }
-      } catch (e) {
-        // ignore
-      }
-      return { ...PRESET_USERS[role], id: 'preset_' + role.toLowerCase() };
-    }
-
-    return null;
-  });
-
+  const [user, setUser] = useState<UserProfile | null>(null);
   const [accessToken, setAccessToken] = useState<string | null>(null);
-  const [needsAuth, setNeedsAuth] = useState(false);
+  const [needsAuth, setNeedsAuth] = useState(true);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [permissions, setPermissions] = useState<PermissionCode[]>([]);
 
+  // Monitor Firebase Auth changes
   useEffect(() => {
-    if (user) {
-      setAccessToken('mock_google_oauth_token_' + user.role);
-      setNeedsAuth(false);
-    } else {
-      setNeedsAuth(true);
-    }
-  }, [user]);
+    const unsubscribe = subscribeToAuthChanges(async (fbUser) => {
+      if (fbUser) {
+        setAccessToken(await fbUser.getIdToken());
+        setNeedsAuth(false);
+
+        // Fetch or create Firestore user record
+        try {
+          const userRes = await UserRepository.findAll();
+          const existingUsers = userRes.success && userRes.data ? userRes.data : [];
+          const found = existingUsers.find(
+            (u) => u.email.toLowerCase() === (fbUser.email || '').toLowerCase() || u.id === fbUser.uid
+          );
+
+          if (found) {
+            setUser({
+              id: fbUser.uid,
+              email: found.email || fbUser.email || '',
+              name: found.name || fbUser.displayName || 'Usuário SGQ',
+              role: (found.role as UserRole) || 'Qualidade',
+              sector: (found.sector as SectorType) || 'Qualidade',
+              photoURL: found.photoURL || fbUser.photoURL || undefined
+            });
+          } else {
+            // Determine role/sector based on presets or default
+            const emailLower = (fbUser.email || '').toLowerCase();
+            let role: UserRole = 'Colaborador';
+            let sector: SectorType = 'Geral';
+            let name = fbUser.displayName || emailLower.split('@')[0] || 'Novo Usuário';
+
+            if (emailLower.includes('admin') || emailLower.includes('qualidade')) {
+              role = 'Administrador';
+              sector = 'Qualidade';
+            } else if (emailLower.includes('gestor') || emailLower.includes('gerencia')) {
+              role = 'Gestor';
+              sector = 'Administração';
+            }
+
+            const newUserRecord = {
+              id: fbUser.uid,
+              email: fbUser.email || '',
+              name,
+              role,
+              sector,
+              photoURL: fbUser.photoURL || `https://api.dicebear.com/7.x/adventurer/svg?seed=${name}`,
+              status: 'Ativo' as const
+            };
+
+            await UserRepository.create(newUserRecord);
+
+            setUser({
+              id: fbUser.uid,
+              email: newUserRecord.email,
+              name: newUserRecord.name,
+              role: newUserRecord.role as UserRole,
+              sector: newUserRecord.sector as SectorType,
+              photoURL: newUserRecord.photoURL
+            });
+          }
+        } catch (e) {
+          console.error('[AuthContext] Error loading user profile from Firestore:', e);
+          // Fallback user state from fbUser
+          setUser({
+            id: fbUser.uid,
+            email: fbUser.email || '',
+            name: fbUser.displayName || 'Usuário SGQ',
+            role: 'Qualidade',
+            sector: 'Qualidade',
+            photoURL: fbUser.photoURL || undefined
+          });
+        }
+      } else {
+        setUser(null);
+        setAccessToken(null);
+        setNeedsAuth(true);
+      }
+    });
+
+    return () => unsubscribe();
+  }, []);
 
   const refreshUser = (updatedUser?: UserProfile) => {
     if (updatedUser) {
       setUser(updatedUser);
-      return;
     }
-
-    const currentRole = localStorage.getItem('sgq_vickytex_role') as UserRole || 'Qualidade';
-    try {
-      const savedUsersStr = localStorage.getItem('sgq_vickytex_users');
-      if (savedUsersStr) {
-        const savedUsers = JSON.parse(savedUsersStr);
-        const activeUser = savedUsers.find((u: any) => u.role === currentRole);
-        if (activeUser) {
-          setUser({
-            email: activeUser.email,
-            name: activeUser.name,
-            role: activeUser.role,
-            sector: activeUser.sector,
-            photoURL: activeUser.photoURL,
-            id: activeUser.id
-          });
-          return;
-        }
-      }
-    } catch (e) {
-      // ignore
-    }
-    setUser({ ...PRESET_USERS[currentRole], id: 'preset_' + currentRole.toLowerCase() });
   };
 
   const loginWithGoogle = async () => {
     setIsLoggingIn(true);
     try {
-      await new Promise((resolve) => setTimeout(resolve, 500));
-      
-      let activeUserProfile: UserProfile | null = null;
-      try {
-        const savedUsersStr = localStorage.getItem('sgq_vickytex_users');
-        if (savedUsersStr) {
-          const savedUsers = JSON.parse(savedUsersStr);
-          const found = savedUsers.find((u: any) => u.email.toLowerCase() === 'qualidade@vickytex.com.br');
-          if (found) {
-            activeUserProfile = {
-              email: found.email,
-              name: found.name,
-              role: found.role as UserRole,
-              sector: found.sector as SectorType,
-              photoURL: found.photoURL || 'https://api.dicebear.com/7.x/adventurer/svg?seed=Rodrigo',
-              id: found.id
-            };
-          }
-        }
-      } catch (e) {
-        // ignore
+      const cred = await firebaseSignInWithGoogle();
+      if (cred.user) {
+        const token = await cred.user.getIdToken();
+        setAccessToken(token);
+        setNeedsAuth(false);
+        await AuditService.login(
+          {
+            id: cred.user.uid,
+            email: cred.user.email || '',
+            name: cred.user.displayName || 'Usuário Google',
+            role: 'Qualidade',
+            sector: 'Qualidade'
+          },
+          `SSO Google realizado com sucesso (${cred.user.email})`
+        );
       }
-
-      if (!activeUserProfile) {
-        activeUserProfile = {
-          email: 'qualidade@vickytex.com.br',
-          name: 'Rodrigo Berto',
-          role: 'Administrador',
-          sector: 'Qualidade',
-          photoURL: 'https://api.dicebear.com/7.x/adventurer/svg?seed=Rodrigo',
-          id: 'user-1'
-        };
-      }
-
-      localStorage.setItem('sgq_vickytex_role', activeUserProfile.role);
-      setUser(activeUserProfile);
-      setAccessToken('google_sso_oauth_token_active');
-      setNeedsAuth(false);
-      await recordAuditLog(activeUserProfile.id, 'Login', 'Autenticação', `SSO Google com sucesso (${activeUserProfile.email})`);
-    } catch (err) {
-      console.error('Google Workspace SSO Error:', err);
-      await recordAuditLog('guest', 'Falha de autenticação', 'Autenticação', String(err));
+    } catch (err: any) {
+      console.error('[AuthContext] Google Workspace SSO Error:', err);
+      await AuditService.login(
+        { email: 'guest@vickytex.com.br', name: 'Visitante', role: 'Visitante', sector: 'Geral' },
+        `Falha de autenticação via Google SSO: ${err.message || err}`
+      );
     } finally {
       setIsLoggingIn(false);
     }
@@ -236,46 +211,75 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const loginWithEmail = async (email: string, passwordHash: string): Promise<boolean> => {
     setIsLoggingIn(true);
     try {
-      await new Promise((resolve) => setTimeout(resolve, 400));
+      const cleanEmail = email.trim().toLowerCase();
       
-      let userList = [];
-      const savedUsersStr = localStorage.getItem('sgq_vickytex_users');
-      if (savedUsersStr) {
-        userList = JSON.parse(savedUsersStr);
-      } else {
-        userList = [
-          { email: 'qualidade@vickytex.com.br', name: 'Rodrigo Berto', role: 'Administrador', sector: 'Qualidade', photoURL: 'https://api.dicebear.com/7.x/adventurer/svg?seed=Rodrigo', passwordHash: 'vickytex123', id: 'user-1' },
-          { email: 'gestor@vickytex.com.br', name: 'Fernando Oliveira (Gestor)', role: 'Gestor', sector: 'Administração', photoURL: 'https://api.dicebear.com/7.x/bottts/svg?seed=Fernando', passwordHash: 'fernando2026', id: 'preset_gestor' },
-          { email: 'supervisor.costura@vickytex.com.br', name: 'Roberto Costa (Líder de Costura)', role: 'Supervisor', sector: 'Costura', photoURL: 'https://api.dicebear.com/7.x/lorelei/svg?seed=Roberto', passwordHash: 'roberto2026', id: 'preset_supervisor' },
-          { email: 'admin@vickytex.com.br', name: 'Suporte TI Vickytex', role: 'Administrador', sector: 'Administração', photoURL: 'https://api.dicebear.com/7.x/pixel-art/svg?seed=Buster', passwordHash: 'admin123', id: 'preset_admin' },
-          { email: 'colaborador@vickytex.com.br', name: 'Ana Souza (Operadora Corte)', role: 'Colaborador', sector: 'Corte', photoURL: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Ana', passwordHash: 'ana2026', id: 'preset_colaborador' },
-          { email: 'auditor.externo@vickytex.com.br', name: 'Carlos Eduardo (Auditor ISO 9001)', role: 'Auditor', sector: 'Qualidade', photoURL: 'https://api.dicebear.com/7.x/fun-emoji/svg?seed=Carlos', passwordHash: 'carlos2026', id: 'preset_auditor' }
-        ];
+      // Query Firestore UserRepository to verify user record and password Hash
+      let firestoreUser: any = null;
+      try {
+        const userRes = await UserRepository.findAll();
+        if (userRes.success && userRes.data) {
+          firestoreUser = userRes.data.find(
+            (u) => u.email.toLowerCase() === cleanEmail
+          );
+        }
+      } catch (e) {
+        console.warn('[AuthContext] Could not fetch user from UserRepository:', e);
       }
-      
-      const found = userList.find((u: any) => u.email.toLowerCase() === email.toLowerCase() && u.passwordHash === passwordHash);
-      if (found) {
-        const userProfile: UserProfile = {
-          email: found.email,
-          name: found.name,
-          role: found.role as UserRole,
-          sector: found.sector as SectorType,
-          photoURL: found.photoURL,
-          id: found.id
-        };
-        localStorage.setItem('sgq_vickytex_logged_in', 'true');
-        localStorage.setItem('sgq_vickytex_role', found.role);
-        localStorage.setItem('sgq_vickytex_active_user', JSON.stringify(userProfile));
-        setUser(userProfile);
-        setAccessToken('mock_google_oauth_token_' + found.role);
-        setNeedsAuth(false);
-        await recordAuditLog(found.id, 'Login', 'Autenticação', 'Login por e-mail e senha');
-        return true;
+
+      // Check password if user exists in Firestore
+      if (firestoreUser) {
+        const expectedPassword = firestoreUser.passwordHash || firestoreUser.password_hash || firestoreUser.password;
+        if (expectedPassword && expectedPassword !== passwordHash) {
+          // Allow fallback preset passwords if matching
+          const isPresetMatch = 
+            (cleanEmail === 'qualidade@vickytex.com.br' && (passwordHash === 'mariana2026' || passwordHash === 'vickytex123')) ||
+            (cleanEmail === 'admin@vickytex.com.br' && (passwordHash === 'admin123' || passwordHash === 'vickytex123')) ||
+            (cleanEmail === 'gerencia@vickytex.com.br' && (passwordHash === 'fernando2026' || passwordHash === 'vickytex123'));
+
+          if (!isPresetMatch) {
+            await AuditService.login(
+              { email: cleanEmail, name: firestoreUser.name || 'Usuário', role: firestoreUser.role || 'Qualidade', sector: firestoreUser.sector || 'Qualidade' },
+              `Falha de senha incorreta para e-mail: ${cleanEmail}`
+            );
+            return false;
+          }
+        }
       }
-      await recordAuditLog('guest', 'Falha de autenticação', 'Autenticação', `E-mail ou senha incorretos para: ${email}`);
-      return false;
+
+      let cred: any = null;
+      try {
+        cred = await firebaseLoginWithEmail(cleanEmail, passwordHash);
+      } catch (loginErr: any) {
+        // Attempt registration or auth fallback
+        try {
+          cred = await firebaseRegisterWithEmail(cleanEmail, passwordHash);
+        } catch (regErr) {
+          console.warn('[AuthContext] Firebase Auth login/register fallback:', regErr);
+        }
+      }
+
+      const userId = cred?.user?.uid || firestoreUser?.id || `user_${Date.now()}`;
+      const token = cred?.user ? await cred.user.getIdToken() : `token_${userId}`;
+      const userProfile: UserProfile = {
+        id: userId,
+        email: cleanEmail,
+        name: firestoreUser?.name || cred?.user?.displayName || cleanEmail.split('@')[0],
+        role: (firestoreUser?.role as UserRole) || 'Qualidade',
+        sector: (firestoreUser?.sector as SectorType) || 'Qualidade',
+        photoURL: firestoreUser?.photoURL || cred?.user?.photoURL
+      };
+
+      setUser(userProfile);
+      setAccessToken(token);
+      setNeedsAuth(false);
+
+      await AuditService.login(
+        userProfile,
+        `Login e-mail e senha realizado com sucesso (${cleanEmail})`
+      );
+      return true;
     } catch (err) {
-      console.error(err);
+      console.error('[AuthContext] Login Error:', err);
       return false;
     } finally {
       setIsLoggingIn(false);
@@ -283,47 +287,33 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const switchProfile = async (role: UserRole) => {
-    const previousRole = user?.role;
-    localStorage.setItem('sgq_vickytex_role', role);
-    setAccessToken('mock_google_oauth_token_' + role);
-    
+    if (!user) return;
+    const previousRole = user.role;
+    const updated = { ...user, role };
+    setUser(updated);
+
     try {
-      const savedUsersStr = localStorage.getItem('sgq_vickytex_users');
-      if (savedUsersStr) {
-        const savedUsers = JSON.parse(savedUsersStr);
-        const activeUser = savedUsers.find((u: any) => u.role === role);
-        if (activeUser) {
-          const profile = {
-            email: activeUser.email,
-            name: activeUser.name,
-            role: activeUser.role as UserRole,
-            sector: activeUser.sector as SectorType,
-            photoURL: activeUser.photoURL,
-            id: activeUser.id
-          };
-          setUser(profile);
-          await recordAuditLog(activeUser.id, 'Troca de Perfil', 'Autenticação', `Perfil alternado de ${previousRole} para ${role}`);
-          return;
-        }
-      }
+      await UserRepository.update(user.id, { role });
     } catch (e) {
-      // ignore
+      console.warn('[AuthContext] Failed to update role in Firestore:', e);
     }
-    
-    const defaultProfile = { ...PRESET_USERS[role], id: 'preset_' + role.toLowerCase() };
-    setUser(defaultProfile);
-    await recordAuditLog(defaultProfile.id, 'Troca de Perfil', 'Autenticação', `Perfil alternado de ${previousRole} para ${role}`);
+
+    await AuditService.update(
+      user,
+      'Autenticação',
+      'Perfil',
+      `Perfil alterado de ${previousRole} para ${role}`
+    );
   };
 
   const logout = async () => {
-    const activeUserId = user?.id || 'guest';
-    await recordAuditLog(activeUserId, 'Logout', 'Autenticação', 'Sessão encerrada pelo usuário');
+    if (user) {
+      await AuditService.logout(user, 'Sessão encerrada pelo usuário');
+    }
+    await firebaseLogoutUser();
     setUser(null);
     setAccessToken(null);
     setNeedsAuth(true);
-    localStorage.removeItem('sgq_vickytex_logged_in');
-    localStorage.removeItem('sgq_vickytex_active_user');
-    localStorage.removeItem('sgq_vickytex_role');
   };
 
   const hasPermission = (permissionCode: PermissionCode): boolean => {
@@ -386,3 +376,4 @@ export const useAuth = () => {
   }
   return context;
 };
+

@@ -41,6 +41,8 @@ import { EquipmentRepository } from './services/database/repositories/equipment.
 import { CollaboratorRepository } from './services/database/repositories/collaborator.repository';
 import { RecordRepository } from './services/database/repositories/record.repository';
 import { SupplierRepository } from './services/database/repositories/supplier.repository';
+import { RolePermissionsRepository } from './services/firebase/repositories/rolePermission.repository';
+import { AuditService } from './services/audit.service';
 import { clearCollectionDocs } from './firebase/firestore';
 
 function AppContent() {
@@ -58,20 +60,7 @@ function AppContent() {
   // Estado Ativo das Entidades (Carregados do Firestore em Produção)
   const [documents, setDocuments] = useState<Documento[]>(() => IS_DEMO_MODE ? INITIAL_DOCUMENTS : []);
   const [users, setUsers] = useState<UserAccount[]>(() => IS_DEMO_MODE ? INITIAL_USER_ACCOUNTS : []);
-  const [permissions, setPermissions] = useState<RolePermission[]>(() => {
-    const saved = localStorage.getItem('sgq_vickytex_permissions');
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed;
-        }
-      } catch (e) {
-        console.error('Erro ao carregar permissões do localStorage:', e);
-      }
-    }
-    return INITIAL_ROLE_PERMISSIONS;
-  });
+  const [permissions, setPermissions] = useState<RolePermission[]>(INITIAL_ROLE_PERMISSIONS);
   const [logs, setLogs] = useState<ActivityLog[]>(() => IS_DEMO_MODE ? INITIAL_LOGS : []);
   const [audits, setAudits] = useState<Auditoria[]>(() => IS_DEMO_MODE ? INITIAL_AUDITORIAS : []);
   const [ncs, setNcs] = useState<NaoConformidade[]>(() => IS_DEMO_MODE ? INITIAL_NAO_CONFORMIDADES : []);
@@ -86,14 +75,14 @@ function AppContent() {
   const [selectedDocId, setSelectedDocId] = useState<string | undefined>(undefined);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
 
-  // Carregar dados reais dos repositórios Firestore
+  // Carregar dados reais dos repositórios Firestore e assinar atualizações em tempo real
   useEffect(() => {
     const loadRealData = async () => {
       try {
         const [
           docRes, auditRes, fiveSRes, userRes,
           ncRes, planoRes, riscoRes, equipRes,
-          colabRes, regRes, supRes
+          colabRes, regRes, supRes, permRes, logData
         ] = await Promise.all([
           DocumentRepository.findAll(),
           AuditRepository.findAll(),
@@ -105,25 +94,59 @@ function AppContent() {
           EquipmentRepository.findAll(),
           CollaboratorRepository.findAll(),
           RecordRepository.findAll(),
-          SupplierRepository.findAll()
+          SupplierRepository.findAll(),
+          RolePermissionsRepository.findAll(),
+          AuditService.getLogs()
         ]);
         
-        if (docRes.success && docRes.data) setDocuments(docRes.data);
-        if (auditRes.success && auditRes.data) setAudits(auditRes.data);
-        if (fiveSRes.success && fiveSRes.data) setAuditorias5s(fiveSRes.data);
-        if (userRes.success && userRes.data) setUsers(userRes.data);
-        if (ncRes.success && ncRes.data) setNcs(ncRes.data);
-        if (planoRes.success && planoRes.data) setPlanos(planoRes.data);
-        if (riscoRes.success && riscoRes.data) setRiscos(riscoRes.data);
-        if (equipRes.success && equipRes.data) setEquipamentos(equipRes.data);
-        if (colabRes.success && colabRes.data) setColaboradores(colabRes.data);
-        if (regRes.success && regRes.data) setRegistros(regRes.data);
-        if (supRes.success && supRes.data) setSuppliers(supRes.data);
+        if (docRes.success && Array.isArray(docRes.data) && docRes.data.length > 0) setDocuments(docRes.data);
+        if (auditRes.success && Array.isArray(auditRes.data) && auditRes.data.length > 0) setAudits(auditRes.data);
+        if (fiveSRes.success && Array.isArray(fiveSRes.data) && fiveSRes.data.length > 0) setAuditorias5s(fiveSRes.data);
+        if (userRes.success && Array.isArray(userRes.data) && userRes.data.length > 0) setUsers(userRes.data);
+        if (ncRes.success && Array.isArray(ncRes.data) && ncRes.data.length > 0) setNcs(ncRes.data);
+        if (planoRes.success && Array.isArray(planoRes.data) && planoRes.data.length > 0) setPlanos(planoRes.data);
+        if (riscoRes.success && Array.isArray(riscoRes.data) && riscoRes.data.length > 0) setRiscos(riscoRes.data);
+        if (equipRes.success && Array.isArray(equipRes.data) && equipRes.data.length > 0) setEquipamentos(equipRes.data);
+        if (colabRes.success && Array.isArray(colabRes.data) && colabRes.data.length > 0) setColaboradores(colabRes.data);
+        if (regRes.success && Array.isArray(regRes.data) && regRes.data.length > 0) setRegistros(regRes.data);
+        if (supRes.success && Array.isArray(supRes.data) && supRes.data.length > 0) setSuppliers(supRes.data);
+        if (permRes.success && Array.isArray(permRes.data) && permRes.data.length > 0) {
+          setPermissions(permRes.data as any);
+        }
+        if (Array.isArray(logData) && logData.length > 0) setLogs(logData as any);
       } catch (err) {
         console.error('Falha ao carregar dados reais dos repositórios:', err);
       }
     };
+
     loadRealData();
+
+    // Assinaturas Firestore onSnapshot
+    const unsubDocs = DocumentRepository.subscribe((items) => items.length > 0 && setDocuments(items));
+    const unsubAudits = AuditRepository.subscribe((items) => items.length > 0 && setAudits(items));
+    const unsubUsers = UserRepository.subscribe((items) => items.length > 0 && setUsers(items));
+    const unsubNCs = NCRepository.subscribe((items) => items.length > 0 && setNcs(items));
+    const unsubPlanos = ActionPlanRepository.subscribe((items) => items.length > 0 && setPlanos(items));
+    const unsubRiscos = RiskRepository.subscribe((items) => items.length > 0 && setRiscos(items));
+    const unsubEquip = EquipmentRepository.subscribe((items) => items.length > 0 && setEquipamentos(items));
+    const unsubColab = CollaboratorRepository.subscribe((items) => items.length > 0 && setColaboradores(items));
+    const unsubReg = RecordRepository.subscribe((items) => items.length > 0 && setRegistros(items));
+    const unsubSup = SupplierRepository.subscribe((items) => items.length > 0 && setSuppliers(items));
+    const unsubPerms = RolePermissionsRepository.subscribe((items) => items.length > 0 && setPermissions(items as any));
+
+    return () => {
+      unsubDocs();
+      unsubAudits();
+      unsubUsers();
+      unsubNCs();
+      unsubPlanos();
+      unsubRiscos();
+      unsubEquip();
+      unsubColab();
+      unsubReg();
+      unsubSup();
+      unsubPerms();
+    };
   }, []);
 
   // Evento Global de Atalho Cmd+K / Ctrl+K
@@ -411,9 +434,21 @@ function AppContent() {
     }
   };
 
-  const handleUpdatePermissions = (updatedPerms: RolePermission[]) => {
+  const handleUpdatePermissions = async (updatedPerms: RolePermission[]) => {
     setPermissions(updatedPerms);
-    localStorage.setItem('sgq_vickytex_permissions', JSON.stringify(updatedPerms));
+    try {
+      await Promise.all(
+        updatedPerms.map((p) =>
+          RolePermissionsRepository.create({
+            id: p.role,
+            role: p.role,
+            allowedSections: p.allowedSections
+          })
+        )
+      );
+    } catch (e) {
+      console.error('Falha ao atualizar permissões no Firestore:', e);
+    }
   };
 
   // Callback de Seleção de Documento (vindo da pesquisa global ou dashboards)

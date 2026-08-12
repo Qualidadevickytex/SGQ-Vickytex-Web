@@ -51,6 +51,7 @@ import {
 } from 'recharts';
 import { PersonalizacaoGeral } from '../utils/mockData';
 import { IndicatorRepository } from '../services/database/repositories/indicator.repository';
+import { CriticalAnalysesRepository } from '../services/firebase/repositories/criticalAnalysis.repository';
 import { IndicadorDesempenho } from '../types/indicator';
 
 interface Indicador {
@@ -298,23 +299,31 @@ export const Indicadores: React.FC<IndicadoresProps> = ({ onAddLog, personalizac
     return import.meta.env.VITE_DEMO_MODE === 'true' ? INITIAL_ANALISES : [];
   });
 
-  // Carregar dados reais remotamente usando o IndicatorRepository na montagem
+  // Carregar dados reais remotamente usando os repositórios na montagem
   useEffect(() => {
-    const fetchIndicators = async () => {
+    const fetchData = async () => {
       try {
-        const res = await IndicatorRepository.findAll();
-        if (res.success && res.data) {
-          const mapped = res.data.map(mapFromRepo);
+        const [indRes, critRes] = await Promise.all([
+          IndicatorRepository.findAll(),
+          CriticalAnalysesRepository.findAll()
+        ]);
+
+        if (indRes.success && indRes.data && indRes.data.length > 0) {
+          const mapped = indRes.data.map(mapFromRepo);
           setIndicadores(mapped);
           if (mapped.length > 0 && !selectedKpiId) {
             setSelectedKpiId(mapped[0].id);
           }
         }
+
+        if (critRes.success && critRes.data && critRes.data.length > 0) {
+          setAnalises(critRes.data as AnaliseCritica[]);
+        }
       } catch (err) {
-        console.error('Erro ao carregar indicadores do repositório remoto:', err);
+        console.error('Erro ao carregar dados do repositório remoto:', err);
       }
     };
-    fetchIndicators();
+    fetchData();
   }, []);
 
   const [selectedKpiId, setSelectedKpiId] = useState<string>('kpi-1');
@@ -589,7 +598,7 @@ export const Indicadores: React.FC<IndicadoresProps> = ({ onAddLog, personalizac
   };
 
   // Handler para Adicionar Análise Crítica
-  const handleAddCritica = (e: React.FormEvent) => {
+  const handleAddCritica = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newCritica.conclusao) return;
 
@@ -616,6 +625,12 @@ export const Indicadores: React.FC<IndicadoresProps> = ({ onAddLog, personalizac
       statusAcao: 'Sob Controle',
       linkPlanoId: ''
     });
+
+    try {
+      await CriticalAnalysesRepository.create(created as any);
+    } catch (err) {
+      console.error('Falha ao salvar análise crítica no Firestore:', err);
+    }
   };
 
   // Deletar Indicador

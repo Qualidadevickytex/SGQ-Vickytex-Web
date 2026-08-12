@@ -131,10 +131,27 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ personalizacao: propPe
     }
   };
 
+  const getLatestPassword = (acc: typeof PRESET_ACCOUNTS[0]) => {
+    try {
+      const savedUsersStr = localStorage.getItem('sgq_vickytex_users');
+      if (savedUsersStr) {
+        const savedUsers = JSON.parse(savedUsersStr);
+        const found = savedUsers.find((u: any) => u.email.toLowerCase() === acc.email.toLowerCase());
+        if (found && (found.passwordHash || found.password)) {
+          return found.passwordHash || found.password;
+        }
+      }
+    } catch (e) {
+      // ignore
+    }
+    return acc.password;
+  };
+
   const handleQuickLogin = async (acc: typeof PRESET_ACCOUNTS[0]) => {
     setErrorMsg('');
     setSuccessMsg('');
-    const success = await loginWithEmail(acc.email, acc.password);
+    const targetPass = getLatestPassword(acc);
+    const success = await loginWithEmail(acc.email, targetPass);
     if (success) {
       setSuccessMsg(`Autenticado como ${acc.name}! Redirecionando...`);
     } else {
@@ -144,7 +161,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ personalizacao: propPe
 
   const fillCredentialsAndSwitch = (acc: typeof PRESET_ACCOUNTS[0]) => {
     setEmail(acc.email);
-    setPassword(acc.password);
+    setPassword(getLatestPassword(acc));
     setActiveTab('password');
     setErrorMsg('');
     setSuccessMsg('');

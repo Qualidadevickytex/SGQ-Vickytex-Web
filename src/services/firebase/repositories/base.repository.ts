@@ -6,7 +6,7 @@
 import { BaseService, ApiResponse, PaginatedResponse } from '../../api.types';
 import { ErrorHandler } from '../../errorHandler';
 import { cacheService } from '../../cache.service';
-import { getAllDocs, getDocById, createDocWithId, updateDocData, deleteDocById } from '../../../firebase/firestore';
+import { getAllDocs, getDocById, createDocWithId, updateDocData, deleteDocById, subscribeToCollection } from '../../../firebase/firestore';
 
 export abstract class BaseRepository<T extends { id: string }> implements BaseService<T> {
   protected abstract collectionName: string;
@@ -111,8 +111,20 @@ export abstract class BaseRepository<T extends { id: string }> implements BaseSe
   }
 
 
-  subscribe(_callback: (event: any) => void): () => void {
-    return () => {};
+  subscribe(callback: (items: T[]) => void): () => void {
+    return subscribeToCollection<any>(
+      this.collectionName,
+      (docs) => {
+        const mapped = docs.map((rec) => this.mapRecord(rec));
+        const seen = new Set<string>();
+        const unique = mapped.filter((a: T) => {
+          if (!a || !a.id || seen.has(a.id)) return false;
+          seen.add(a.id);
+          return true;
+        });
+        callback(unique);
+      }
+    );
   }
 
   async search(query: string): Promise<ApiResponse<T[]>> {

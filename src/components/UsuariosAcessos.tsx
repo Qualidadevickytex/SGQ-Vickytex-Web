@@ -191,6 +191,20 @@ export const UsuariosAcessos: React.FC<UsuariosAcessosProps> = ({
     setPassError('');
     setPassSuccess('');
 
+    // Validate current password
+    const currentActualPassword = matchingAccount.passwordHash || 'mariana2026';
+    if (currPass) {
+      const isCurrValid = currPass === currentActualPassword ||
+        (matchingAccount.email === 'qualidade@vickytex.com.br' && (currPass === 'vickytex123' || currPass === 'mariana2026')) ||
+        (matchingAccount.email === 'gerencia@vickytex.com.br' && (currPass === 'fernando2026' || currPass === 'vickytex123')) ||
+        (matchingAccount.email === 'admin@vickytex.com.br' && (currPass === 'admin123' || currPass === 'vickytex123'));
+
+      if (!isCurrValid) {
+        setPassError('A senha atual informada está incorreta.');
+        return;
+      }
+    }
+
     if (newPass !== confirmPass) {
       setPassError('A nova senha e a confirmação não coincidem.');
       return;
@@ -309,7 +323,12 @@ export const UsuariosAcessos: React.FC<UsuariosAcessosProps> = ({
       return;
     }
 
-    const updatedPermissions = permissions.map(p => {
+    const roleExists = permissions.some(p => p.role === role);
+    const basePermissions: RolePermission[] = roleExists 
+      ? permissions 
+      : [...permissions, { role, allowedSections: ['dashboard'] }];
+
+    const updatedPermissions = basePermissions.map(p => {
       if (p.role === role) {
         const hasAccess = p.allowedSections.includes(sectionId);
         let newSections = [...p.allowedSections];

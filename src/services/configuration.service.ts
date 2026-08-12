@@ -27,7 +27,7 @@ const DEFAULT_CONFIG: SystemConfiguration = {
   smtpPort: 587,
   smtpUser: 'sgq.alertas@vickytex.com.br',
   googleClientId: (import.meta as any).env?.VITE_GOOGLE_CLIENT_ID || '',
-  apiUrl: (import.meta as any).env?.VITE_API_URL || 'http://localhost:3001',
+  apiUrl: (import.meta as any).env?.VITE_API_URL || '',
   primaryColor: '#0f172a', // Slate 900
   accentColor: '#4f46e5', // Indigo 600
   sessionTimeoutMinutes: 30,

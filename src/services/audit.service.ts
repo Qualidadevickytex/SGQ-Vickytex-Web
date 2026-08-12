@@ -4,6 +4,7 @@
  */
 
 import { UserProfile } from '../types';
+import { AuditLogsRepository } from './firebase/repositories/auditLog.repository';
 
 export interface AuditLog {
   id: string;
@@ -18,27 +19,11 @@ export interface AuditLog {
 
 type AuditSubscriber = (log: AuditLog) => void;
 
-const getApiBaseUrl = (): string => {
-  if (typeof window !== 'undefined') {
-    return (import.meta as any).env?.VITE_API_URL || 'http://localhost:3001';
-  }
-  return 'http://localhost:3001';
-};
-
 class AuditServiceClass {
   private subscribers: Set<AuditSubscriber> = new Set();
   private localLogs: AuditLog[] = [];
 
-  constructor() {
-    try {
-      const saved = localStorage.getItem('sgq_vickytex_activity_logs');
-      if (saved) {
-        this.localLogs = JSON.parse(saved);
-      }
-    } catch (e) {
-      console.warn('[AuditService] Failed to load local logs:', e);
-    }
-  }
+  constructor() {}
 
   public subscribe(callback: AuditSubscriber): () => void {
     this.subscribers.add(callback);
@@ -82,32 +67,11 @@ class AuditServiceClass {
       }
     });
 
-    // 2. Persist to local memory and localStorage
-    this.localLogs.unshift(logEntry);
-    if (this.localLogs.length > 500) {
-      this.localLogs = this.localLogs.slice(0, 500);
-    }
+    // 2. Persist to Firestore audit_logs collection
     try {
-      localStorage.setItem('sgq_vickytex_activity_logs', JSON.stringify(this.localLogs));
-    } catch (e) {
-      // ignore write errors
-    }
-
-    // 3. Persist via Express HTTP API
-    try {
-      const baseUrl = getApiBaseUrl();
-      await fetch(`${baseUrl}/api/audit-logs`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          usuarioEmail: logEntry.usuarioEmail,
-          acao: logEntry.acao,
-          modulo: 'Auditoria',
-          registro: `${logEntry.usuarioNome} (${logEntry.usuarioRole}): ${logEntry.detalhes}`
-        })
-      });
+      await AuditLogsRepository.create(logEntry);
     } catch (err) {
-      console.warn('[AuditService] Failed to persist log entry via Express API:', err);
+      console.warn('[AuditService] Failed to persist log entry to Firestore audit_logs:', err);
     }
 
     return logEntry;
@@ -160,28 +124,17 @@ class AuditServiceClass {
    */
   async getLogs(): Promise<AuditLog[]> {
     try {
-      const baseUrl = getApiBaseUrl();
-      const res = await fetch(`${baseUrl}/api/audit-logs`);
-      if (res.ok) {
-        const result = await res.json();
-        if (result.success && Array.isArray(result.data)) {
-          return result.data.map((rec: any) => ({
-            id: rec.id,
-            usuarioEmail: rec.usuarioEmail || '',
-            usuarioNome: rec.usuarioEmail || '',
-            usuarioRole: 'Usuário',
-            acao: rec.acao,
-            detalhes: rec.registro || '',
-            timestamp: rec.data || new Date().toISOString()
-          }));
-        }
+      const res = await AuditLogsRepository.findAll();
+      if (res.success && Array.isArray(res.data)) {
+        return res.data;
       }
     } catch (e) {
-      console.warn('[AuditService] Failed to load from Express API. Falling back to local logs.', e);
+      console.warn('[AuditService] Failed to load logs from Firestore:', e);
     }
-    return this.localLogs;
+    return [];
   }
 }
 
 export const AuditService = new AuditServiceClass();
 export default AuditService;
+

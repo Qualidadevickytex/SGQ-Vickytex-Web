@@ -721,7 +721,7 @@ export const INITIAL_USER_ACCOUNTS: UserAccount[] = [
     sector: 'Qualidade',
     photoURL: 'https://api.dicebear.com/7.x/adventurer/svg?seed=Rodrigo',
     status: 'Ativo',
-    passwordHash: 'vickytex123',
+    passwordHash: 'mariana2026',
     lastLogin: '2026-07-10 08:30',
     telefone: '47992774430'
   },
