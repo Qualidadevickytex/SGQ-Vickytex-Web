@@ -109,21 +109,21 @@ function AppContent() {
         
         if (!isMounted) return;
 
-        if (docRes.success && Array.isArray(docRes.data) && (docRes.data.length > 0 || !IS_DEMO_MODE)) setDocuments(docRes.data);
-        if (auditRes.success && Array.isArray(auditRes.data) && (auditRes.data.length > 0 || !IS_DEMO_MODE)) setAudits(auditRes.data);
-        if (fiveSRes.success && Array.isArray(fiveSRes.data) && (fiveSRes.data.length > 0 || !IS_DEMO_MODE)) setAuditorias5s(fiveSRes.data);
-        if (userRes.success && Array.isArray(userRes.data) && (userRes.data.length > 0 || !IS_DEMO_MODE)) setUsers(userRes.data);
-        if (ncRes.success && Array.isArray(ncRes.data) && (ncRes.data.length > 0 || !IS_DEMO_MODE)) setNcs(ncRes.data);
-        if (planoRes.success && Array.isArray(planoRes.data) && (planoRes.data.length > 0 || !IS_DEMO_MODE)) setPlanos(planoRes.data);
-        if (riscoRes.success && Array.isArray(riscoRes.data) && (riscoRes.data.length > 0 || !IS_DEMO_MODE)) setRiscos(riscoRes.data);
-        if (equipRes.success && Array.isArray(equipRes.data) && (equipRes.data.length > 0 || !IS_DEMO_MODE)) setEquipamentos(equipRes.data);
-        if (colabRes.success && Array.isArray(colabRes.data) && (colabRes.data.length > 0 || !IS_DEMO_MODE)) setColaboradores(colabRes.data);
-        if (regRes.success && Array.isArray(regRes.data) && (regRes.data.length > 0 || !IS_DEMO_MODE)) setRegistros(regRes.data);
-        if (supRes.success && Array.isArray(supRes.data) && (supRes.data.length > 0 || !IS_DEMO_MODE)) setSuppliers(supRes.data);
-        if (permRes.success && Array.isArray(permRes.data) && (permRes.data.length > 0 || !IS_DEMO_MODE)) {
+        if (docRes.success && Array.isArray(docRes.data)) setDocuments(docRes.data);
+        if (auditRes.success && Array.isArray(auditRes.data)) setAudits(auditRes.data);
+        if (fiveSRes.success && Array.isArray(fiveSRes.data)) setAuditorias5s(fiveSRes.data);
+        if (userRes.success && Array.isArray(userRes.data)) setUsers(userRes.data);
+        if (ncRes.success && Array.isArray(ncRes.data)) setNcs(ncRes.data);
+        if (planoRes.success && Array.isArray(planoRes.data)) setPlanos(planoRes.data);
+        if (riscoRes.success && Array.isArray(riscoRes.data)) setRiscos(riscoRes.data);
+        if (equipRes.success && Array.isArray(equipRes.data)) setEquipamentos(equipRes.data);
+        if (colabRes.success && Array.isArray(colabRes.data)) setColaboradores(colabRes.data);
+        if (regRes.success && Array.isArray(regRes.data)) setRegistros(regRes.data);
+        if (supRes.success && Array.isArray(supRes.data)) setSuppliers(supRes.data);
+        if (permRes.success && Array.isArray(permRes.data)) {
           setPermissions(permRes.data as any);
         }
-        if (Array.isArray(logData) && (logData.length > 0 || !IS_DEMO_MODE)) setLogs(logData as any);
+        if (Array.isArray(logData)) setLogs(logData as any);
       } catch (err) {
         console.error('Falha ao carregar dados reais dos repositórios:', err);
       }
@@ -132,17 +132,17 @@ function AppContent() {
     loadRealData();
 
     // Assinaturas Firestore onSnapshot
-    const unsubDocs = DocumentRepository.subscribe((items) => (items.length > 0 || !IS_DEMO_MODE) && setDocuments(items));
-    const unsubAudits = AuditRepository.subscribe((items) => (items.length > 0 || !IS_DEMO_MODE) && setAudits(items));
-    const unsubUsers = UserRepository.subscribe((items) => (items.length > 0 || !IS_DEMO_MODE) && setUsers(items));
-    const unsubNCs = NCRepository.subscribe((items) => (items.length > 0 || !IS_DEMO_MODE) && setNcs(items));
-    const unsubPlanos = ActionPlanRepository.subscribe((items) => (items.length > 0 || !IS_DEMO_MODE) && setPlanos(items));
-    const unsubRiscos = RiskRepository.subscribe((items) => (items.length > 0 || !IS_DEMO_MODE) && setRiscos(items));
-    const unsubEquip = EquipmentRepository.subscribe((items) => (items.length > 0 || !IS_DEMO_MODE) && setEquipamentos(items));
-    const unsubColab = CollaboratorRepository.subscribe((items) => (items.length > 0 || !IS_DEMO_MODE) && setColaboradores(items));
-    const unsubReg = RecordRepository.subscribe((items) => (items.length > 0 || !IS_DEMO_MODE) && setRegistros(items));
-    const unsubSup = SupplierRepository.subscribe((items) => (items.length > 0 || !IS_DEMO_MODE) && setSuppliers(items));
-    const unsubPerms = RolePermissionsRepository.subscribe((items) => (items.length > 0 || !IS_DEMO_MODE) && setPermissions(items as any));
+    const unsubDocs = DocumentRepository.subscribe((items) => setDocuments(items));
+    const unsubAudits = AuditRepository.subscribe((items) => setAudits(items));
+    const unsubUsers = UserRepository.subscribe((items) => setUsers(items));
+    const unsubNCs = NCRepository.subscribe((items) => setNcs(items));
+    const unsubPlanos = ActionPlanRepository.subscribe((items) => setPlanos(items));
+    const unsubRiscos = RiskRepository.subscribe((items) => setRiscos(items));
+    const unsubEquip = EquipmentRepository.subscribe((items) => setEquipamentos(items));
+    const unsubColab = CollaboratorRepository.subscribe((items) => setColaboradores(items));
+    const unsubReg = RecordRepository.subscribe((items) => setRegistros(items));
+    const unsubSup = SupplierRepository.subscribe((items) => setSuppliers(items));
+    const unsubPerms = RolePermissionsRepository.subscribe((items) => setPermissions(items as any));
     const unsubSettings = SystemSettingsRepository.subscribe((records) => {
       const pDoc = records.find(r => r.id === 'sgq_vickytex_personalizacao');
       if (pDoc && pDoc.data) {
@@ -237,7 +237,22 @@ function AppContent() {
       'sgq_vickytex_auditorias_5s',
       'sgq_vickytex_users',
       'sgq_vickytex_permissions',
-      'sgq_vickytex_registros'
+      'sgq_vickytex_registros',
+      'sgq_vickytex_treinamentos',
+      'sgq_vickytex_fornecedores',
+      'sgq_vickytex_indicators',
+      'sgq_vickytex_ceo_projects',
+      'sgq_vickytex_ceo_ideas',
+      'sgq_vickytex_ceo_training_logs',
+      'sgq_vickytex_ceo_gamification_adjustments',
+      'sgq_vickytex_ceo_scores_zeroed',
+      'sgq_vickytex_fornecedores_categorias',
+      'sgq_vickytex_calibracao_tipos',
+      'sgq_vickytex_auditorias_origens',
+      'sgq_vickytex_riscos_categorias',
+      'sgq_vickytex_metodologias_config',
+      'sgq_vickytex_setores',
+      'sgq_vickytex_tipos_documentos'
     ];
     keysToRemove.forEach(k => localStorage.removeItem(k));
 
@@ -249,8 +264,10 @@ function AppContent() {
     setAuditorias5s([]);
     setEquipamentos([]);
     setColaboradores([]);
+    setTreinamentos([]);
     setRegistros([]);
     setSuppliers([]);
+    setLogs([]);
 
     // Also attempt clearing remote Cloud Firestore collections
     const collectionsToClear = [
@@ -259,11 +276,18 @@ function AppContent() {
       'ncs',
       'action_plans',
       'risks',
+      'fives_audits',
       'audits_5s',
       'equipments',
       'collaborators',
+      'trainings',
       'records',
-      'audit_logs'
+      'suppliers',
+      'indicators',
+      'ceo_projects',
+      'ceo_ideas',
+      'audit_logs',
+      'system_settings'
     ];
     for (const coll of collectionsToClear) {
       clearCollectionDocs(coll).catch(() => {});

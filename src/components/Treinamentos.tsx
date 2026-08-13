@@ -947,83 +947,91 @@ export const Treinamentos: React.FC<TreinamentosProps> = ({
               </div>
 
               <div className="space-y-3">
-                {treinamentos.map(tre => {
-                  return (
-                    <div 
-                      key={tre.id} 
-                      className="p-4 rounded-xl border border-slate-100 dark:border-slate-800/80 bg-slate-50/30 dark:bg-slate-950/10 hover:shadow-xs transition-shadow flex items-start justify-between"
-                    >
-                      <div className="space-y-2">
-                        <div className="flex items-center space-x-2">
-                          <span className="text-[10px] font-bold text-slate-400 font-mono">
-                            {tre.codigo}
-                          </span>
-                          <span className="w-1.5 h-1.5 rounded-full bg-slate-300" />
-                          <span className="text-[10px] font-extrabold font-mono bg-blue-50 dark:bg-blue-950/30 text-blue-700 dark:text-blue-300 px-1.5 py-0.5 rounded-sm">
-                            {tre.documentoId}
-                          </span>
-                        </div>
-                        <h4 className="text-xs font-bold text-slate-800 dark:text-slate-100">
-                          {tre.titulo}
-                        </h4>
-                        
-                        <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[10px] text-slate-500 dark:text-slate-400">
-                          <span className="flex items-center">
-                            <Calendar className="w-3.5 h-3.5 mr-1 text-slate-400" />
-                            {tre.dataTreinamento}
-                          </span>
-                          <span className="flex items-center">
-                            <Users className="w-3.5 h-3.5 mr-1 text-slate-400" />
-                            {tre.participantes.length} Participantes
-                          </span>
-                          <span className="flex items-center">
-                            <Clock className="w-3.5 h-3.5 mr-1 text-slate-400" />
-                            {tre.duracaoHoras}h de Carga Horária
-                          </span>
+                {treinamentos.length === 0 ? (
+                  <div className="p-8 text-center border border-dashed border-slate-200 dark:border-slate-800 rounded-xl space-y-2">
+                    <GraduationCap className="w-8 h-8 text-slate-300 dark:text-slate-700 mx-auto" />
+                    <p className="text-xs font-bold text-slate-500">Nenhum treinamento registrado</p>
+                    <p className="text-[11px] text-slate-400">Clique em "Registrar Treinamento" para cadastrar a primeira capacitação.</p>
+                  </div>
+                ) : (
+                  treinamentos.map(tre => {
+                    return (
+                      <div 
+                        key={tre.id} 
+                        className="p-4 rounded-xl border border-slate-100 dark:border-slate-800/80 bg-slate-50/30 dark:bg-slate-950/10 hover:shadow-xs transition-shadow flex items-start justify-between"
+                      >
+                        <div className="space-y-2">
+                          <div className="flex items-center space-x-2">
+                            <span className="text-[10px] font-bold text-slate-400 font-mono">
+                              {tre.codigo}
+                            </span>
+                            <span className="w-1.5 h-1.5 rounded-full bg-slate-300" />
+                            <span className="text-[10px] font-extrabold font-mono bg-blue-50 dark:bg-blue-950/30 text-blue-700 dark:text-blue-300 px-1.5 py-0.5 rounded-sm">
+                              {tre.documentoId}
+                            </span>
+                          </div>
+                          <h4 className="text-xs font-bold text-slate-800 dark:text-slate-100">
+                            {tre.titulo}
+                          </h4>
+                          
+                          <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[10px] text-slate-500 dark:text-slate-400">
+                            <span className="flex items-center">
+                              <Calendar className="w-3.5 h-3.5 mr-1 text-slate-400" />
+                              {tre.dataTreinamento}
+                            </span>
+                            <span className="flex items-center">
+                              <Users className="w-3.5 h-3.5 mr-1 text-slate-400" />
+                              {tre.participantes.length} Participantes
+                            </span>
+                            <span className="flex items-center">
+                              <Clock className="w-3.5 h-3.5 mr-1 text-slate-400" />
+                              {tre.duracaoHoras}h de Carga Horária
+                            </span>
+                          </div>
+
+                          {/* Listinha de participantes */}
+                          <div className="text-[10px] flex items-center space-x-1.5 text-slate-400 pt-1">
+                            <span className="font-semibold">Grupo:</span>
+                            <span className="italic">{tre.participantes.join(', ') || 'Nenhum inscrito'}</span>
+                          </div>
                         </div>
 
-                        {/* Listinha de participantes */}
-                        <div className="text-[10px] flex items-center space-x-1.5 text-slate-400 pt-1">
-                          <span className="font-semibold">Grupo:</span>
-                          <span className="italic">{tre.participantes.join(', ') || 'Nenhum inscrito'}</span>
+                        <div className="flex flex-col items-end justify-between h-full space-y-4">
+                          <div className="flex items-center space-x-1.5">
+                            <span className={`px-2 py-0.5 rounded-full text-[9px] font-extrabold ${
+                              tre.status === 'Realizado' 
+                                ? 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600' 
+                                : 'bg-amber-50 dark:bg-amber-950/30 text-amber-600'
+                            }`}>
+                              {tre.status.toUpperCase()}
+                            </span>
+                            <button
+                              onClick={() => handleOpenEditTraining(tre)}
+                              className="text-slate-400 hover:text-blue-500 p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded transition-colors"
+                              title="Editar Treinamento"
+                            >
+                              <Pencil className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteTreinamento(tre.id)}
+                              className="text-slate-400 hover:text-rose-500 p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded transition-colors"
+                              title="Excluir Treinamento"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                          
+                          <button
+                            onClick={() => setSelectedTrainingDoc(tre)}
+                            className="text-xs font-extrabold text-blue-600 dark:text-blue-400 hover:underline flex items-center"
+                          >
+                            <Printer className="w-3.5 h-3.5 mr-1" /> Ficha de Presença
+                          </button>
                         </div>
                       </div>
-
-                      <div className="flex flex-col items-end justify-between h-full space-y-4">
-                        <div className="flex items-center space-x-1.5">
-                          <span className={`px-2 py-0.5 rounded-full text-[9px] font-extrabold ${
-                            tre.status === 'Realizado' 
-                              ? 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600' 
-                              : 'bg-amber-50 dark:bg-amber-950/30 text-amber-600'
-                          }`}>
-                            {tre.status.toUpperCase()}
-                          </span>
-                          <button
-                            onClick={() => handleOpenEditTraining(tre)}
-                            className="text-slate-400 hover:text-blue-500 p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded transition-colors"
-                            title="Editar Treinamento"
-                          >
-                            <Pencil className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            onClick={() => handleDeleteTreinamento(tre.id)}
-                            className="text-slate-400 hover:text-rose-500 p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded transition-colors"
-                            title="Excluir Treinamento"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                        
-                        <button
-                          onClick={() => setSelectedTrainingDoc(tre)}
-                          className="text-xs font-extrabold text-blue-600 dark:text-blue-400 hover:underline flex items-center"
-                        >
-                          <Printer className="w-3.5 h-3.5 mr-1" /> Ficha de Presença
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })
+                )}
               </div>
             </div>
 
@@ -1044,23 +1052,42 @@ export const Treinamentos: React.FC<TreinamentosProps> = ({
                   A norma ISO 9001 não exige apenas registrar o treinamento, mas sim <strong>avaliar se ele foi eficaz</strong> no chão de fábrica após algumas semanas.
                 </p>
 
-                <div className="space-y-2.5">
-                  <div className="p-3 rounded-lg bg-slate-50 dark:bg-slate-800/30 border border-slate-150 dark:border-slate-800/80 flex items-start space-x-2">
-                    <Clock className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
-                    <div>
-                      <p className="text-[11px] font-bold text-slate-700 dark:text-slate-300">Próxima Avaliação Prática</p>
-                      <p className="text-[10px] text-slate-400">Avaliar a operadora Maria Santos sobre o uso do gabarito de acrílico (IT-ACA-002) até <strong>06/08/2026</strong>.</p>
-                    </div>
-                  </div>
+                {(() => {
+                  const proxEval = treinamentos.find(t => t.status === 'Planejado');
+                  const ultEfic = treinamentos.find(t => t.status === 'Realizado');
 
-                  <div className="p-3 rounded-lg bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-150 dark:border-emerald-950/40 flex items-start space-x-2">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-                    <div>
-                      <p className="text-[11px] font-bold text-emerald-800 dark:text-emerald-400">Última Eficácia Confirmada</p>
-                      <p className="text-[10px] text-slate-500 dark:text-slate-400">Aptitude prática de Roberto Costa sobre enfesto de alta densidade confirmada por Mariana Silva em 15/03/2026.</p>
+                  return (
+                    <div className="space-y-2.5">
+                      <div className="p-3 rounded-lg bg-slate-50 dark:bg-slate-800/30 border border-slate-150 dark:border-slate-800/80 flex items-start space-x-2">
+                        <Clock className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+                        <div>
+                          <p className="text-[11px] font-bold text-slate-700 dark:text-slate-300">Próxima Avaliação Prática</p>
+                          <p className="text-[10px] text-slate-400">
+                            {proxEval ? (
+                              <>Avaliar os participantes do treinamento <strong>{proxEval.codigo} - {proxEval.titulo}</strong> até <strong>{proxEval.dataTreinamento}</strong>.</>
+                            ) : (
+                              'Nenhuma avaliação prática pendente no cronograma.'
+                            )}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="p-3 rounded-lg bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-150 dark:border-emerald-950/40 flex items-start space-x-2">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                        <div>
+                          <p className="text-[11px] font-bold text-emerald-800 dark:text-emerald-400">Última Eficácia Confirmada</p>
+                          <p className="text-[10px] text-slate-500 dark:text-slate-400">
+                            {ultEfic ? (
+                              <>Eficácia prática do treinamento <strong>{ultEfic.codigo} - {ultEfic.titulo}</strong> confirmada com {ultEfic.participantes.length} colaborador(es) em {ultEfic.dataTreinamento}.</>
+                            ) : (
+                              'Nenhum treinamento realizado registrado no histórico.'
+                            )}
+                          </p>
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                </div>
+                  );
+                })()}
               </div>
 
               <div className="pt-4 border-t border-slate-100 dark:border-slate-800 text-[10px] text-slate-400 italic">
