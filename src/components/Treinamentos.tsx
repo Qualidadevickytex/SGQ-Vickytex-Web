@@ -202,9 +202,10 @@ export const Treinamentos: React.FC<TreinamentosProps> = ({
     }
 
     if (editingColaborador) {
+      let updatedColab: ColaboradorCompetencia | null = null;
       const updated = colaboradores.map(c => {
         if (c.id === editingColaborador.id) {
-          return {
+          updatedColab = {
             ...c,
             nome: colaboradorForm.nome,
             cargo: colaboradorForm.cargo,
@@ -212,10 +213,14 @@ export const Treinamentos: React.FC<TreinamentosProps> = ({
             status: colaboradorForm.status,
             documentosAssinados: colaboradorForm.documentosAssinados
           };
+          return updatedColab;
         }
         return c;
       });
       saveColaboradores(updated);
+      if (updatedColab) {
+        CollaboratorRepository.update((updatedColab as ColaboradorCompetencia).id, updatedColab).catch(err => console.error('Erro ao atualizar colaborador no Firestore:', err));
+      }
       onAddLog('Editou Colaborador', `Atualizou informações do colaborador ${colaboradorForm.nome}.`);
     } else {
       const created: ColaboradorCompetencia = {
@@ -227,6 +232,7 @@ export const Treinamentos: React.FC<TreinamentosProps> = ({
         documentosAssinados: colaboradorForm.documentosAssinados
       };
       saveColaboradores([...colaboradores, created]);
+      CollaboratorRepository.create(created).catch(err => console.error('Erro ao cadastrar colaborador no Firestore:', err));
       onAddLog('Cadastrou Colaborador', `Cadastrou o novo colaborador ${colaboradorForm.nome} no setor ${colaboradorForm.setor}.`);
     }
 
@@ -590,6 +596,11 @@ export const Treinamentos: React.FC<TreinamentosProps> = ({
           return col;
         });
         saveColaboradores(updatedColabs);
+        updatedColabs.forEach(col => {
+          if (partArray.includes(col.nome)) {
+            CollaboratorRepository.update(col.id, col).catch(err => console.error(err));
+          }
+        });
       }
 
       onAddLog(
@@ -636,6 +647,10 @@ export const Treinamentos: React.FC<TreinamentosProps> = ({
     });
 
     saveColaboradores(updatedColabs);
+    const targetCol = updatedColabs.find(c => c.id === signForm.colaboradorId);
+    if (targetCol) {
+      CollaboratorRepository.update(targetCol.id, targetCol).catch(err => console.error('Erro ao homologar competência no Firestore:', err));
+    }
     const colName = colaboradores.find(c => c.id === signForm.colaboradorId)?.nome || '';
     
     onAddLog(
@@ -1537,9 +1552,11 @@ export const Treinamentos: React.FC<TreinamentosProps> = ({
               <button
                 type="button"
                 onClick={() => {
-                  const updated = colaboradores.filter(c => c.id !== colToDelete.id);
+                  const idToDelete = colToDelete.id;
+                  const updated = colaboradores.filter(c => c.id !== idToDelete);
                   saveColaboradores(updated);
-                  onAddLog('Excluiu Colaborador', `Removeu o colaborador com ID ${colToDelete.id} (${colToDelete.nome}) do cadastro.`);
+                  CollaboratorRepository.delete(idToDelete).catch(err => console.error('Erro ao excluir colaborador no Firestore:', err));
+                  onAddLog('Excluiu Colaborador', `Removeu o colaborador com ID ${idToDelete} (${colToDelete.nome}) do cadastro.`);
                   setColToDelete(null);
                 }}
                 className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-bold transition-colors shadow-xs"

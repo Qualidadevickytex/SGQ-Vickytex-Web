@@ -42,6 +42,7 @@ import { CollaboratorRepository } from './services/database/repositories/collabo
 import { RecordRepository } from './services/database/repositories/record.repository';
 import { SupplierRepository } from './services/database/repositories/supplier.repository';
 import { RolePermissionsRepository } from './services/firebase/repositories/rolePermission.repository';
+import { SystemSettingsRepository } from './services/database/repositories/systemSettings.repository';
 import { AuditService } from './services/audit.service';
 import { clearCollectionDocs } from './firebase/firestore';
 
@@ -142,6 +143,12 @@ function AppContent() {
     const unsubReg = RecordRepository.subscribe((items) => (items.length > 0 || !IS_DEMO_MODE) && setRegistros(items));
     const unsubSup = SupplierRepository.subscribe((items) => (items.length > 0 || !IS_DEMO_MODE) && setSuppliers(items));
     const unsubPerms = RolePermissionsRepository.subscribe((items) => (items.length > 0 || !IS_DEMO_MODE) && setPermissions(items as any));
+    const unsubSettings = SystemSettingsRepository.subscribe((records) => {
+      const pDoc = records.find(r => r.id === 'sgq_vickytex_personalizacao');
+      if (pDoc && pDoc.data) {
+        setPersonalizacao((prev) => ({ ...prev, ...pDoc.data }));
+      }
+    });
 
     return () => {
       isMounted = false;
@@ -156,6 +163,7 @@ function AppContent() {
       unsubReg();
       unsubSup();
       unsubPerms();
+      unsubSettings();
     };
   }, [user, needsAuth]);
 
@@ -181,17 +189,17 @@ function AppContent() {
     // Fallback de roles padrões caso as permissões locais não estejam povoadas
     if (allowed.length === 0) {
       if (user.role === 'Administrador' || user.role === 'Gestor') {
-        allowed = ['dashboard', 'documentos', 'auditorias', 'riscos', '5s', 'treinamentos', 'calibracao', 'planos', 'configuracoes', 'usuarios', 'integracao', 'database', 'registros', 'fornecedores', 'indicadores'];
+        allowed = ['dashboard', 'documentos', 'auditorias', 'riscos', '5s', 'treinamentos', 'calibracao', 'planos', 'configuracoes', 'usuarios', 'integracao', 'database', 'registros', 'fornecedores', 'indicadores', 'ceo'];
       } else if (user.role === 'Qualidade') {
-        allowed = ['dashboard', 'documentos', 'auditorias', 'riscos', '5s', 'treinamentos', 'calibracao', 'planos', 'configuracoes', 'usuarios', 'registros', 'fornecedores', 'indicadores'];
+        allowed = ['dashboard', 'documentos', 'auditorias', 'riscos', '5s', 'treinamentos', 'calibracao', 'planos', 'configuracoes', 'usuarios', 'registros', 'fornecedores', 'indicadores', 'ceo'];
       } else if (user.role === 'Supervisor') {
-        allowed = ['dashboard', 'documentos', 'auditorias', '5s', 'treinamentos', 'calibracao', 'planos', 'registros', 'fornecedores', 'indicadores'];
+        allowed = ['dashboard', 'documentos', 'auditorias', '5s', 'treinamentos', 'calibracao', 'planos', 'registros', 'fornecedores', 'indicadores', 'ceo'];
       } else if (user.role === 'Colaborador') {
-        allowed = ['dashboard', 'documentos', '5s', 'treinamentos', 'registros', 'indicadores'];
+        allowed = ['dashboard', 'documentos', '5s', 'treinamentos', 'registros', 'indicadores', 'ceo'];
       } else if (user.role === 'Auditor') {
-        allowed = ['dashboard', 'documentos', 'auditorias', 'riscos', '5s', 'planos', 'registros', 'fornecedores', 'indicadores'];
+        allowed = ['dashboard', 'documentos', 'auditorias', 'riscos', '5s', 'planos', 'registros', 'fornecedores', 'indicadores', 'ceo'];
       } else {
-        allowed = ['dashboard', 'documentos', 'registros', 'indicadores'];
+        allowed = ['dashboard', 'documentos', 'registros', 'indicadores', 'ceo'];
       }
     }
     
@@ -267,13 +275,10 @@ function AppContent() {
   const handleAddDocument = async (doc: Documento) => {
     try {
       const res = await DocumentRepository.create(doc);
-      if (res.success && res.data) {
-        setDocuments((prev) => [res.data, ...prev]);
-      } else {
-        setDocuments((prev) => [doc, ...prev]);
-      }
+      const newDoc = (res.success && res.data) ? res.data : doc;
+      setDocuments((prev) => prev.some((d) => d.id === newDoc.id) ? prev.map((d) => (d.id === newDoc.id ? newDoc : d)) : [newDoc, ...prev]);
     } catch (e) {
-      setDocuments((prev) => [doc, ...prev]);
+      setDocuments((prev) => prev.some((d) => d.id === doc.id) ? prev.map((d) => (d.id === doc.id ? doc : d)) : [doc, ...prev]);
     }
   };
 
@@ -307,13 +312,10 @@ function AppContent() {
   const handleAddAudit = async (audit: Auditoria) => {
     try {
       const res = await AuditRepository.create(audit);
-      if (res.success && res.data) {
-        setAudits((prev) => [res.data, ...prev]);
-      } else {
-        setAudits((prev) => [audit, ...prev]);
-      }
+      const newAudit = (res.success && res.data) ? res.data : audit;
+      setAudits((prev) => prev.some((a) => a.id === newAudit.id) ? prev.map((a) => (a.id === newAudit.id ? newAudit : a)) : [newAudit, ...prev]);
     } catch (e) {
-      setAudits((prev) => [audit, ...prev]);
+      setAudits((prev) => prev.some((a) => a.id === audit.id) ? prev.map((a) => (a.id === audit.id ? audit : a)) : [audit, ...prev]);
     }
   };
 
@@ -340,40 +342,91 @@ function AppContent() {
     }
   };
 
-  const handleAddNC = (nc: NaoConformidade) => {
-    setNcs((prev) => [nc, ...prev]);
+  const handleAddNC = async (nc: NaoConformidade) => {
+    try {
+      const res = await NCRepository.create(nc);
+      const newNC = (res.success && res.data) ? res.data : nc;
+      setNcs((prev) => prev.some((n) => n.id === newNC.id) ? prev.map((n) => (n.id === newNC.id ? newNC : n)) : [newNC, ...prev]);
+    } catch (e) {
+      console.error('Erro ao salvar NC no Firestore:', e);
+      setNcs((prev) => prev.some((n) => n.id === nc.id) ? prev.map((n) => (n.id === nc.id ? nc : n)) : [nc, ...prev]);
+    }
   };
 
-  const handleUpdateNC = (updated: NaoConformidade) => {
-    setNcs((prev) => prev.map((n) => (n.id === updated.id ? updated : n)));
+  const handleUpdateNC = async (updated: NaoConformidade) => {
+    try {
+      await NCRepository.update(updated.id, updated);
+      setNcs((prev) => prev.map((n) => (n.id === updated.id ? updated : n)));
+    } catch (e) {
+      console.error('Erro ao atualizar NC no Firestore:', e);
+    }
   };
 
-  const handleDeleteNC = (id: string) => {
-    setNcs((prev) => prev.filter((n) => n.id !== id));
+  const handleDeleteNC = async (id: string) => {
+    try {
+      await NCRepository.delete(id);
+      setNcs((prev) => prev.filter((n) => n.id !== id));
+    } catch (e) {
+      console.error('Erro ao excluir NC no Firestore:', e);
+    }
   };
 
-  const handleAddPlano = (plano: PlanoAcao) => {
-    setPlanos((prev) => [plano, ...prev]);
+  const handleAddPlano = async (plano: PlanoAcao) => {
+    try {
+      const res = await ActionPlanRepository.create(plano);
+      const newPlano = (res.success && res.data) ? res.data : plano;
+      setPlanos((prev) => prev.some((p) => p.id === newPlano.id) ? prev.map((p) => (p.id === newPlano.id ? newPlano : p)) : [newPlano, ...prev]);
+    } catch (e) {
+      console.error('Erro ao salvar Plano de Ação no Firestore:', e);
+      setPlanos((prev) => prev.some((p) => p.id === plano.id) ? prev.map((p) => (p.id === plano.id ? plano : p)) : [plano, ...prev]);
+    }
   };
 
-  const handleUpdatePlano = (updated: PlanoAcao) => {
-    setPlanos((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
+  const handleUpdatePlano = async (updated: PlanoAcao) => {
+    try {
+      await ActionPlanRepository.update(updated.id, updated);
+      setPlanos((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
+    } catch (e) {
+      console.error('Erro ao atualizar Plano de Ação no Firestore:', e);
+    }
   };
 
-  const handleDeletePlano = (id: string) => {
-    setPlanos((prev) => prev.filter((p) => p.id !== id));
+  const handleDeletePlano = async (id: string) => {
+    try {
+      await ActionPlanRepository.delete(id);
+      setPlanos((prev) => prev.filter((p) => p.id !== id));
+    } catch (e) {
+      console.error('Erro ao excluir Plano de Ação no Firestore:', e);
+    }
   };
 
-  const handleAddRisco = (risco: RiscoOportunidade) => {
-    setRiscos((prev) => [risco, ...prev]);
+  const handleAddRisco = async (risco: RiscoOportunidade) => {
+    try {
+      const res = await RiskRepository.create(risco);
+      const newRisco = (res.success && res.data) ? res.data : risco;
+      setRiscos((prev) => prev.some((r) => r.id === newRisco.id) ? prev.map((r) => (r.id === newRisco.id ? newRisco : r)) : [newRisco, ...prev]);
+    } catch (e) {
+      console.error('Erro ao salvar Risco no Firestore:', e);
+      setRiscos((prev) => prev.some((r) => r.id === risco.id) ? prev.map((r) => (r.id === risco.id ? risco : r)) : [risco, ...prev]);
+    }
   };
 
-  const handleUpdateRisco = (updated: RiscoOportunidade) => {
-    setRiscos((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
+  const handleUpdateRisco = async (updated: RiscoOportunidade) => {
+    try {
+      await RiskRepository.update(updated.id, updated);
+      setRiscos((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
+    } catch (e) {
+      console.error('Erro ao atualizar Risco no Firestore:', e);
+    }
   };
 
-  const handleDeleteRisco = (id: string) => {
-    setRiscos((prev) => prev.filter((r) => r.id !== id));
+  const handleDeleteRisco = async (id: string) => {
+    try {
+      await RiskRepository.delete(id);
+      setRiscos((prev) => prev.filter((r) => r.id !== id));
+    } catch (e) {
+      console.error('Erro ao excluir Risco no Firestore:', e);
+    }
   };
 
   const handleAddAudit5S = async (audit: Auditoria5S) => {

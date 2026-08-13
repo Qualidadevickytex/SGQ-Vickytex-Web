@@ -313,6 +313,13 @@ export const FiveSConfig: React.FC<FiveSConfigProps> = ({
     setIsCycleModalOpen(false);
   };
 
+  const handleDeleteCycle = (id: string) => {
+    if (confirm('Tem certeza de que deseja excluir este ciclo de auditoria?')) {
+      const updatedList = ciclos.filter(c => c.id !== id);
+      onUpdateCiclos(updatedList);
+    }
+  };
+
   // --- REINCIDÊNCIA & SCORES ---
   const handleSavePointsAndPenalties = () => {
     onUpdateConfig({
@@ -768,8 +775,11 @@ export const FiveSConfig: React.FC<FiveSConfigProps> = ({
                       </td>
                       {canModify && (
                         <td className="p-3 text-right space-x-1.5">
-                          <button onClick={() => handleOpenCycleModal(c)} className="p-1 text-slate-400 hover:text-blue-500">
+                          <button onClick={() => handleOpenCycleModal(c)} title="Editar Ciclo" className="p-1 text-slate-400 hover:text-blue-500 transition-colors">
                             <Edit2 className="w-3.5 h-3.5" />
+                          </button>
+                          <button onClick={() => handleDeleteCycle(c.id)} title="Excluir Ciclo" className="p-1 text-slate-400 hover:text-red-500 transition-colors">
+                            <Trash2 className="w-3.5 h-3.5" />
                           </button>
                         </td>
                       )}

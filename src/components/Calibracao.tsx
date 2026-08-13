@@ -28,6 +28,7 @@ import {
 import { Documento, Equipamento, Calibracao, SectorType } from '../types';
 import { SECTORS, getSectors, PersonalizacaoGeral } from '../utils/mockData';
 import { SystemSettingsRepository } from '../services/database/repositories/systemSettings.repository';
+import { EquipmentRepository } from '../services/database/repositories/equipment.repository';
 
 interface CalibracaoProps {
   documents: Documento[];
@@ -590,9 +591,10 @@ export const CalibracaoComponent: React.FC<CalibracaoProps> = ({
     }
 
     if (editingEquip) {
+      let updatedItem: Equipamento | null = null;
       const updated = equipamentos.map(eq => {
         if (eq.id === editingEquip.id) {
-          return {
+          updatedItem = {
             ...eq,
             tag: newEquip.tag.toUpperCase().trim(),
             nome: newEquip.nome.trim(),
@@ -603,10 +605,14 @@ export const CalibracaoComponent: React.FC<CalibracaoProps> = ({
             frequenciaCalibracao: Number(newEquip.frequenciaCalibracao),
             dataAquisicao: newEquip.dataAquisicao
           };
+          return updatedItem;
         }
         return eq;
       });
       saveEquipamentos(updated);
+      if (updatedItem) {
+        EquipmentRepository.update((updatedItem as Equipamento).id, updatedItem).catch(e => console.error('Erro ao atualizar equipamento no Firestore:', e));
+      }
       onAddLog('Editou Equipamento', `Atualizou informações do equipamento ${newEquip.tag.toUpperCase().trim()}.`);
     } else {
       const created: Equipamento = {
@@ -625,6 +631,7 @@ export const CalibracaoComponent: React.FC<CalibracaoProps> = ({
 
       const updated = [created, ...equipamentos];
       saveEquipamentos(updated);
+      EquipmentRepository.create(created).catch(e => console.error('Erro ao criar equipamento no Firestore:', e));
 
       onAddLog(
         'Cadastro de Equipamento',
@@ -706,6 +713,10 @@ export const CalibracaoComponent: React.FC<CalibracaoProps> = ({
       });
 
       saveEquipamentos(updated);
+      const targetEquip = updated.find(e => e.id === selectedEquipId);
+      if (targetEquip) {
+        EquipmentRepository.update(targetEquip.id, targetEquip).catch(e => console.error('Erro ao atualizar calibração no Firestore:', e));
+      }
 
       onAddLog(
         'Editou Calibração',
@@ -746,6 +757,10 @@ export const CalibracaoComponent: React.FC<CalibracaoProps> = ({
       });
 
       saveEquipamentos(updated);
+      const targetEquip = updated.find(e => e.id === selectedEquipId);
+      if (targetEquip) {
+        EquipmentRepository.update(targetEquip.id, targetEquip).catch(e => console.error('Erro ao registrar calibração no Firestore:', e));
+      }
 
       onAddLog(
         'Homologação de Calibração',
@@ -1587,9 +1602,11 @@ export const CalibracaoComponent: React.FC<CalibracaoProps> = ({
               <button
                 type="button"
                 onClick={() => {
-                  const updated = equipamentos.filter(eq => eq.id !== equipToDelete.id);
+                  const idToDelete = equipToDelete.id;
+                  const updated = equipamentos.filter(eq => eq.id !== idToDelete);
                   saveEquipamentos(updated);
-                  onAddLog('Excluiu Equipamento', `Removeu o equipamento com ID ${equipToDelete.id} (${equipToDelete.tag}) do inventário.`);
+                  EquipmentRepository.delete(idToDelete).catch(e => console.error('Erro ao excluir equipamento no Firestore:', e));
+                  onAddLog('Excluiu Equipamento', `Removeu o equipamento com ID ${idToDelete} (${equipToDelete.tag}) do inventário.`);
                   setEquipToDelete(null);
                 }}
                 className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-bold transition-colors shadow-xs"
@@ -1640,16 +1657,21 @@ export const CalibracaoComponent: React.FC<CalibracaoProps> = ({
               <button
                 type="button"
                 onClick={() => {
+                  let targetEquip: Equipamento | null = null;
                   const updated = equipamentos.map(eq => {
                     if (eq.id === calibToDelete.equipId) {
-                      return {
+                      targetEquip = {
                         ...eq,
                         calibracoes: eq.calibracoes.filter(c => c.id !== calibToDelete.calibId)
                       };
+                      return targetEquip;
                     }
                     return eq;
                   });
                   saveEquipamentos(updated);
+                  if (targetEquip) {
+                    EquipmentRepository.update((targetEquip as Equipamento).id, targetEquip).catch(e => console.error('Erro ao excluir certificado de calibração no Firestore:', e));
+                  }
                   onAddLog('Excluiu Calibração', `Removeu o certificado de calibração ${calibToDelete.certNum} do equipamento.`);
                   setCalibToDelete(null);
                 }}

@@ -30,6 +30,7 @@ import {
 import { ProjetoCEO, SugestaoCEO } from '../../types/ceo';
 import { useAuth } from '../../contexts/AuthContext';
 import { ConfirmModal } from '../common/ConfirmModal';
+import { SystemSettingsRepository } from '../../services/database/repositories/systemSettings.repository';
 
 interface GamificacaoCEOProps {
   projects: ProjetoCEO[];
@@ -85,6 +86,27 @@ export const GamificacaoCEO: React.FC<GamificacaoCEOProps> = ({ projects, sugges
   const [maintBeltOverride, setMaintBeltOverride] = useState<string>('Auto');
   const [maintCustomMedal, setMaintCustomMedal] = useState<string>('');
   const [maintReason, setMaintReason] = useState<string>('');
+
+  // Subscrição onSnapshot em tempo real no Firestore para sincronizar Leaderboard entre usuários
+  useEffect(() => {
+    const unsub = SystemSettingsRepository.subscribe((records) => {
+      const logsDoc = records.find(r => r.id === 'sgq_vickytex_ceo_training_logs');
+      if (logsDoc && Array.isArray(logsDoc.items)) {
+        setLoggedTrainings(logsDoc.items);
+      }
+
+      const adjDoc = records.find(r => r.id === 'sgq_vickytex_ceo_gamification_adjustments');
+      if (adjDoc && adjDoc.data) {
+        setManualAdjustments(adjDoc.data);
+      }
+
+      const zeroDoc = records.find(r => r.id === 'sgq_vickytex_ceo_scores_zeroed');
+      if (zeroDoc && zeroDoc.data !== undefined) {
+        setIsScoresZeroed(Boolean(zeroDoc.data.zeroed));
+      }
+    });
+    return () => unsub();
+  }, []);
 
   useEffect(() => {
     localStorage.setItem('sgq_vickytex_ceo_gamification_adjustments', JSON.stringify(manualAdjustments));
@@ -327,12 +349,16 @@ export const GamificacaoCEO: React.FC<GamificacaoCEOProps> = ({ projects, sugges
     localStorage.setItem('sgq_vickytex_ceo_training_logs', '[]');
     localStorage.removeItem('sgq_vickytex_ceo_gamification_adjustments');
     localStorage.setItem('sgq_vickytex_ceo_scores_zeroed', 'true');
+    SystemSettingsRepository.create({ id: 'sgq_vickytex_ceo_training_logs', items: [] }).catch(console.error);
+    SystemSettingsRepository.create({ id: 'sgq_vickytex_ceo_gamification_adjustments', data: {} }).catch(console.error);
+    SystemSettingsRepository.create({ id: 'sgq_vickytex_ceo_scores_zeroed', data: { zeroed: true } }).catch(console.error);
     setIsZeroScoresModalOpen(false);
   };
 
   const handleRestoreScores = () => {
     setIsScoresZeroed(false);
     localStorage.removeItem('sgq_vickytex_ceo_scores_zeroed');
+    SystemSettingsRepository.create({ id: 'sgq_vickytex_ceo_scores_zeroed', data: { zeroed: false } }).catch(console.error);
   };
 
   const handleLogHours = (e: React.FormEvent) => {
@@ -348,7 +374,9 @@ export const GamificacaoCEO: React.FC<GamificacaoCEOProps> = ({ projects, sugges
       data: new Date().toISOString().split('T')[0]
     };
 
-    setLoggedTrainings(prev => [newLog, ...prev]);
+    const updatedLogs = [newLog, ...loggedTrainings];
+    setLoggedTrainings(updatedLogs);
+    SystemSettingsRepository.create({ id: 'sgq_vickytex_ceo_training_logs', items: updatedLogs }).catch(console.error);
     setLogHoursModalOpen(false);
     setTrainingTopic('Mapeamento de Fluxo de Valor (VSM) Avançado');
   };
@@ -357,96 +385,109 @@ export const GamificacaoCEO: React.FC<GamificacaoCEOProps> = ({ projects, sugges
     e.preventDefault();
     if (!selectedUserForMaint) return;
 
-    setManualAdjustments(prev => ({
-      ...prev,
+    const updatedAdjustments = {
+      ...manualAdjustments,
       [selectedUserForMaint]: {
         pointsBonus: Number(maintPointsBonus),
         beltOverride: maintBeltOverride,
         customMedal: maintCustomMedal.trim() || undefined,
         reason: maintReason.trim() || undefined
       }
-    }));
+    };
 
+    setManualAdjustments(updatedAdjustments);
+    SystemSettingsRepository.create({ id: 'sgq_vickytex_ceo_gamification_adjustments', data: updatedAdjustments }).catch(console.error);
     setMaintenanceModalOpen(false);
   };
 
   const handleResetMaintenance = (email: string) => {
-    setManualAdjustments(prev => {
-      const copy = { ...prev };
-      delete copy[email];
-      return copy;
-    });
+    const updatedAdjustments = { ...manualAdjustments };
+    delete updatedAdjustments[email];
+    setManualAdjustments(updatedAdjustments);
+    SystemSettingsRepository.create({ id: 'sgq_vickytex_ceo_gamification_adjustments', data: updatedAdjustments }).catch(console.error);
   };
 
   return (
     <div id="gamification-root" className="space-y-6">
       
       {/* 1. Header Hero Card */}
-      <div className="bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-600 rounded-3xl p-6 text-white shadow-lg flex flex-col md:flex-row items-center justify-between gap-6">
-        <div className="space-y-2 max-w-xl">
-          <div className="inline-flex items-center space-x-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase bg-white/10 border border-white/20 text-yellow-300">
-            <Trophy className="w-4 h-4 animate-bounce" />
-            <span>Programa VickyTex de Excelência Operacional</span>
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 text-white shadow-lg space-y-6">
+        <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-6">
+          <div className="space-y-3 max-w-2xl">
+            <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full text-xs font-semibold bg-amber-500/10 border border-amber-500/20 text-amber-300">
+              <Trophy className="w-3.5 h-3.5" />
+              <span>Programa VickyTex de Excelência Operacional</span>
+            </div>
+            <h2 className="text-2xl font-bold tracking-tight text-white">
+              Gamificação, Reconhecimento e Ranks Belt
+            </h2>
+            <p className="text-sm text-slate-300 leading-relaxed">
+              Acumule pontos resolvendo problemas reais de fabricação, implementando Poka-Yokes, reduzindo lead times operacionais, concluindo etapas DMAIC e participando de treinamentos técnicos Lean Seis Sigma.
+            </p>
           </div>
-          <h2 className="text-xl font-black tracking-tight">Gamificação, Reconhecimento e Ranks de Categoria Belt</h2>
-          <p className="text-xs text-blue-100 leading-relaxed">
-            Acumule pontos resolvendo problemas reais de fabricação, implementando Poka-Yokes, reduzindo lead times operacionais, concluindo etapas DMAIC e participando de treinamentos técnicos Lean Seis Sigma.
-          </p>
-        </div>
-        
-        <div className="flex flex-wrap gap-2 shrink-0">
-          <button
-            onClick={() => setIsZeroScoresModalOpen(true)}
-            className="px-3.5 py-2.5 bg-rose-800/80 hover:bg-rose-800 text-white border border-rose-400/30 font-black rounded-xl text-xs transition-all active:scale-95 flex items-center space-x-1.5 shadow-xs"
-            title="Zerar todas as pontuações do leaderboard"
-          >
-            <RotateCcw className="w-4 h-4 text-rose-200" />
-            <span>Zerar Pontuações</span>
-          </button>
-
-          {isScoresZeroed && (
+          
+          <div className="flex items-center gap-3 shrink-0 self-start">
             <button
-              onClick={handleRestoreScores}
-              className="px-3 py-2.5 bg-emerald-700/80 hover:bg-emerald-700 text-white border border-emerald-400/30 font-black rounded-xl text-xs transition-all active:scale-95 flex items-center space-x-1.5"
-              title="Recalcular pontos automáticos de projetos e treinamentos"
+              onClick={() => {
+                if (user) {
+                  setTrainingUserEmail(user.email);
+                  setTrainingUserName(user.name || '');
+                }
+                setLogHoursModalOpen(true);
+              }}
+              className="px-4 py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-semibold rounded-xl text-xs shadow-md transition-all active:scale-95 flex items-center space-x-2"
             >
-              <TrendingUp className="w-4 h-4 text-emerald-200" />
-              <span>Restaurar Pontuação Automática</span>
+              <Plus className="w-4 h-4" />
+              <span>Lançar Horas de Treinamento</span>
             </button>
-          )}
+          </div>
+        </div>
 
-          <button
-            onClick={() => {
-              if (rankingList.length > 0) {
-                const firstUser = rankingList[0];
-                setSelectedUserForMaint(firstUser.email);
-                const adj = manualAdjustments[firstUser.email];
-                setMaintPointsBonus(adj?.pointsBonus || 0);
-                setMaintBeltOverride(adj?.beltOverride || 'Auto');
-                setMaintCustomMedal(adj?.customMedal || '');
-                setMaintReason(adj?.reason || '');
-              }
-              setMaintenanceModalOpen(true);
-            }}
-            className="px-4 py-2.5 bg-blue-800/80 hover:bg-blue-800 text-white border border-blue-400/30 font-black rounded-xl text-xs transition-all active:scale-95 flex items-center space-x-1.5"
-          >
-            <Settings className="w-4 h-4 text-blue-200" />
-            <span>Manutenção do Leaderboard</span>
-          </button>
+        {/* Secondary Admin Action Toolbar */}
+        <div className="pt-4 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-3 text-xs">
+          <span className="text-slate-400 font-medium text-xs">
+            Ações de Gestão do Ranking:
+          </span>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={() => {
+                if (rankingList.length > 0) {
+                  const firstUser = rankingList[0];
+                  setSelectedUserForMaint(firstUser.email);
+                  const adj = manualAdjustments[firstUser.email];
+                  setMaintPointsBonus(adj?.pointsBonus || 0);
+                  setMaintBeltOverride(adj?.beltOverride || 'Auto');
+                  setMaintCustomMedal(adj?.customMedal || '');
+                  setMaintReason(adj?.reason || '');
+                }
+                setMaintenanceModalOpen(true);
+              }}
+              className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-medium rounded-lg transition-colors flex items-center space-x-1.5"
+            >
+              <Settings className="w-3.5 h-3.5 text-slate-400" />
+              <span>Manutenção do Leaderboard</span>
+            </button>
 
-          <button
-            onClick={() => {
-              if (user) {
-                setTrainingUserEmail(user.email);
-                setTrainingUserName(user.name || '');
-              }
-              setLogHoursModalOpen(true);
-            }}
-            className="px-4 py-2.5 bg-white text-blue-700 hover:bg-slate-50 font-black rounded-xl text-xs shadow-md transition-all active:scale-95 flex items-center space-x-1.5"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Lançar Horas de Treinamento</span>
-          </button>
+            {isScoresZeroed && (
+              <button
+                onClick={handleRestoreScores}
+                className="px-3 py-1.5 bg-emerald-950/60 hover:bg-emerald-900/80 text-emerald-300 border border-emerald-800/50 font-medium rounded-lg transition-colors flex items-center space-x-1.5"
+                title="Recalcular pontos automáticos de projetos e treinamentos"
+              >
+                <TrendingUp className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Restaurar Pontuação Automática</span>
+              </button>
+            )}
+
+            <button
+              onClick={() => setIsZeroScoresModalOpen(true)}
+              className="px-3 py-1.5 bg-rose-950/60 hover:bg-rose-900/80 text-rose-300 border border-rose-800/50 font-medium rounded-lg transition-colors flex items-center space-x-1.5"
+              title="Zerar todas as pontuações do leaderboard"
+            >
+              <RotateCcw className="w-3.5 h-3.5 text-rose-400" />
+              <span>Zerar Pontuações</span>
+            </button>
+          </div>
         </div>
       </div>
 

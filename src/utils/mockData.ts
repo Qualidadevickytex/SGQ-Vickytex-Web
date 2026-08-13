@@ -686,6 +686,9 @@ export const DEFAULT_PERSONALIZACAO: PersonalizacaoGeral = {
 };
 
 export const getPersonalizacaoGeral = (): PersonalizacaoGeral => {
+  if (systemConfigCache['sgq_vickytex_personalizacao']) {
+    return { ...DEFAULT_PERSONALIZACAO, ...systemConfigCache['sgq_vickytex_personalizacao'] };
+  }
   if (typeof window !== 'undefined') {
     const saved = localStorage.getItem('sgq_vickytex_personalizacao');
     if (saved) {
@@ -697,7 +700,6 @@ export const getPersonalizacaoGeral = (): PersonalizacaoGeral => {
         if (parsed.loginVersaoTexto === "SGQ WEB • V0.3" || parsed.loginVersaoTexto === "SGQ WEB • v0.3" || !parsed.loginVersaoTexto) {
           parsed.loginVersaoTexto = "SGQ WEB • v1.0.0";
         }
-        savePersonalizacaoGeral({ ...DEFAULT_PERSONALIZACAO, ...parsed });
         return { ...DEFAULT_PERSONALIZACAO, ...parsed };
       } catch (e) {
         // ignore
@@ -708,9 +710,13 @@ export const getPersonalizacaoGeral = (): PersonalizacaoGeral => {
 };
 
 export const savePersonalizacaoGeral = (config: PersonalizacaoGeral): void => {
+  systemConfigCache['sgq_vickytex_personalizacao'] = config;
   if (typeof window !== 'undefined') {
     localStorage.setItem('sgq_vickytex_personalizacao', JSON.stringify(config));
   }
+  SystemSettingsRepository.create({ id: 'sgq_vickytex_personalizacao', data: config }).catch((err) => {
+    console.error('Erro ao salvar personalização no Firestore:', err);
+  });
 };
 
 export const INITIAL_USER_ACCOUNTS: UserAccount[] = [

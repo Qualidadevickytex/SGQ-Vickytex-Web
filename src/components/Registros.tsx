@@ -32,6 +32,7 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import { Documento, Registro, SectorType } from '../types';
 import { getSectors } from '../utils/mockData';
+import { RecordRepository } from '../services/database/repositories/record.repository';
 
 interface RegistrosProps {
   documents: Documento[];
@@ -198,25 +199,35 @@ export const Registros: React.FC<RegistrosProps> = ({ documents, onAddLog, perso
     }
 
     if (editingRegistro) {
-      const updated = registros.map(r => r.id === editingRegistro.id ? {
-        ...r,
-        codigo: codigo.trim().toUpperCase(),
-        titulo: titulo.trim(),
-        documentoOrigemId: documentoOrigemId || undefined,
-        setor,
-        tipoMidia,
-        localArmazenamento: localArmazenamento.trim(),
-        tempoRetencaoAnos,
-        disposicaoFinal,
-        responsavelPreenchimento: responsavelPreenchimento.trim(),
-        responsavelGuarda: responsavelGuarda.trim(),
-        indexacaoMetodo: indexacaoMetodo.trim(),
-        statusControle,
-        googleDriveLink: googleDriveLink.trim() || undefined,
-        googleDriveId: googleDriveLink.trim() ? `drive-${editingRegistro.id}` : undefined,
-        observacoes: observacoes.trim() || undefined,
-      } : r);
+      let updatedRecord: Registro | null = null;
+      const updated = registros.map(r => {
+        if (r.id === editingRegistro.id) {
+          updatedRecord = {
+            ...r,
+            codigo: codigo.trim().toUpperCase(),
+            titulo: titulo.trim(),
+            documentoOrigemId: documentoOrigemId || undefined,
+            setor,
+            tipoMidia,
+            localArmazenamento: localArmazenamento.trim(),
+            tempoRetencaoAnos,
+            disposicaoFinal,
+            responsavelPreenchimento: responsavelPreenchimento.trim(),
+            responsavelGuarda: responsavelGuarda.trim(),
+            indexacaoMetodo: indexacaoMetodo.trim(),
+            statusControle,
+            googleDriveLink: googleDriveLink.trim() || undefined,
+            googleDriveId: googleDriveLink.trim() ? `drive-${editingRegistro.id}` : undefined,
+            observacoes: observacoes.trim() || undefined,
+          };
+          return updatedRecord;
+        }
+        return r;
+      });
       saveRegistros(updated);
+      if (updatedRecord) {
+        RecordRepository.update((updatedRecord as Registro).id, updatedRecord).catch(err => console.error('Erro ao atualizar registro no Firestore:', err));
+      }
       onAddLog('Atualizou Registro de Qualidade', `Atualizou o controle do registro ${codigo.toUpperCase().trim()}: ${titulo.trim()}.`);
     } else {
       const newReg: Registro = {
@@ -239,6 +250,7 @@ export const Registros: React.FC<RegistrosProps> = ({ documents, onAddLog, perso
         dataUltimaVerificacao: new Date().toISOString().split('T')[0]
       };
       saveRegistros([newReg, ...registros]);
+      RecordRepository.create(newReg).catch(err => console.error('Erro ao cadastrar registro no Firestore:', err));
       onAddLog('Cadastrou Registro de Qualidade', `Incluiu o novo controle de registro ${newReg.codigo} no índice mestre.`);
     }
 
@@ -255,6 +267,7 @@ export const Registros: React.FC<RegistrosProps> = ({ documents, onAddLog, perso
     const { id, code } = registroToDelete;
     const updated = registros.filter(r => r.id !== id);
     saveRegistros(updated);
+    RecordRepository.delete(id).catch(err => console.error('Erro ao excluir registro no Firestore:', err));
     onAddLog('Excluiu Controle de Registro', `Removeu o controle de registro ${code} do sistema.`);
     setRegistroToDelete(null);
   };
@@ -269,16 +282,26 @@ export const Registros: React.FC<RegistrosProps> = ({ documents, onAddLog, perso
   const handleSaveVerification = () => {
     if (!selectedForVerify) return;
     
+    let targetRecord: Registro | null = null;
     const todayStr = new Date().toISOString().split('T')[0];
-    const updated = registros.map(r => r.id === selectedForVerify.id ? {
-      ...r,
-      dataUltimaVerificacao: todayStr,
-      observacoes: verificationNotes.trim() 
-        ? `${r.observacoes || ''}\n[Verificação ${todayStr}]: ${verificationNotes.trim()}`.trim()
-        : r.observacoes
-    } : r);
+    const updated = registros.map(r => {
+      if (r.id === selectedForVerify.id) {
+        targetRecord = {
+          ...r,
+          dataUltimaVerificacao: todayStr,
+          observacoes: verificationNotes.trim() 
+            ? `${r.observacoes || ''}\n[Verificação ${todayStr}]: ${verificationNotes.trim()}`.trim()
+            : r.observacoes
+        };
+        return targetRecord;
+      }
+      return r;
+    });
 
     saveRegistros(updated);
+    if (targetRecord) {
+      RecordRepository.update((targetRecord as Registro).id, targetRecord).catch(err => console.error('Erro ao salvar verificação no Firestore:', err));
+    }
     onAddLog(
       'Auditou Registro da Qualidade', 
       `Realizou verificação de conformidade e legibilidade no registro ${selectedForVerify.codigo}. Notas: ${verificationNotes.trim() || 'Nenhuma nota adicional'}`

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Settings, Plus, Trash2, Check, ArrowRight, Info, Award, ShieldAlert, ArrowUp, ArrowDown, Pencil } from 'lucide-react';
 import { DocumentType, ApprovalFlow, ApprovalFlowStep, DocumentStatus } from '../../types';
+import { SystemSettingsRepository } from '../../services/database/repositories/systemSettings.repository';
 
 interface FluxosParametrizadosProps {
   onClose?: () => void;
@@ -122,6 +123,17 @@ export const FluxosParametrizados: React.FC<FluxosParametrizadosProps> = ({ onCl
   const [isCustomPerfil, setIsCustomPerfil] = useState<boolean>(false);
   const [customPerfilText, setCustomPerfilText] = useState<string>('');
 
+  // Subscrição onSnapshot em tempo real no Firestore para sincronizar entre usuários
+  useEffect(() => {
+    const unsub = SystemSettingsRepository.subscribe((records) => {
+      const rec = records.find(r => r.id === 'sgq_vickytex_fluxos_documentos');
+      if (rec && Array.isArray(rec.items) && rec.items.length > 0) {
+        setFlows(rec.items);
+      }
+    });
+    return () => unsub();
+  }, []);
+
   useEffect(() => {
     const flow = flows.find(f => f.tipoDocumento === selectedType);
     if (flow) {
@@ -140,7 +152,13 @@ export const FluxosParametrizados: React.FC<FluxosParametrizadosProps> = ({ onCl
 
   const handleSaveFlows = (updatedFlows: ApprovalFlow[]) => {
     setFlows(updatedFlows);
-    localStorage.setItem('sgq_vickytex_fluxos_documentos', JSON.stringify(updatedFlows));
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('sgq_vickytex_fluxos_documentos', JSON.stringify(updatedFlows));
+    }
+    SystemSettingsRepository.create({
+      id: 'sgq_vickytex_fluxos_documentos',
+      items: updatedFlows
+    }).catch(err => console.error('Erro ao salvar fluxos no Firestore:', err));
   };
 
   const handleCancelEdit = () => {

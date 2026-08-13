@@ -3,9 +3,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Database, Folder, ShieldCheck, RefreshCw, Key, Link2, ExternalLink, Calendar, Mail, Save, Check } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { SystemSettingsRepository } from '../services/database/repositories/systemSettings.repository';
 
 export const GoogleIntegrationPanel: React.FC = () => {
   const { user, accessToken, loginWithGoogle } = useAuth();
@@ -16,8 +17,24 @@ export const GoogleIntegrationPanel: React.FC = () => {
   });
   const [saveSuccess, setSaveSuccess] = useState(false);
 
+  useEffect(() => {
+    const unsub = SystemSettingsRepository.subscribe((records) => {
+      const rec = records.find(r => r.id === 'google_drive' || r.id === 'sgq_vickytex_gdrive_folder_id');
+      if (rec && rec.data && rec.data.folderId) {
+        setGdriveFolderId(rec.data.folderId);
+      }
+    });
+    return () => unsub();
+  }, []);
+
   const handleSaveFolderId = () => {
-    localStorage.setItem('sgq_vickytex_gdrive_folder_id', gdriveFolderId);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('sgq_vickytex_gdrive_folder_id', gdriveFolderId);
+    }
+    SystemSettingsRepository.create({
+      id: 'google_drive',
+      data: { folderId: gdriveFolderId }
+    }).catch(err => console.error('Erro ao salvar ID da pasta no Firestore:', err));
     setSaveSuccess(true);
     setTimeout(() => setSaveSuccess(false), 4000);
   };

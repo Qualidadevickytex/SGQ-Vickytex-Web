@@ -66,7 +66,8 @@ export abstract class BaseRepository<T extends { id: string }> implements BaseSe
   async create(data: Partial<T>): Promise<ApiResponse<T>> {
     const timestamp = new Date().toISOString();
     const id = data.id || `${this.collectionName}-${Date.now()}`;
-    const payload = this.mapToPayload({ ...data, id });
+    const rawPayload = this.mapToPayload({ ...data, id });
+    const payload = JSON.parse(JSON.stringify(rawPayload));
 
     try {
       await createDocWithId(this.collectionName, id, payload);
@@ -82,7 +83,8 @@ export abstract class BaseRepository<T extends { id: string }> implements BaseSe
 
   async update(id: string, data: Partial<T>): Promise<ApiResponse<T>> {
     const timestamp = new Date().toISOString();
-    const payload = this.mapToPayload(data);
+    const rawPayload = this.mapToPayload(data);
+    const payload = JSON.parse(JSON.stringify(rawPayload));
 
     try {
       await updateDocData(this.collectionName, id, payload);
