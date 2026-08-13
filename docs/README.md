@@ -1,4 +1,4 @@
-# Portal de Governança Documental e Engenharia — SGQ WEB VICKYTEX (v1.2.0)
+# Portal de Governança Documental e Engenharia — SGQ WEB VICKYTEX (v1.2.1)
 
 > 🛡️ **BEM-VINDO AO ECOSSISTEMA TÉCNICO DO SGQ WEB VICKYTEX**
 > Este portal é o ponto de entrada obrigatório para desenvolvedores, arquitetos, auditores e agentes de IA. Toda alteração no código ou infraestrutura deve manter este acervo documental 100% alinhado e sincronizado.
@@ -10,16 +10,18 @@
 O **SGQ WEB VICKYTEX** é uma plataforma corporativa e industrial de Gestão da Qualidade, desenvolvida para garantir a conformidade com a norma **ISO 9001:2015** no segmento têxtil de confecção de uniformes escolares e profissionais. 
 
 O sistema integra:
-- **Gestão Documental (Lista Mestra e POPs)**
-- **Não Conformidades e Auditorias de Processo**
-- **Metodologia 5S (Auditorias, Fotos e Planos de Ação)**
-- **Planos de Ação 5W2H e Ações Corretivas**
-- **Calibração de Equipamentos Industriais (ISO 7.1.5)**
-- **Treinamentos e Matriz de Competências (ISO 7.2)**
-- **Indicadores Estratégicos (KPIs / BSC) e Gestão CEO**
-- **Qualificação e Avaliação de Fornecedores**
-- **Controle de Acessos RBAC e Integração Google Workspace SSO**
-- **Inspetor Live de Banco de Dados com Painel de Integração com a Nuvem (Firebase)**
+- **Gestão Documental (Lista Mestra, POPs, ITs e FORs)**
+- **Fluxos Parametrizados de Aprovação por Perfil e Tipo**
+- **Não Conformidades (RNCs) e Auditorias Internas/Processo (ISO 10.2)**
+- **Metodologia 5S (Auditorias por Senso, Fotos, Notas e Planos de Ação)**
+- **Planos de Ação 5W2H e Ações Corretivas com Responsáveis e Prazos**
+- **Calibração de Equipamentos e Instrumentos Industriais (ISO 7.1.5)**
+- **Treinamentos, Lançamento de Horas e Matriz de Competências (ISO 7.2)**
+- **Indicadores Estratégicos (KPIs / BSC) com Metas por Setor**
+- **Centro de Excelência Operacional (CEO): Projetos A3/Kaizen, Ideias e Gamificação Belt**
+- **Qualificação e Avaliação Contínua de Fornecedores (ISO 8.4)**
+- **Controle de Acessos RBAC Granular e Integração Google Workspace SSO**
+- **Sincronização em Tempo Real (`onSnapshot`) e Inspetor Live de Banco de Dados com Painel Firebase**
 
 ---
 
@@ -32,11 +34,11 @@ Para evitar duplicidade, divergências e obsolescência, cada assunto possui **u
 | **Mapa e Portal Principal** | [`/docs/README.md`](/docs/README.md) | Onboarding, índice de SSOT, regras de sincronização e estrutura. |
 | **Contrato e Diretrizes** | [`/docs/SGQ_DEVELOPMENT_CONTRACT.md`](/docs/SGQ_DEVELOPMENT_CONTRACT.md) | "A Constituição" do projeto: padrões estritos de código, React 18, Tailwind e regras gerais. |
 | **Padrões de Implementação** | [`/docs/IMPLEMENTATION_STANDARD.md`](/docs/IMPLEMENTATION_STANDARD.md) | Guia de estilização anti-slop, UI/UX, acessibilidade e componentes. |
-| **Arquitetura de Software** | [`/docs/ARCHITECTURE.md`](/docs/ARCHITECTURE.md) | Estrutura de pastas, serviços, repositórios Firebase, contextos, RBAC e instalações. |
-| **Modelagem do Banco de Dados** | [`/docs/FIRESTORE_SCHEMA.md`](/docs/FIRESTORE_SCHEMA.md) | Schemas completos de todas as coleções Firestore, tipos, regras de segurança e fallback. |
+| **Arquitetura de Software** | [`/docs/ARCHITECTURE.md`](/docs/ARCHITECTURE.md) | Estrutura de pastas, serviços, 21 repositórios Firebase, contextos, RBAC e instalações. |
+| **Modelagem do Banco de Dados** | [`/docs/FIRESTORE_SCHEMA.md`](/docs/FIRESTORE_SCHEMA.md) | Schemas completos de todas as coleções e documentos do Firestore, tipos e fallback. |
 | **Implantação e DevOps** | [`/docs/DEPLOYMENT.md`](/docs/DEPLOYMENT.md) | Pipelines de build, variáveis de ambiente, Firebase Firestore, Netlify/Cloud Run. |
 | **Rastreabilidade End-to-End** | [`/docs/TRACEABILITY_MATRIX.md`](/docs/TRACEABILITY_MATRIX.md) | Matriz completa relacionando Módulo ➔ Código ➔ Coleção Firestore ➔ Repositórios. |
-| **Histórico de Versões** | [`/docs/CHANGELOG.md`](/docs/CHANGELOG.md) | Registro histórico de versões (v0.1 a v1.2.0), atualizações de infraestrutura e releases. |
+| **Histórico de Versões** | [`/docs/CHANGELOG.md`](/docs/CHANGELOG.md) | Registro histórico de versões (v0.1 a v1.2.1), atualizações de infraestrutura e releases. |
 | **Requisitos de Produto** | [`/docs/PRD.md`](/docs/PRD.md) | Visão geral dos requisitos de produto, escopo funcional e objetivos de negócio. |
 | **Manual do Usuário Final** | [`/docs/MANUAL_USUARIO.md`](/docs/MANUAL_USUARIO.md) | Guia passo a passo para colaboradores, auditores, gerentes e administradores. |
 | **Guia de Compartilhamento** | [`/docs/COMPARTILHAR_ACESSO.md`](/docs/COMPARTILHAR_ACESSO.md) | Guia rápido de envio de links de acesso e configuração nos computadores da fábrica. |

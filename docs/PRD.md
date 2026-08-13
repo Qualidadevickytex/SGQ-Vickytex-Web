@@ -55,11 +55,11 @@ O sistema deve registrar cada documento com:
 ### RF04 - Geração Automática de QR Code
 - Cada documento homologado ganha um QR Code único contendo a URL do sistema para verificação rápida de validade em dispositivos móveis na fábrica (combate ao uso de cópias obsoletas impressas).
 
-### RF05 - Dashboard Executivo
+### RF05 - Dashboard Executivo & Módulos da Qualidade Integrados
 - **Indicadores Rápidos**: Total de documentos, documentos homologados, documentos vencidos ou em revisão.
 - **Gráficos**: Distribuição de documentos por Setor e por Tipo.
 - **Painel de Atividades**: Histórico em tempo real de ações no SGQ.
-- **Seção de Módulos Futuros**: Indicadores provisórios para Auditorias, NC (Não Conformidades), Treinamentos para demonstração de prontidão comercial.
+- **25 Módulos Operacionais Ativos**: Lista Mestra, Fluxos, RNCs, Planos 5W2H, Auditorias 5S, Calibração, Treinamentos, KPIs, Fornecedores, Riscos, Análise Crítica, Colaboradores, Registros, Centro de Excelência Operacional (CEO, A3, Ideias, Gamificação Belt), Usuários RBAC, Notificações, Audit Logs, Configurações, Google Drive e Inspetor de Banco de Dados.
 
 ### RF06 - Pesquisa Inteligente Global
 - Campo de busca unificado que analisa código, título, palavras-chave e retorna resultados categorizados por tipo (POPs, Formulários, Não Conformidades, etc.).
@@ -67,8 +67,8 @@ O sistema deve registrar cada documento com:
 ---
 
 ## 5. Requisitos Não Funcionais
-- **RNF01 - Segurança**: Autenticação unificada com Google SSO.
-- **RNF02 - Desempenho**: Tempo de resposta do buscador global menor que 200ms.
-- **RNF03 - Arquitetura**: Desenvolvimento modular em React com separação rigorosa de pastas.
+- **RNF01 - Segurança**: Autenticação unificada com Google SSO e controle de acesso RBAC granular.
+- **RNF02 - Desempenho**: Tempo de resposta do buscador global menor que 200ms com assinaturas em tempo real via `onSnapshot` do Firebase Firestore.
+- **RNF03 - Arquitetura**: Desenvolvimento modular em React 18, TypeScript e Tailwind CSS v4 com suíte de 21 repositórios desacoplados.
 - **RNF04 - UI/UX**: Interface elegante, limpa, inspirada na Microsoft, SAP Fiori e ClickUp. Layout responsivo para tablets e computadores na fábrica.
-- **RNF05 - Escalabilidade**: Estrutura preparada para receber os módulos de Auditoria, Planos de Ação, Calibração e Treinamentos nas próximas sprints.
+- **RNF05 - Resiliência e Persistência**: Persistência dupla com salvamento atômico em Firebase Firestore e fallback offline em `localStorage`.

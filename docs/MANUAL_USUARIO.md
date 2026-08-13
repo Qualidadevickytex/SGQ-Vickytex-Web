@@ -1,4 +1,4 @@
-# Manual de Operação do Usuário — SGQ WEB VICKYTEX (v1.2.0)
+# Manual de Operação do Usuário — SGQ WEB VICKYTEX (v1.2.1)
 
 > 🟢 **FONTE OFICIAL DA VERDADE (SSOT) - OPERAÇÃO DO USUÁRIO**
 > Este manual é o guia passo a passo para colaboradores, supervisores, auditores, gestores e administradores da fábrica. Para o mapa da documentação técnica, consulte [`/docs/README.md`](/docs/README.md).
@@ -6,7 +6,7 @@
 ## Bem-vindo ao SGQ Web Vickytex!
 Este sistema foi desenvolvido especialmente para modernizar a gestão de qualidade da **Vickytex**, atendendo aos rigorosos requisitos da norma **ISO 9001:2015**. O software substitui a antiga Lista Mestra em formato Excel por um painel web ágil, seguro e integrado.
 
-Este manual descreve de forma simples como navegar, consultar, criar e revisar documentos, gerenciar os indicadores de qualidade da fábrica e realizar a configuração do banco de dados na nuvem.
+Este manual descreve de forma simples como navegar, consultar, criar e revisar documentos, gerenciar os indicadores de qualidade da fábrica, acompanhar os projetos de melhoria contínua e a gamificação do CEO, além de realizar a configuração do banco de dados na nuvem.
 
 ---
 
@@ -68,7 +68,18 @@ No cabeçalho do sistema, há um campo de **Pesquisa Global**.
 
 ---
 
-## 7. Banco de Dados & Integração com a Nuvem (Administradores)
+## 7. Módulo de Melhoria Contínua & Gamificação CEO
+Ao clicar em **"Melhoria Contínua"** no menu lateral, colaboradores e gestores acessam a suíte do Centro de Excelência Operacional (CEO):
+1. **Projetos A3 e Kaizen**: Acompanhamento de projetos Lean por setor, metas de economia e progresso das etapas.
+2. **Caixa de Ideias**: Registro de sugestões de inovação por qualquer colaborador.
+3. **Gamificação Belt & Lançamento de Horas**:
+   - **Graduação Belt**: O sistema calcula a pontuação acumulada (White Belt, Yellow Belt, Green Belt, Black Belt, Master Black Belt) com base em cursos, projetos concluídos e horas de treinamento.
+   - **Lançar Horas**: Botão no topo da tela para registrar horas de treinamento técnico de cada colaborador.
+   - **Manutenção de Pontuação (Gestores)**: Opção de zerar pontuações em auditorias anuais com recurso de restauração garantida.
+
+---
+
+## 8. Banco de Dados & Integração com a Nuvem (Administradores)
 No menu lateral, ao clicar em **"Banco de Dados"**, os administradores têm acesso a três módulos principais:
 1. **Painel Admin**: Monitoramento de memória, limpeza de cache, logs da aplicação e exportação/importação de dados em formato JSON.
 2. **Explorador de Coleções**: Visualização em tempo real de todas as coleções no Firebase Firestore (`/documents`, `/audits`, `/fives_audits`, etc.), tamanho das cargas úteis e consulta detalhada dos documentos.

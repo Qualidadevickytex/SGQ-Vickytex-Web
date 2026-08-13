@@ -1,4 +1,4 @@
-# Manual Técnico de Instalação e Operação — SGQ WEB VICKYTEX (v1.2.0)
+# Manual Técnico de Instalação e Operação — SGQ WEB VICKYTEX (v1.2.1)
 
 > 🟢 **FONTE OFICIAL DA VERDADE (SSOT) - MANUTENÇÃO TÉCNICA**
 > Este manual é a referência para instalação, suporte, banco de dados e operação técnica do sistema. Para o mapa completo da documentação, acesse [`/docs/README.md`](/docs/README.md).
@@ -10,8 +10,8 @@ O sistema **SGQ Web Vickytex** foi estruturado com as tecnologias mais estáveis
 - **Estilização**: Tailwind CSS v4 (Compilação ultra rápida via plugin oficial do Vite)
 - **Biblioteca de Ícones**: Lucide React
 - **Animações**: Motion
-- **Banco de Dados & Nuvem**: Firebase Firestore com SDK JavaScript v10+
-- **Camada de Repositórios**: Repositórios fortemente tipados em `src/services/firebase/repositories/`
+- **Banco de Dados & Nuvem**: Firebase Firestore com SDK JavaScript v10+ e assinaturas em tempo real (`onSnapshot`)
+- **Camada de Repositórios**: Suíte de 21 repositórios fortemente tipados em `src/services/firebase/repositories/`
 - **Fallback Offline**: LocalStorage do navegador com desduplicação atômica de IDs
 - **Hospedagem Frontend**: Cloud Run / Netlify / Vercel
 

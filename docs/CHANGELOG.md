@@ -5,6 +5,26 @@
 
 ---
 
+## [v1.2.1] - 2026-08-13 (Persistência Total em Tempo Real no Firestore, Suíte de 21 Repositórios e Redesign da Gamificação CEO)
+
+### 🚀 Destaques da Release v1.2.1
+- **Sincronização em Tempo Real (`onSnapshot`) e Persistência Direta no Firestore**:
+  - Finalizada a migração das 4 pendências remanescentes para salvamento direto no Firestore (`/system_settings`):
+    1. **Personalização de Marca e Cores**: `sgq_vickytex_personalizacao` assinado em tempo real pelo `App.tsx` para sincronizar identidade visual em todas as estações.
+    2. **Fluxos Parametrizados de Documentos**: `sgq_vickytex_fluxos_documentos` sincronizando etapas de aprovação de POP, FOR, IT, MAN e LIST.
+    3. **Configuração da Pasta Raiz do Google Drive**: Documento `google_drive` persistido no Firestore para apontamento corporativo de PDFs.
+    4. **Gamificação & Leaderboard CEO**: Logs de treinamentos (`sgq_vickytex_ceo_training_logs`), ajustes manuais/bônus (`sgq_vickytex_ceo_gamification_adjustments`) e estado de zeramento/restauração (`sgq_vickytex_ceo_scores_zeroed`).
+- **Suíte Completa de 21 Repositórios Especializados**:
+  - `actionPlan.repository.ts`, `audit.repository.ts`, `auditLog.repository.ts`, `base.repository.ts`, `ceo.repository.ts`, `collaborator.repository.ts`, `criticalAnalysis.repository.ts`, `document.repository.ts`, `equipment.repository.ts`, `fiveS.repository.ts`, `indicator.repository.ts`, `nc.repository.ts`, `notification.repository.ts`, `record.repository.ts`, `risk.repository.ts`, `rolePermission.repository.ts`, `supplier.repository.ts`, `systemSettings.repository.ts`, `training.repository.ts`, `user.repository.ts`.
+- **Correção de Permissões RBAC para Seção Executiva `'ceo'`**:
+  - Corrigida a validação de permissões em `src/App.tsx` liberando a chave de seção `'ceo'` para todos os perfis autorizados e eliminando redirecionamentos indevidos para o dashboard.
+- **Redesign Visual do Módulo de Gamificação CEO (`GamificacaoCEO.tsx`)**:
+  - Reformulado o layout do cabeçalho da Gamificação para um visual escuro industrial legível com hierarquia clara de botões (destaque no lançamento de horas de treinamento e barra dedicada para ações de manutenção do leaderboard).
+- **Atualização da Suíte Geral de Documentação**:
+  - Sincronizados todos os documentos de arquitetura, esquemas do Firestore, matriz de rastreabilidade, manual do usuário, manual técnico e PRD.
+
+---
+
 ## [v1.2.0] - 2026-08-07 (Migração para Firebase Firestore + LocalStorage Resiliente & Painel de Integração com a Nuvem)
 
 ### 🚀 Destaques da Arquitetura Firebase + Cloud Integration

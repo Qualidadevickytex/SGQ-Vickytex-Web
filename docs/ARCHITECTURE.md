@@ -1,4 +1,4 @@
-# Arquitetura Técnica, Design System e Infraestrutura — SGQ WEB VICKYTEX (v1.2.0)
+# Arquitetura Técnica, Design System e Infraestrutura — SGQ WEB VICKYTEX (v1.2.1)
 
 > 🟢 **FONTE OFICIAL DA VERDADE (SSOT) - ARQUITETURA E DESIGN SYSTEM**
 > Este documento é a referência única para padrões arquiteturais, hierarquia de componentes e design system.
@@ -8,7 +8,7 @@
 
 ## 1. Arquitetura de Software (Modular e Escalável)
 
-O **SGQ Web Vickytex** segue uma estrutura de desenvolvimento modular (Screaming Architecture), separando as preocupações visuais, regras de negócios e serviços de infraestrutura externa (Firebase Firestore + LocalStorage Fallback e APIs do Google Workspace).
+O **SGQ Web Vickytex** segue uma estrutura de desenvolvimento modular (Screaming Architecture), separando as preocupações visuais, regras de negócios e serviços de infraestrutura externa (Firebase Firestore com assinaturas em tempo real + LocalStorage Fallback e APIs do Google Workspace).
 
 ```
 /src
@@ -17,12 +17,13 @@ O **SGQ Web Vickytex** segue uma estrutura de desenvolvimento modular (Screaming
 │   ├── ui/         # Elementos de UI puros (Bordas, botões customizados)
 │   ├── dashboard/  # Componentes internos da tela principal
 │   ├── documentos/ # Componentes específicos da lista mestra e revisões
+│   ├── ceo/        # Painel Executivo CEO, A3, Ideias e Gamificação
 │   └── fiveS/      # Auditorias e Dashboard do Programa 5S
 ├── contexts/       # Gerenciamento de estado global (Tema, Autenticação, CEO)
 ├── firebase/       # Inicialização do Firebase, Firestore e Auth
 ├── layouts/        # Estruturas de grid e navegação da página (Sidebar, Header, Footer)
 ├── services/       # Repositórios Firebase, conectores REST/APIs e serviços do SGQ
-│   └── firebase/repositories/ # Repositórios tipados do Firestore
+│   └── firebase/repositories/ # Suíte de 21 Repositórios tipados do Firestore
 ├── styles/         # Estilização global do Tailwind
 ├── types/          # Arquivos de tipagem estrita do TypeScript
 └── utils/          # Funções utilitárias e geradores de sementes (mockData)
@@ -30,11 +31,12 @@ O **SGQ Web Vickytex** segue uma estrutura de desenvolvimento modular (Screaming
 
 ### Decisão de Infraestrutura: Single Page Application (SPA) + Firebase Firestore & LocalStorage
 O sistema é construído como uma aplicação em **React 18** compilada pelo **Vite** e integrada ao **Firebase Firestore**.
-As interações com o banco de dados utilizam uma suíte de repositórios fortemente tipados (`BaseRepository<T>`), oferecendo:
-1. **Sincronização em Nuvem em Tempo Real**: Persistência global em nuvem via Firestore.
+As interações com o banco de dados utilizam uma suíte de 21 repositórios fortemente tipados (`BaseRepository<T>`), oferecendo:
+1. **Sincronização em Nuvem em Tempo Real (`onSnapshot`)**: Persistência global instantânea em todas as telas e estações da fábrica via Firestore.
 2. **Resiliência e Fallback Offline**: Armazenamento paralelo transparente no `localStorage` do navegador para operações ininterruptas mesmo sem internet.
 3. **Mecanismo Anti-Duplicação**: Desduplicação automática por `id` e atualização atômica de conjuntos de dados.
-4. **Painel Dinâmico "Integração com a Nuvem"**: Permite aos administradores colar ou alterar a configuração do Firebase (`firebaseConfig`) diretamente pela interface sem recompilação do código.
+4. **Persistência de Configurações do Sistema (`/system_settings`)**: Armazenamento em nuvem para personalização visual, fluxos parametrizados, apontamento do Google Drive e gamificação.
+5. **Painel Dinâmico "Integração com a Nuvem"**: Permite aos administradores colar ou alterar a configuração do Firebase (`firebaseConfig`) diretamente pela interface sem recompilação do código.
 
 ---
 
@@ -58,13 +60,16 @@ A interface foi projetada para transmitir autoridade, clareza e conformidade ind
 
 ## 3. Modelagem de Dados do Firestore (NoSQL Resiliente)
 
-As coleções no Firebase Firestore estão estruturadas com foco em desacoplamento, indexação eficiente e rastreabilidade histórica completa.
+As coleções no Firebase Firestore estão estruturadas com foco em desacoplamento, indexação eficiente, suporte a `onSnapshot` e rastreabilidade histórica completa.
 
-### Coleção: `/documents`
-Armazena os metadados do documento em vigência e o histórico de revisões em sub-objetos ou registros vinculados em `/document_versions`.
+### Coleção: `/documents` & `/document_versions`
+Armazena os metadados do documento em vigência e o histórico de revisões.
 
 ### Coleção: `/fives_audits`
 Armazena auditorias completas do Programa 5S com pontuação dos 5 sensos, planos de ação e fotos da fábrica.
+
+### Coleção: `/system_settings`
+Armazena sub-documentos de parametrização global (Personalização de marca, fluxos de aprovação, Google Drive e Gamificação CEO).
 
 ### Coleção: `/audit_logs`
 Log imutável de ações executadas no sistema para fins de auditoria do SGQ corporativo.
@@ -93,7 +98,7 @@ O SGQ Web Vickytex adota uma arquitetura de gerenciamento de identidade e contro
                          ▼
   [ 3. AUTORIZAÇÃO - RBAC Engine ]
   - Perfil/papel (Administrador, Qualidade, Supervisor, Auditor, Colaborador) lido da base
-  - Liberação/bloqueio granular de recursos no frontend e validação nas regras do Firestore
+  - Liberação/bloqueio granular de recursos no frontend (incluindo seção 'ceo') e validação nas regras do Firestore
 ```
 
 ---
