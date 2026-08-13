@@ -19,25 +19,37 @@ class TrainingRepositoryClass extends BaseRepository<Treinamento> {
     return {
       id: rec.id,
       codigo: rec.codigo || `TRN-${rec.id}`,
-      documentoId: rec.documentoId || '',
+      documentoId: rec.documentoId || rec.documento_id || '',
       titulo: rec.titulo || '',
-      dataTreinamento: rec.dataTreinamento || rec.data_realizacao || new Date().toISOString().split('T')[0],
+      dataTreinamento: rec.dataTreinamento || rec.data_realizacao || rec.dataRealizacao || new Date().toISOString().split('T')[0],
       instrutor: rec.instrutor || '',
       setor: rec.setor || rec.sector || 'Geral',
-      duracaoHoras: rec.duracaoHoras || rec.carga_horaria || 1,
-      participantes: rec.participantes || [],
+      duracaoHoras: Number(rec.duracaoHoras || rec.carga_horaria || rec.cargaHoraria || 1),
+      participantes: Array.isArray(rec.participantes) ? rec.participantes : [],
       status: rec.status || 'Planejado'
     };
   }
 
   protected mapToPayload(data: Partial<Treinamento>): any {
-    return {
+    const payload: any = {
+      codigo: data.codigo,
+      documentoId: data.documentoId,
+      documento_id: data.documentoId,
       titulo: data.titulo,
       instrutor: data.instrutor,
+      setor: data.setor,
+      sector: data.setor,
+      dataTreinamento: data.dataTreinamento,
       dataRealizacao: data.dataTreinamento,
-      cargaHoraria: data.duracaoHoras,
-      status: data.status
+      data_realizacao: data.dataTreinamento,
+      duracaoHoras: Number(data.duracaoHoras || 1),
+      cargaHoraria: Number(data.duracaoHoras || 1),
+      carga_horaria: Number(data.duracaoHoras || 1),
+      participantes: Array.isArray(data.participantes) ? data.participantes : [],
+      status: data.status || 'Planejado'
     };
+    Object.keys(payload).forEach(k => payload[k] === undefined && delete payload[k]);
+    return payload;
   }
 
   protected getSearchFilter(query: string): string {

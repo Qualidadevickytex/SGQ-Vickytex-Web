@@ -245,44 +245,50 @@ const INITIAL_ANALISES: AnaliseCritica[] = [
 
 const mapToRepo = (ind: Indicador): IndicadorDesempenho => {
   const valoresMensais: { [key: string]: number } = {};
-  if (ind.historico) {
+  if (ind.historico && Array.isArray(ind.historico)) {
     ind.historico.forEach(h => {
-      valoresMensais[h.mes] = h.valor;
+      if (h && h.mes) {
+        valoresMensais[h.mes] = Number(h.valor);
+      }
     });
   }
   return {
     id: ind.id,
     codigo: ind.id,
     nome: ind.nome,
-    setor: ind.setor,
-    meta: ind.meta,
+    setor: ind.setor as any,
+    meta: Number(ind.meta),
     unidade: ind.unidade,
-    frequenciaMensuracao: ind.frequencia,
+    frequenciaMensuracao: ind.frequencia as any,
     valoresMensais,
     responsavel: ind.responsavel,
-    ...ind
+    direcaoMeta: ind.direcaoMeta,
+    requisitoISO: ind.requisitoISO,
+    descricao: ind.descricao,
+    formula: ind.formula,
+    historico: ind.historico
   } as any;
 };
 
 const mapFromRepo = (repoInd: any): Indicador => {
-  if (repoInd.historico && repoInd.direcaoMeta) {
-    return repoInd as Indicador;
-  }
-  const historico: { mes: string; valor: number }[] = [];
-  if (repoInd.valoresMensais) {
+  let historico: { mes: string; valor: number }[] = [];
+  if (Array.isArray(repoInd.historico) && repoInd.historico.length > 0) {
+    historico = repoInd.historico;
+  } else if (repoInd.valoresMensais && Object.keys(repoInd.valoresMensais).length > 0) {
     Object.entries(repoInd.valoresMensais).forEach(([mes, valor]) => {
       historico.push({ mes, valor: Number(valor) });
     });
   }
+
   return {
     id: repoInd.id,
     nome: repoInd.nome || '',
     setor: repoInd.setor || '',
-    unidade: repoInd.unidade || '',
-    meta: repoInd.meta || 0,
+    unidade: repoInd.unidade || '%',
+    meta: Number(repoInd.meta ?? 0),
     direcaoMeta: repoInd.direcaoMeta || 'maior',
-    frequencia: repoInd.frequenciaMensuracao || 'Mensal',
-    requisitoISO: repoInd.requisitoISO || '9.1',
+    frequencia: repoInd.frequenciaMensuracao || repoInd.frequencia || 'Mensal',
+    requisitoISO: repoInd.requisitoISO || '9.1.3 - Análise e avaliação',
     descricao: repoInd.descricao || '',
     formula: repoInd.formula || '',
     responsavel: repoInd.responsavel || '',
@@ -299,8 +305,10 @@ export const Indicadores: React.FC<IndicadoresProps> = ({ onAddLog, personalizac
     return import.meta.env.VITE_DEMO_MODE === 'true' ? INITIAL_ANALISES : [];
   });
 
-  // Carregar dados reais remotamente usando os repositórios na montagem
+  // Carregar dados reais remotamente usando os repositórios na montagem e manter sincronizado em tempo real
   useEffect(() => {
+    let isMounted = true;
+
     const fetchData = async () => {
       try {
         const [indRes, critRes] = await Promise.all([
@@ -308,12 +316,15 @@ export const Indicadores: React.FC<IndicadoresProps> = ({ onAddLog, personalizac
           CriticalAnalysesRepository.findAll()
         ]);
 
+        if (!isMounted) return;
+
         if (indRes.success && indRes.data && indRes.data.length > 0) {
           const mapped = indRes.data.map(mapFromRepo);
           setIndicadores(mapped);
-          if (mapped.length > 0 && !selectedKpiId) {
-            setSelectedKpiId(mapped[0].id);
-          }
+          setSelectedKpiId(prev => {
+            if (prev && mapped.some(m => m.id === prev)) return prev;
+            return mapped[0]?.id || '';
+          });
         }
 
         if (critRes.success && critRes.data && critRes.data.length > 0) {
@@ -324,6 +335,32 @@ export const Indicadores: React.FC<IndicadoresProps> = ({ onAddLog, personalizac
       }
     };
     fetchData();
+
+    // Assinaturas em tempo real via Firestore
+    const unsubInd = IndicatorRepository.subscribe((items) => {
+      if (!isMounted) return;
+      if (items && items.length > 0) {
+        const mapped = items.map(mapFromRepo);
+        setIndicadores(mapped);
+        setSelectedKpiId(prev => {
+          if (prev && mapped.some(m => m.id === prev)) return prev;
+          return mapped[0]?.id || '';
+        });
+      }
+    });
+
+    const unsubCrit = CriticalAnalysesRepository.subscribe((items) => {
+      if (!isMounted) return;
+      if (items && items.length > 0) {
+        setAnalises(items as AnaliseCritica[]);
+      }
+    });
+
+    return () => {
+      isMounted = false;
+      unsubInd();
+      unsubCrit();
+    };
   }, []);
 
   const [selectedKpiId, setSelectedKpiId] = useState<string>('kpi-1');
@@ -407,6 +444,7 @@ export const Indicadores: React.FC<IndicadoresProps> = ({ onAddLog, personalizac
     if (!newKpi.nome || newKpi.meta === undefined) return;
 
     if (editingKpi) {
+      let updatedObj: Indicador | null = null;
       const updatedList = indicadores.map(k => {
         if (k.id === editingKpi.id) {
           const updated: Indicador = {
@@ -422,16 +460,7 @@ export const Indicadores: React.FC<IndicadoresProps> = ({ onAddLog, personalizac
             formula: newKpi.formula || '',
             responsavel: newKpi.responsavel || 'Gestor da Qualidade',
           };
-
-          // Sincronizar remotamente em background
-          setTimeout(async () => {
-            try {
-              await IndicatorRepository.update(k.id, mapToRepo(updated));
-            } catch (err) {
-              console.error('Falha ao atualizar indicador remoto:', err);
-            }
-          }, 0);
-
+          updatedObj = updated;
           return updated;
         }
         return k;
@@ -442,6 +471,14 @@ export const Indicadores: React.FC<IndicadoresProps> = ({ onAddLog, personalizac
       setEditingKpi(null);
       onAddLog('Indicadores', `Editou as configurações do indicador "${newKpi.nome}"`);
       
+      if (updatedObj) {
+        try {
+          await IndicatorRepository.update(editingKpi.id, mapToRepo(updatedObj));
+        } catch (err) {
+          console.error('Falha ao atualizar indicador remoto:', err);
+        }
+      }
+
       // Limpar form
       setNewKpi({
         nome: '',
@@ -508,14 +545,17 @@ export const Indicadores: React.FC<IndicadoresProps> = ({ onAddLog, personalizac
     e.preventDefault();
     if (!newMeasure.valor) return;
 
+    const numericValue = Number(newMeasure.valor);
+    const mesToSave = newMeasure.mes;
+
     let updatedKpi: Indicador | null = null;
     setIndicadores(prev => prev.map(k => {
       if (k.id === selectedKpiId) {
         // Evitar duplicar mesmo mês, remover se já existe
-        const filteredHist = k.historico.filter(h => h.mes !== newMeasure.mes);
+        const filteredHist = (k.historico || []).filter(h => h.mes !== mesToSave);
         updatedKpi = {
           ...k,
-          historico: [...filteredHist, { mes: newMeasure.mes, valor: Number(newMeasure.valor) }]
+          historico: [...filteredHist, { mes: mesToSave, valor: numericValue }]
         };
         return updatedKpi;
       }
@@ -523,18 +563,16 @@ export const Indicadores: React.FC<IndicadoresProps> = ({ onAddLog, personalizac
     }));
 
     setShowAddMeasureModal(false);
-    onAddLog('Indicadores', `Lançou medição de ${newMeasure.valor}${activeKpi.unidade} para o mês de ${newMeasure.mes} no indicador "${activeKpi.nome}"`);
+    onAddLog('Indicadores', `Lançou medição de ${numericValue}${activeKpi?.unidade || ''} para o mês de ${mesToSave} no indicador "${activeKpi?.nome || ''}"`);
     setNewMeasure({ mes: 'Ago', valor: '' });
 
-    setTimeout(async () => {
-      if (updatedKpi) {
-        try {
-          await IndicatorRepository.update(selectedKpiId, mapToRepo(updatedKpi));
-        } catch (err) {
-          console.error('Falha ao atualizar medição remota:', err);
-        }
+    if (updatedKpi) {
+      try {
+        await IndicatorRepository.update(selectedKpiId, mapToRepo(updatedKpi));
+      } catch (err) {
+        console.error('Falha ao atualizar medição remota:', err);
       }
-    }, 0);
+    }
   };
 
   // Handler para Salvar Edição de Apontamento Histórico
@@ -544,9 +582,9 @@ export const Indicadores: React.FC<IndicadoresProps> = ({ onAddLog, personalizac
     let updatedKpi: Indicador | null = null;
     setIndicadores(prev => prev.map(k => {
       if (k.id === selectedKpiId) {
-        const updatedHist = [...k.historico];
-        const oldVal = updatedHist[idx].valor;
-        const oldMes = updatedHist[idx].mes;
+        const updatedHist = [...(k.historico || [])];
+        const oldVal = updatedHist[idx]?.valor;
+        const oldMes = updatedHist[idx]?.mes;
         updatedHist[idx] = { mes: editingHistMes, valor: Number(editingHistValue) };
         updatedKpi = {
           ...k,
@@ -576,13 +614,15 @@ export const Indicadores: React.FC<IndicadoresProps> = ({ onAddLog, personalizac
     let updatedKpi: Indicador | null = null;
     setIndicadores(prev => prev.map(k => {
       if (k.id === selectedKpiId) {
-        const deletedItem = k.historico[idx];
-        const updatedHist = k.historico.filter((_, i) => i !== idx);
+        const deletedItem = (k.historico || [])[idx];
+        const updatedHist = (k.historico || []).filter((_, i) => i !== idx);
         updatedKpi = {
           ...k,
           historico: updatedHist
         };
-        onAddLog('Indicadores', `Excluiu o apontamento de ${deletedItem.valor}${k.unidade} do mês de ${deletedItem.mes} no indicador "${k.nome}"`);
+        if (deletedItem) {
+          onAddLog('Indicadores', `Excluiu o apontamento de ${deletedItem.valor}${k.unidade} do mês de ${deletedItem.mes} no indicador "${k.nome}"`);
+        }
         return updatedKpi;
       }
       return k;

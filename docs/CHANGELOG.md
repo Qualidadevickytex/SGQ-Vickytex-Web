@@ -19,6 +19,9 @@
 - **Aprimoramento da Limpeza Global de Dados ("Zerar Banco de Dados")**:
   - Correção no manipulador `handleClearAllData` em `App.tsx` para garantir a exclusão atômica de documentos em todas as coleções remotas do Firestore e limpeza integral das chaves do `localStorage`.
   - As inscrições em tempo real (`onSnapshot`) propagam o estado limpo instantaneamente para todas as telas sem necessidade de recarregar a página.
+- **Persistência Total e Tempo Real de Medições dos Indicadores (ISO 9.1.3)**:
+  - Corrigido o `IndicatorRepository` (`mapToPayload` e `mapRecord`), garantindo que tanto `valoresMensais` quanto o array de `historico` de medições sejam persistidos e recuperados integralmente no Firebase Firestore.
+  - Implementada a assinatura em tempo real via `onSnapshot` (`IndicatorRepository.subscribe` e `CriticalAnalysesRepository.subscribe`) no componente `Indicadores.tsx`, sincronizando lançamentos, edições e exclusões de medições instantaneamente na nuvem.
 - **Sincronização Completa da Suíte de Documentação**:
   - Atualizados todos os manuais, matriz de rastreabilidade, arquitetura e guias de implantação para a versão v1.2.2.
 

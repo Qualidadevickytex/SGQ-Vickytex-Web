@@ -44,6 +44,7 @@ import { SupplierRepository } from './services/database/repositories/supplier.re
 import { RolePermissionsRepository } from './services/firebase/repositories/rolePermission.repository';
 import { SystemSettingsRepository } from './services/database/repositories/systemSettings.repository';
 import { TrainingRepository } from './services/database/repositories/training.repository';
+import { AuditLogsRepository } from './services/firebase/repositories/auditLog.repository';
 import { AuditService } from './services/audit.service';
 import { clearCollectionDocs } from './firebase/firestore';
 
@@ -138,6 +139,7 @@ function AppContent() {
     // Assinaturas Firestore onSnapshot
     const unsubDocs = DocumentRepository.subscribe((items) => setDocuments(items));
     const unsubAudits = AuditRepository.subscribe((items) => setAudits(items));
+    const unsubFiveS = FiveSRepository.subscribe((items) => setAuditorias5s(items));
     const unsubUsers = UserRepository.subscribe((items) => setUsers(items));
     const unsubNCs = NCRepository.subscribe((items) => setNcs(items));
     const unsubPlanos = ActionPlanRepository.subscribe((items) => setPlanos(items));
@@ -147,6 +149,11 @@ function AppContent() {
     const unsubReg = RecordRepository.subscribe((items) => setRegistros(items));
     const unsubSup = SupplierRepository.subscribe((items) => setSuppliers(items));
     const unsubTrain = TrainingRepository.subscribe((items) => setTrainings(items));
+    const unsubLogs = AuditLogsRepository.subscribe((items) => {
+      if (Array.isArray(items) && items.length > 0) {
+        setLogs(items as any);
+      }
+    });
     const unsubPerms = RolePermissionsRepository.subscribe((items) => setPermissions(items as any));
     const unsubSettings = SystemSettingsRepository.subscribe((records) => {
       const pDoc = records.find(r => r.id === 'sgq_vickytex_personalizacao');
@@ -159,6 +166,7 @@ function AppContent() {
       isMounted = false;
       unsubDocs();
       unsubAudits();
+      unsubFiveS();
       unsubUsers();
       unsubNCs();
       unsubPlanos();
@@ -168,6 +176,7 @@ function AppContent() {
       unsubReg();
       unsubSup();
       unsubTrain();
+      unsubLogs();
       unsubPerms();
       unsubSettings();
     };

@@ -6,6 +6,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { ProjetoCEO, SugestaoCEO, CEOStats } from '../types/ceo';
 import { CEOService } from '../services/ceo.service';
+import { CEOProjectsRepository, CEOSugestoesRepository } from '../services/firebase/repositories/ceo.repository';
 import { cacheService } from '../services/cache.service';
 import { useAuth } from './AuthContext'; // Import hook to get active user
 
@@ -86,11 +87,28 @@ export const CEOProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, []);
 
-  // Trigger loading when user profile mounts/changes
+  // Trigger loading and live subscriptions when user profile mounts/changes
   useEffect(() => {
     if (!user) return;
     loadCEOData();
     checkIntegrations();
+
+    const unsubProjects = CEOProjectsRepository.subscribe((items) => {
+      if (Array.isArray(items)) {
+        setProjects(items);
+      }
+    });
+
+    const unsubSuggestions = CEOSugestoesRepository.subscribe((items) => {
+      if (Array.isArray(items)) {
+        setSuggestions(items);
+      }
+    });
+
+    return () => {
+      unsubProjects();
+      unsubSuggestions();
+    };
   }, [loadCEOData, checkIntegrations, user]);
 
   /**

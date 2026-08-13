@@ -28,9 +28,14 @@ import {
   RotateCcw
 } from 'lucide-react';
 import { ProjetoCEO, SugestaoCEO } from '../../types/ceo';
+import { Treinamento } from '../../types/training';
+import { UserAccount } from '../../types/user';
 import { useAuth } from '../../contexts/AuthContext';
 import { ConfirmModal } from '../common/ConfirmModal';
 import { SystemSettingsRepository } from '../../services/database/repositories/systemSettings.repository';
+import { TrainingRepository } from '../../services/database/repositories/training.repository';
+import { UserRepository } from '../../services/database/repositories/user.repository';
+import { INITIAL_USER_ACCOUNTS } from '../../utils/mockData';
 
 interface GamificacaoCEOProps {
   projects: ProjetoCEO[];
@@ -54,6 +59,8 @@ interface ColaboradorRank {
 export const GamificacaoCEO: React.FC<GamificacaoCEOProps> = ({ projects, suggestions }) => {
   const { user } = useAuth();
   const [rankingList, setRankingList] = useState<ColaboradorRank[]>([]);
+  const [dbTrainings, setDbTrainings] = useState<Treinamento[]>([]);
+  const [dbUsers, setDbUsers] = useState<UserAccount[]>([]);
   const [logHoursModalOpen, setLogHoursModalOpen] = useState(false);
   const [trainingUserEmail, setTrainingUserEmail] = useState(user?.email || '');
   const [trainingUserName, setTrainingUserName] = useState(user?.name || '');
@@ -64,7 +71,7 @@ export const GamificacaoCEO: React.FC<GamificacaoCEOProps> = ({ projects, sugges
     return saved ? JSON.parse(saved) : [
       { id: '1', nome: 'Mariana Santos', email: 'supervisor.costura@vickytex.com.br', horas: 16, tema: 'Certificação Green Belt Six Sigma', data: '2026-06-15' },
       { id: '2', nome: 'Carlos Oliveira', email: 'colaborador.costura@vickytex.com.br', horas: 8, tema: 'Práticas de SMED e Troca Rápida', data: '2026-05-20' },
-      { id: '3', nome: 'Ana Costa', email: 'supervisor.qualidade@vickytex.com.br', horas: 24, tema: 'Liderança Kaizen e Ferramentas de Causa Raiz', data: '2026-07-01' }
+      { id: '3', nome: 'Ana Costa', email: 'qualidade@vickytex.com.br', horas: 24, tema: 'Liderança Kaizen e Ferramentas de Causa Raiz', data: '2026-07-01' }
     ];
   });
 
@@ -87,9 +94,9 @@ export const GamificacaoCEO: React.FC<GamificacaoCEOProps> = ({ projects, sugges
   const [maintCustomMedal, setMaintCustomMedal] = useState<string>('');
   const [maintReason, setMaintReason] = useState<string>('');
 
-  // Subscrição onSnapshot em tempo real no Firestore para sincronizar Leaderboard entre usuários
+  // Subscrição onSnapshot em tempo real no Firestore para sincronizar Leaderboard, Treinamentos e Usuários
   useEffect(() => {
-    const unsub = SystemSettingsRepository.subscribe((records) => {
+    const unsubSettings = SystemSettingsRepository.subscribe((records) => {
       const logsDoc = records.find(r => r.id === 'sgq_vickytex_ceo_training_logs');
       if (logsDoc && Array.isArray(logsDoc.items)) {
         setLoggedTrainings(logsDoc.items);
@@ -105,7 +112,24 @@ export const GamificacaoCEO: React.FC<GamificacaoCEOProps> = ({ projects, sugges
         setIsScoresZeroed(Boolean(zeroDoc.data.zeroed));
       }
     });
-    return () => unsub();
+
+    const unsubTrainings = TrainingRepository.subscribe((items) => {
+      if (Array.isArray(items)) {
+        setDbTrainings(items);
+      }
+    });
+
+    const unsubUsers = UserRepository.subscribe((items) => {
+      if (Array.isArray(items) && items.length > 0) {
+        setDbUsers(items);
+      }
+    });
+
+    return () => {
+      unsubSettings();
+      unsubTrainings();
+      unsubUsers();
+    };
   }, []);
 
   useEffect(() => {
@@ -116,7 +140,7 @@ export const GamificacaoCEO: React.FC<GamificacaoCEOProps> = ({ projects, sugges
     localStorage.setItem('sgq_vickytex_ceo_scores_zeroed', isScoresZeroed ? 'true' : 'false');
   }, [isScoresZeroed]);
 
-  // Recalculate ranking whenever projects, suggestions, or logged trainings change
+  // Recalculate ranking whenever projects, suggestions, trainings, or logged trainings change
   useEffect(() => {
     const calculateRankings = () => {
       const userMap = new Map<string, {
@@ -132,165 +156,209 @@ export const GamificacaoCEO: React.FC<GamificacaoCEOProps> = ({ projects, sugges
         medalhas: Set<string>;
       }>();
 
-      // Pre-seed known users from collaborations or logged trainings to build a rich leaderboard
+      const normalizeEmail = (em: string) => (em || '').trim().toLowerCase();
+
+      const getOrCreateUser = (emailInput: string, defaultName?: string) => {
+        const norm = normalizeEmail(emailInput);
+        if (!norm) return null;
+
+        if (!userMap.has(norm)) {
+          // Buscar nome correspondente em dbUsers ou INITIAL_USER_ACCOUNTS
+          const foundAccount = dbUsers.find(u => normalizeEmail(u.email) === norm) || 
+                               INITIAL_USER_ACCOUNTS.find(u => normalizeEmail(u.email) === norm);
+          
+          const resolvedName = foundAccount?.name || defaultName || emailInput.split('@')[0];
+          userMap.set(norm, {
+            nome: resolvedName,
+            email: emailInput.trim(),
+            projetosAtivos: 0,
+            projetosConcluidos: 0,
+            ideiasSubmetidas: 0,
+            ideiasAprovadas: 0,
+            tarefasConcluidas: 0,
+            horasTreinamento: 0,
+            pontos: 0,
+            medalhas: new Set<string>()
+          });
+        }
+        return userMap.get(norm)!;
+      };
+
+      // 1. Pre-seed users from initial accounts and database accounts
+      const allAccounts = dbUsers.length > 0 ? dbUsers : INITIAL_USER_ACCOUNTS;
+      allAccounts.forEach(acc => {
+        if (acc.email) {
+          getOrCreateUser(acc.email, acc.name);
+        }
+      });
+
+      // Pre-seed known users from collaborations or logged trainings
       const seedUsers = [
         { email: 'supervisor.costura@vickytex.com.br', nome: 'Mariana Santos' },
         { email: 'colaborador.costura@vickytex.com.br', nome: 'Carlos Oliveira' },
         { email: 'qualidade@vickytex.com.br', nome: 'Ana Costa (Qualidade)' },
         { email: 'colaborador.corte@vickytex.com.br', nome: 'Roberto Silva' },
-        { email: 'gerencia@vickytex.com.br', nome: 'Diretoria Executiva' }
+        { email: 'gerencia@vickytex.com.br', nome: 'Diretoria Executiva' },
+        { email: 'sgq@vickytex.com.br', nome: 'Julia Vidal Scremin Alves' }
       ];
 
       seedUsers.forEach(su => {
-        userMap.set(su.email, {
-          nome: su.nome,
-          email: su.email,
-          projetosAtivos: 0,
-          projetosConcluidos: 0,
-          ideiasSubmetidas: 0,
-          ideiasAprovadas: 0,
-          tarefasConcluidas: 0,
-          horasTreinamento: 0,
-          pontos: 0,
-          medalhas: new Set<string>()
-        });
+        getOrCreateUser(su.email, su.nome);
       });
 
       // Add active user if not already seeded
-      if (user && !userMap.has(user.email)) {
-        userMap.set(user.email, {
-          nome: user.name || user.email.split('@')[0],
-          email: user.email,
-          projetosAtivos: 0,
-          projetosConcluidos: 0,
-          ideiasSubmetidas: 0,
-          ideiasAprovadas: 0,
-          tarefasConcluidas: 0,
-          horasTreinamento: 0,
-          pontos: 0,
-          medalhas: new Set<string>()
-        });
+      if (user && user.email) {
+        getOrCreateUser(user.email, user.name || user.email.split('@')[0]);
       }
 
-      // Add logged training hours
-      loggedTrainings.forEach(log => {
-        const u = userMap.get(log.email) || {
-          nome: log.nome,
-          email: log.email,
-          projetosAtivos: 0,
-          projetosConcluidos: 0,
-          ideiasSubmetidas: 0,
-          ideiasAprovadas: 0,
-          tarefasConcluidas: 0,
-          horasTreinamento: 0,
-          pontos: 0,
-          medalhas: new Set<string>()
-        };
-        u.horasTreinamento += log.horas;
-        u.pontos += log.horas * 5; // 5 pts per hour of continuous improvement training
-        u.medalhas.add('Estudioso Lean');
-        userMap.set(log.email, u);
+      // 2. Add real trainings from TrainingRepository (ISO 7.2 & Treinamentos)
+      dbTrainings.forEach(tr => {
+        const hours = Number(tr.duracaoHoras || 1);
+        if (tr.status === 'Realizado') {
+          // Instrutor
+          if (tr.instrutor) {
+            const isEmail = tr.instrutor.includes('@');
+            let u = isEmail ? getOrCreateUser(tr.instrutor) : null;
+            if (!u) {
+              // Buscar por nome
+              for (const val of userMap.values()) {
+                if (val.nome.toLowerCase().includes(tr.instrutor.toLowerCase()) || tr.instrutor.toLowerCase().includes(val.nome.toLowerCase())) {
+                  u = val;
+                  break;
+                }
+              }
+            }
+            if (u) {
+              u.horasTreinamento += hours;
+              u.pontos += hours * 5;
+              u.medalhas.add('Instrutor Lean');
+            }
+          }
+
+          // Participantes
+          (tr.participantes || []).forEach(part => {
+            if (!part) return;
+            const isEmail = part.includes('@');
+            let u = isEmail ? getOrCreateUser(part) : null;
+            if (!u) {
+              for (const val of userMap.values()) {
+                if (val.nome.toLowerCase().includes(part.toLowerCase()) || part.toLowerCase().includes(val.nome.toLowerCase())) {
+                  u = val;
+                  break;
+                }
+              }
+            }
+            if (u) {
+              u.horasTreinamento += hours;
+              u.pontos += hours * 5;
+              u.medalhas.add('Estudioso Lean');
+            }
+          });
+        }
       });
 
-      // Map suggestions
+      // 3. Add logged training hours from CEO Training Logs
+      loggedTrainings.forEach(log => {
+        if (!log || !log.email) return;
+        const u = getOrCreateUser(log.email, log.nome);
+        if (u) {
+          const h = Number(log.horas || 0);
+          u.horasTreinamento += h;
+          u.pontos += h * 5; // 5 pts per hour of continuous improvement training
+          u.medalhas.add('Estudioso Lean');
+        }
+      });
+
+      // 4. Map suggestions (Banco de Ideias)
       suggestions.forEach(sug => {
         if (!sug.autor) return;
-        const u = userMap.get(sug.autor) || {
-          nome: sug.autor.split('@')[0],
-          email: sug.autor,
-          projetosAtivos: 0,
-          projetosConcluidos: 0,
-          ideiasSubmetidas: 0,
-          ideiasAprovadas: 0,
-          tarefasConcluidas: 0,
-          horasTreinamento: 0,
-          pontos: 0,
-          medalhas: new Set<string>()
-        };
-
-        u.ideiasSubmetidas += 1;
-        u.pontos += 15; // 15 pts per suggestion submitted
-
-        if (sug.status === 'Aprovada' || sug.status === 'Em Implantação' || sug.status === 'Concluída') {
-          u.ideiasAprovadas += 1;
-          u.pontos += 50; // 50 pts per approved idea
-          u.medalhas.add('Mente Inovadora');
+        const isEmail = sug.autor.includes('@');
+        let u = isEmail ? getOrCreateUser(sug.autor) : null;
+        if (!u) {
+          for (const val of userMap.values()) {
+            if (val.nome.toLowerCase().includes(sug.autor.toLowerCase()) || sug.autor.toLowerCase().includes(val.nome.toLowerCase())) {
+              u = val;
+              break;
+            }
+          }
+        }
+        if (!u && isEmail) {
+          u = getOrCreateUser(sug.autor);
         }
 
-        userMap.set(sug.autor, u);
+        if (u) {
+          u.ideiasSubmetidas += 1;
+          u.pontos += 15; // 15 pts per suggestion submitted
+
+          if (sug.status === 'Aprovada' || sug.status === 'Em Implantação' || sug.status === 'Concluída') {
+            u.ideiasAprovadas += 1;
+            u.pontos += 50; // 50 pts per approved idea
+            u.medalhas.add('Mente Inovadora');
+          }
+        }
       });
 
-      // Map projects
+      // 5. Map projects (Projetos de Melhoria A3 / DMAIC / Kaizen)
       projects.forEach(proj => {
         // Project leader
         if (proj.lider) {
-          const u = userMap.get(proj.lider) || {
-            nome: proj.lider.split('@')[0],
-            email: proj.lider,
-            projetosAtivos: 0,
-            projetosConcluidos: 0,
-            ideiasSubmetidas: 0,
-            ideiasAprovadas: 0,
-            tarefasConcluidas: 0,
-            horasTreinamento: 0,
-            pontos: 0,
-            medalhas: new Set<string>()
-          };
-
-          if (proj.status === 'Concluído') {
-            u.projetosConcluidos += 1;
-            u.pontos += 200; // 200 pts per completed project
-            u.medalhas.add('Campeão Kaizen');
-          } else if (proj.status === 'Em Execução' || proj.status === 'Planejado') {
-            u.projetosAtivos += 1;
-            u.pontos += 50; // 50 pts for active leading
+          const isEmail = proj.lider.includes('@');
+          let u = isEmail ? getOrCreateUser(proj.lider) : null;
+          if (!u) {
+            for (const val of userMap.values()) {
+              if (val.nome.toLowerCase().includes(proj.lider.toLowerCase()) || proj.lider.toLowerCase().includes(val.nome.toLowerCase())) {
+                u = val;
+                break;
+              }
+            }
+          }
+          if (!u && isEmail) {
+            u = getOrCreateUser(proj.lider);
           }
 
-          // Stage completion counts
-          const completedStages = proj.ferramentas?.etapas?.filter(e => e.status === 'Concluido').length || 0;
-          u.pontos += completedStages * 30; // 30 pts per completed gate/stage
+          if (u) {
+            if (proj.status === 'Concluído') {
+              u.projetosConcluidos += 1;
+              u.pontos += 200; // 200 pts per completed project
+              u.medalhas.add('Campeão Kaizen');
+            } else if (proj.status === 'Em Execução' || proj.status === 'Planejado') {
+              u.projetosAtivos += 1;
+              u.pontos += 50; // 50 pts for active leading
+            }
 
-          userMap.set(proj.lider, u);
+            // Stage completion counts
+            const completedStages = proj.ferramentas?.etapas?.filter(e => e.status === 'Concluido').length || 0;
+            u.pontos += completedStages * 30; // 30 pts per completed gate/stage
+          }
         }
 
         // Project team members
         proj.ferramentas?.equipe?.forEach(m => {
-          if (!m.email) return;
-          const u = userMap.get(m.email) || {
-            nome: m.nome,
-            email: m.email,
-            projetosAtivos: 0,
-            projetosConcluidos: 0,
-            ideiasSubmetidas: 0,
-            ideiasAprovadas: 0,
-            tarefasConcluidas: 0,
-            horasTreinamento: 0,
-            pontos: 0,
-            medalhas: new Set<string>()
-          };
-          u.pontos += 30; // 30 points for team collaboration
-          u.medalhas.add('Trabalho em Equipe');
-          userMap.set(m.email, u);
+          if (!m.email && !m.nome) return;
+          const u = m.email ? getOrCreateUser(m.email, m.nome) : null;
+          if (u) {
+            u.pontos += 30; // 30 points for team collaboration
+            u.medalhas.add('Trabalho em Equipe');
+          }
         });
 
         // Cronograma tasks
         proj.ferramentas?.cronograma?.forEach(task => {
           if (task.status === 'Concluido' && task.responsavel) {
-            const u = userMap.get(task.responsavel) || {
-              nome: task.responsavel.split('@')[0],
-              email: task.responsavel,
-              projetosAtivos: 0,
-              projetosConcluidos: 0,
-              ideiasSubmetidas: 0,
-              ideiasAprovadas: 0,
-              tarefasConcluidas: 0,
-              horasTreinamento: 0,
-              pontos: 0,
-              medalhas: new Set<string>()
-            };
-            u.tarefasConcluidas += 1;
-            u.pontos += 15; // 15 pts per finished task
-            userMap.set(task.responsavel, u);
+            const isEmail = task.responsavel.includes('@');
+            let u = isEmail ? getOrCreateUser(task.responsavel) : null;
+            if (!u) {
+              for (const val of userMap.values()) {
+                if (val.nome.toLowerCase().includes(task.responsavel.toLowerCase())) {
+                  u = val;
+                  break;
+                }
+              }
+            }
+            if (u) {
+              u.tarefasConcluidas += 1;
+              u.pontos += 15; // 15 pts per finished task
+            }
           }
         });
       });
@@ -300,10 +368,9 @@ export const GamificacaoCEO: React.FC<GamificacaoCEOProps> = ({ projects, sugges
         let belt: 'Yellow Belt' | 'Green Belt' | 'Black Belt' | 'Master Black Belt' | 'Lean Practitioner' = 'Lean Practitioner';
         
         // Apply manual adjustments if any
-        const adj = manualAdjustments[u.email];
-        let totalPts = isScoresZeroed 
-          ? Math.max(0, adj?.pointsBonus || 0)
-          : Math.max(0, u.pontos + (adj?.pointsBonus || 0));
+        const norm = normalizeEmail(u.email);
+        const adj = manualAdjustments[u.email] || manualAdjustments[norm];
+        const totalPts = Math.max(0, u.pontos + (adj?.pointsBonus || 0));
 
         if (totalPts >= 600 || u.projetosConcluidos >= 2) {
           belt = 'Master Black Belt';
@@ -340,7 +407,7 @@ export const GamificacaoCEO: React.FC<GamificacaoCEOProps> = ({ projects, sugges
     };
 
     calculateRankings();
-  }, [projects, suggestions, loggedTrainings, manualAdjustments, isScoresZeroed, user]);
+  }, [projects, suggestions, dbTrainings, loggedTrainings, dbUsers, manualAdjustments, isScoresZeroed, user]);
 
   const handleConfirmResetScores = () => {
     setIsScoresZeroed(true);
@@ -361,22 +428,53 @@ export const GamificacaoCEO: React.FC<GamificacaoCEOProps> = ({ projects, sugges
     SystemSettingsRepository.create({ id: 'sgq_vickytex_ceo_scores_zeroed', data: { zeroed: false } }).catch(console.error);
   };
 
-  const handleLogHours = (e: React.FormEvent) => {
+  const handleLogHours = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!trainingUserEmail || !trainingUserName || !trainingTopic) return;
+
+    const numericHours = Number(trainingHoursInput) || 1;
 
     const newLog = {
       id: `log-${Date.now()}`,
       nome: trainingUserName,
       email: trainingUserEmail,
-      horas: Number(trainingHoursInput),
+      horas: numericHours,
       tema: trainingTopic,
       data: new Date().toISOString().split('T')[0]
     };
 
     const updatedLogs = [newLog, ...loggedTrainings];
     setLoggedTrainings(updatedLogs);
-    SystemSettingsRepository.create({ id: 'sgq_vickytex_ceo_training_logs', items: updatedLogs }).catch(console.error);
+    localStorage.setItem('sgq_vickytex_ceo_training_logs', JSON.stringify(updatedLogs));
+
+    // Se estiver zerado, reativar pontuação para que o novo lançamento apareça imediatamente
+    if (isScoresZeroed) {
+      setIsScoresZeroed(false);
+      localStorage.removeItem('sgq_vickytex_ceo_scores_zeroed');
+      SystemSettingsRepository.create({ id: 'sgq_vickytex_ceo_scores_zeroed', data: { zeroed: false } }).catch(console.error);
+    }
+
+    // Persistir em Firestore tanto no SystemSettings quanto no TrainingRepository oficial
+    try {
+      await Promise.all([
+        SystemSettingsRepository.create({ id: 'sgq_vickytex_ceo_training_logs', items: updatedLogs }),
+        TrainingRepository.create({
+          id: `tr-ceo-${Date.now()}`,
+          codigo: `TRE-CEO-${Date.now().toString().slice(-4)}`,
+          documentoId: 'CAP-CEO-LEAN',
+          titulo: trainingTopic,
+          dataTreinamento: new Date().toISOString().split('T')[0],
+          instrutor: 'Centro de Excelência Operacional (CEO)',
+          setor: 'Geral',
+          duracaoHoras: numericHours,
+          participantes: [trainingUserName, trainingUserEmail],
+          status: 'Realizado'
+        })
+      ]);
+    } catch (err) {
+      console.error('Falha ao persistir horas de treinamento:', err);
+    }
+
     setLogHoursModalOpen(false);
     setTrainingTopic('Mapeamento de Fluxo de Valor (VSM) Avançado');
   };

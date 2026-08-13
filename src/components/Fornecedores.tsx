@@ -45,7 +45,7 @@ export const Fornecedores: React.FC<FornecedoresProps> = ({ onAddLog, personaliz
     return import.meta.env.VITE_DEMO_MODE === 'true' ? INITIAL_FORNECEDORES : [];
   });
 
-  // Carregar os fornecedores reais do Banco de Dados via SupplierRepository na montagem
+  // Carregar os fornecedores reais do Banco de Dados via SupplierRepository na montagem e manter sincronizado
   useEffect(() => {
     const fetchSuppliers = async () => {
       try {
@@ -58,6 +58,14 @@ export const Fornecedores: React.FC<FornecedoresProps> = ({ onAddLog, personaliz
       }
     };
     fetchSuppliers();
+
+    const unsub = SupplierRepository.subscribe((items) => {
+      if (Array.isArray(items)) {
+        setFornecedores(items);
+      }
+    });
+
+    return () => unsub();
   }, []);
 
   // Estados de busca, filtros e modais

@@ -5,8 +5,14 @@
 
 import React, { useState, useEffect } from 'react';
 import { Search, FileText, CheckSquare, AlertTriangle, Cpu, GraduationCap, X, ChevronRight } from 'lucide-react';
-import { Documento, Auditoria, NaoConformidade } from '../types';
+import { Documento, Auditoria, NaoConformidade, Equipamento, Treinamento } from '../types';
 import { INITIAL_DOCUMENTS, INITIAL_AUDITORIAS, INITIAL_NAO_CONFORMIDADES } from '../utils/mockData';
+import { DocumentRepository } from '../services/database/repositories/document.repository';
+import { AuditRepository } from '../services/database/repositories/audit.repository';
+import { NCRepository } from '../services/database/repositories/nc.repository';
+import { EquipmentRepository } from '../services/database/repositories/equipment.repository';
+import { TrainingRepository } from '../services/database/repositories/training.repository';
+import { SystemSettingsRepository } from '../services/database/repositories/systemSettings.repository';
 
 interface SearchGlobalProps {
   isOpen: boolean;
@@ -16,6 +22,12 @@ interface SearchGlobalProps {
 
 export const SearchGlobal: React.FC<SearchGlobalProps> = ({ isOpen, onClose, onSelectDocument }) => {
   const [query, setQuery] = useState('');
+  const [liveDocs, setLiveDocs] = useState<Documento[]>(INITIAL_DOCUMENTS);
+  const [liveAudits, setLiveAudits] = useState<Auditoria[]>(INITIAL_AUDITORIAS);
+  const [liveNCs, setLiveNCs] = useState<NaoConformidade[]>(INITIAL_NAO_CONFORMIDADES);
+  const [liveEquips, setLiveEquips] = useState<Equipamento[]>([]);
+  const [liveTrainings, setLiveTrainings] = useState<Treinamento[]>([]);
+
   const [docResults, setDocResults] = useState<Documento[]>([]);
   const [auditResults, setAuditResults] = useState<Auditoria[]>([]);
   const [ncResults, setNcResults] = useState<NaoConformidade[]>([]);
@@ -31,30 +43,41 @@ export const SearchGlobal: React.FC<SearchGlobalProps> = ({ isOpen, onClose, onS
     return null;
   });
 
-  // Re-fetch on open
+  // Assinaturas em tempo real via Firestore
   useEffect(() => {
-    if (isOpen) {
-      const saved = localStorage.getItem('sgq_vickytex_personalizacao');
-      if (saved) {
-        try {
-          setPersonalizacao(JSON.parse(saved));
-        } catch (e) {}
+    const unsubDocs = DocumentRepository.subscribe((items) => {
+      if (Array.isArray(items) && items.length > 0) setLiveDocs(items);
+    });
+    const unsubAudits = AuditRepository.subscribe((items) => {
+      if (Array.isArray(items) && items.length > 0) setLiveAudits(items);
+    });
+    const unsubNCs = NCRepository.subscribe((items) => {
+      if (Array.isArray(items) && items.length > 0) setLiveNCs(items);
+    });
+    const unsubEquips = EquipmentRepository.subscribe((items) => {
+      if (Array.isArray(items)) setLiveEquips(items);
+    });
+    const unsubTrainings = TrainingRepository.subscribe((items) => {
+      if (Array.isArray(items)) setLiveTrainings(items);
+    });
+    const unsubSettings = SystemSettingsRepository.subscribe((records) => {
+      const pDoc = records.find(r => r.id === 'sgq_vickytex_personalizacao');
+      if (pDoc && pDoc.data) {
+        setPersonalizacao(pDoc.data);
       }
-    }
-  }, [isOpen]);
+    });
 
-  // Carrossel/Equipamentos simulados adicionais para a Pesquisa Global solicitada ("POP, FOR, MAN, IT, LIST, Auditorias, NC, Planos de ação, Equipamentos, Treinamentos")
-  const MOCK_EQUIPAMENTOS = [
-    { id: 'EQP-COR-001', titulo: 'Enfestadeira Industrial Semiautomática Gerber', tipo: 'Equipamento', setor: 'Corte' },
-    { id: 'EQP-COS-004', titulo: 'Máquina Reta Eletrônica Brother S-7250A', tipo: 'Equipamento', setor: 'Costura' },
-    { id: 'EQP-EST-002', titulo: 'Secador Estufa Flash Cure Serigráfico', tipo: 'Equipamento', setor: 'Estamparia' }
-  ];
+    return () => {
+      unsubDocs();
+      unsubAudits();
+      unsubNCs();
+      unsubEquips();
+      unsubTrainings();
+      unsubSettings();
+    };
+  }, []);
 
-  const MOCK_TREINAMENTOS = [
-    { id: 'TRN-COR-26', titulo: 'Treinamento de Segurança em Faca de Disco e Fita', tipo: 'Treinamento', setor: 'Corte' },
-    { id: 'TRN-QLD-01', titulo: 'Treinamento ISO 9001:2015 Introdução à Lista Mestra', tipo: 'Treinamento', setor: 'Qualidade' }
-  ];
-
+  // Filtragem Reativa de Dados
   useEffect(() => {
     if (!query.trim()) {
       setDocResults([]);
@@ -67,47 +90,47 @@ export const SearchGlobal: React.FC<SearchGlobalProps> = ({ isOpen, onClose, onS
     const lower = query.toLowerCase();
 
     // 1. Filtrar Documentos
-    const docs = INITIAL_DOCUMENTS.filter(
+    const docs = liveDocs.filter(
       (d) =>
-        d.codigo.toLowerCase().includes(lower) ||
-        d.titulo.toLowerCase().includes(lower) ||
-        d.objetivo.toLowerCase().includes(lower) ||
-        d.setor.toLowerCase().includes(lower) ||
-        d.tipo.toLowerCase().includes(lower)
+        (d.codigo || '').toLowerCase().includes(lower) ||
+        (d.titulo || '').toLowerCase().includes(lower) ||
+        (d.objetivo || '').toLowerCase().includes(lower) ||
+        (d.setor || '').toLowerCase().includes(lower) ||
+        (d.tipo || '').toLowerCase().includes(lower)
     );
     setDocResults(docs);
 
     // 2. Filtrar Auditorias
-    const audits = INITIAL_AUDITORIAS.filter(
+    const audits = liveAudits.filter(
       (a) =>
-        a.codigo.toLowerCase().includes(lower) ||
-        a.titulo.toLowerCase().includes(lower) ||
-        a.auditor.toLowerCase().includes(lower) ||
-        a.setor.toLowerCase().includes(lower)
+        (a.codigo || '').toLowerCase().includes(lower) ||
+        (a.titulo || '').toLowerCase().includes(lower) ||
+        (a.auditor || '').toLowerCase().includes(lower) ||
+        (a.setor || '').toLowerCase().includes(lower)
     );
     setAuditResults(audits);
 
     // 3. Filtrar Não Conformidades
-    const ncs = INITIAL_NAO_CONFORMIDADES.filter(
+    const ncs = liveNCs.filter(
       (n) =>
-        n.codigo.toLowerCase().includes(lower) ||
-        n.titulo.toLowerCase().includes(lower) ||
-        n.descricao.toLowerCase().includes(lower) ||
-        n.setor.toLowerCase().includes(lower)
+        (n.codigo || '').toLowerCase().includes(lower) ||
+        (n.titulo || '').toLowerCase().includes(lower) ||
+        (n.descricao || '').toLowerCase().includes(lower) ||
+        (n.setor || '').toLowerCase().includes(lower)
     );
     setNcResults(ncs);
 
     // 4. Outros (Equipamentos e Treinamentos)
     const others = [
-      ...MOCK_EQUIPAMENTOS.filter(
-        (e) => e.id.toLowerCase().includes(lower) || e.titulo.toLowerCase().includes(lower) || e.setor.toLowerCase().includes(lower)
-      ),
-      ...MOCK_TREINAMENTOS.filter(
-        (t) => t.id.toLowerCase().includes(lower) || t.titulo.toLowerCase().includes(lower) || t.setor.toLowerCase().includes(lower)
-      )
+      ...liveEquips.filter(
+        (e) => (e.tag || '').toLowerCase().includes(lower) || (e.nome || '').toLowerCase().includes(lower) || (e.setor || '').toLowerCase().includes(lower)
+      ).map(e => ({ id: e.tag || e.id, titulo: e.nome, tipo: 'Equipamento', setor: e.setor })),
+      ...liveTrainings.filter(
+        (t) => (t.codigo || '').toLowerCase().includes(lower) || (t.titulo || '').toLowerCase().includes(lower) || (t.setor || '').toLowerCase().includes(lower)
+      ).map(t => ({ id: t.codigo || t.id, titulo: t.titulo, tipo: 'Treinamento', setor: t.setor }))
     ];
     setOtherResults(others);
-  }, [query]);
+  }, [query, liveDocs, liveAudits, liveNCs, liveEquips, liveTrainings]);
 
   // Fechar com tecla ESC
   useEffect(() => {
