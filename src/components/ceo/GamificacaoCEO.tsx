@@ -35,7 +35,6 @@ import { ConfirmModal } from '../common/ConfirmModal';
 import { SystemSettingsRepository } from '../../services/database/repositories/systemSettings.repository';
 import { TrainingRepository } from '../../services/database/repositories/training.repository';
 import { UserRepository } from '../../services/database/repositories/user.repository';
-import { INITIAL_USER_ACCOUNTS } from '../../utils/mockData';
 
 interface GamificacaoCEOProps {
   projects: ProjetoCEO[];
@@ -68,11 +67,7 @@ export const GamificacaoCEO: React.FC<GamificacaoCEOProps> = ({ projects, sugges
   const [trainingTopic, setTrainingTopic] = useState('Fundamentos de Lean Manufacturing e Mapeamento VSM');
   const [loggedTrainings, setLoggedTrainings] = useState<any[]>(() => {
     const saved = localStorage.getItem('sgq_vickytex_ceo_training_logs');
-    return saved ? JSON.parse(saved) : [
-      { id: '1', nome: 'Mariana Santos', email: 'supervisor.costura@vickytex.com.br', horas: 16, tema: 'Certificação Green Belt Six Sigma', data: '2026-06-15' },
-      { id: '2', nome: 'Carlos Oliveira', email: 'colaborador.costura@vickytex.com.br', horas: 8, tema: 'Práticas de SMED e Troca Rápida', data: '2026-05-20' },
-      { id: '3', nome: 'Ana Costa', email: 'qualidade@vickytex.com.br', horas: 24, tema: 'Liderança Kaizen e Ferramentas de Causa Raiz', data: '2026-07-01' }
-    ];
+    return saved ? JSON.parse(saved) : [];
   });
 
   // Manual adjustments state for Leaderboard Maintenance
@@ -163,9 +158,8 @@ export const GamificacaoCEO: React.FC<GamificacaoCEOProps> = ({ projects, sugges
         if (!norm) return null;
 
         if (!userMap.has(norm)) {
-          // Buscar nome correspondente em dbUsers ou INITIAL_USER_ACCOUNTS
-          const foundAccount = dbUsers.find(u => normalizeEmail(u.email) === norm) || 
-                               INITIAL_USER_ACCOUNTS.find(u => normalizeEmail(u.email) === norm);
+          // Buscar nome correspondente em dbUsers
+          const foundAccount = dbUsers.find(u => normalizeEmail(u.email) === norm);
           
           const resolvedName = foundAccount?.name || defaultName || emailInput.split('@')[0];
           userMap.set(norm, {
@@ -184,29 +178,16 @@ export const GamificacaoCEO: React.FC<GamificacaoCEOProps> = ({ projects, sugges
         return userMap.get(norm)!;
       };
 
-      // 1. Pre-seed users from initial accounts and database accounts
-      const allAccounts = dbUsers.length > 0 ? dbUsers : INITIAL_USER_ACCOUNTS;
-      allAccounts.forEach(acc => {
-        if (acc.email) {
-          getOrCreateUser(acc.email, acc.name);
-        }
-      });
+      // 1. Incluir exclusivamente os usuários cadastrados no banco de dados (dbUsers)
+      if (dbUsers.length > 0) {
+        dbUsers.forEach(acc => {
+          if (acc.email) {
+            getOrCreateUser(acc.email, acc.name);
+          }
+        });
+      }
 
-      // Pre-seed known users from collaborations or logged trainings
-      const seedUsers = [
-        { email: 'supervisor.costura@vickytex.com.br', nome: 'Mariana Santos' },
-        { email: 'colaborador.costura@vickytex.com.br', nome: 'Carlos Oliveira' },
-        { email: 'qualidade@vickytex.com.br', nome: 'Ana Costa (Qualidade)' },
-        { email: 'colaborador.corte@vickytex.com.br', nome: 'Roberto Silva' },
-        { email: 'gerencia@vickytex.com.br', nome: 'Diretoria Executiva' },
-        { email: 'sgq@vickytex.com.br', nome: 'Julia Vidal Scremin Alves' }
-      ];
-
-      seedUsers.forEach(su => {
-        getOrCreateUser(su.email, su.nome);
-      });
-
-      // Add active user if not already seeded
+      // Adicionar o usuário logado se ainda não estiver na lista
       if (user && user.email) {
         getOrCreateUser(user.email, user.name || user.email.split('@')[0]);
       }
