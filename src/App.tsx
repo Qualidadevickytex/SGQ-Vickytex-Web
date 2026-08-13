@@ -264,7 +264,6 @@ function AppContent() {
     setAuditorias5s([]);
     setEquipamentos([]);
     setColaboradores([]);
-    setTreinamentos([]);
     setRegistros([]);
     setSuppliers([]);
     setLogs([]);

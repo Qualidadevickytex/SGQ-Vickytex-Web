@@ -100,14 +100,14 @@ export const Treinamentos: React.FC<TreinamentosProps> = ({
   // Persistência local simulada das competências e treinamentos
   const [treinamentos, setTreinamentos] = useState<Treinamento[]>(() => {
     const saved = localStorage.getItem('sgq_vickytex_trainings') || localStorage.getItem('sgq_vickytex_treinamentos');
-    return saved ? JSON.parse(saved) : INITIAL_TREINAMENTOS;
+    return saved ? JSON.parse(saved) : [];
   });
 
   React.useEffect(() => {
     const fetchTrainings = async () => {
       try {
         const res = await TrainingRepository.findAll();
-        if (res.success && res.data && res.data.length > 0) {
+        if (res.success && Array.isArray(res.data)) {
           setTreinamentos(res.data);
         }
       } catch (err) {
@@ -115,6 +115,11 @@ export const Treinamentos: React.FC<TreinamentosProps> = ({
       }
     };
     fetchTrainings();
+
+    const unsub = TrainingRepository.subscribe((items) => {
+      setTreinamentos(items);
+    });
+    return () => unsub();
   }, []);
 
   const saveColaboradores = (newColabs: ColaboradorCompetencia[]) => {

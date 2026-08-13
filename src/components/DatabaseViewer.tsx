@@ -221,7 +221,7 @@ export const DatabaseViewer: React.FC<DatabaseViewerProps> = ({
       }
       case 'fornecedores': {
         const saved = localStorage.getItem('sgq_vickytex_fornecedores');
-        return saved ? JSON.parse(saved) : INITIAL_FORNECEDORES;
+        return saved ? JSON.parse(saved) : [];
       }
       default:
         return [];
@@ -252,7 +252,7 @@ export const DatabaseViewer: React.FC<DatabaseViewerProps> = ({
     }
     if (collection === 'fornecedores') {
       const saved = localStorage.getItem('sgq_vickytex_fornecedores');
-      return saved ? JSON.parse(saved).length : INITIAL_FORNECEDORES.length;
+      return saved ? JSON.parse(saved).length : 0;
     }
     return 0;
   };
