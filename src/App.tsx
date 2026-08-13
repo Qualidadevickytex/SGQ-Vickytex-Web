@@ -28,7 +28,7 @@ import { Indicadores } from './components/Indicadores';
 import { CentroExcelencia } from './components/CentroExcelencia';
 import { CEOProvider } from './contexts/CEOContext';
 
-import { Documento, ActivityLog, Auditoria, NaoConformidade, PlanoAcao, RiscoOportunidade, Auditoria5S, UserAccount, RolePermission, Equipamento, ColaboradorCompetencia, Registro, Fornecedor } from './types';
+import { Documento, ActivityLog, Auditoria, NaoConformidade, PlanoAcao, RiscoOportunidade, Auditoria5S, UserAccount, RolePermission, Equipamento, ColaboradorCompetencia, Registro, Fornecedor, Treinamento } from './types';
 import { INITIAL_DOCUMENTS, INITIAL_LOGS, INITIAL_AUDITORIAS, INITIAL_NAO_CONFORMIDADES, INITIAL_PLANOS_ACAO, INITIAL_RISCOS, INITIAL_5S_AUDITS, INITIAL_USER_ACCOUNTS, INITIAL_ROLE_PERMISSIONS, INITIAL_FORNECEDORES, getPersonalizacaoGeral, PersonalizacaoGeral } from './utils/mockData';
 import { DocumentRepository } from './services/database/repositories/document.repository';
 import { AuditRepository } from './services/database/repositories/audit.repository';
@@ -43,6 +43,7 @@ import { RecordRepository } from './services/database/repositories/record.reposi
 import { SupplierRepository } from './services/database/repositories/supplier.repository';
 import { RolePermissionsRepository } from './services/firebase/repositories/rolePermission.repository';
 import { SystemSettingsRepository } from './services/database/repositories/systemSettings.repository';
+import { TrainingRepository } from './services/database/repositories/training.repository';
 import { AuditService } from './services/audit.service';
 import { clearCollectionDocs } from './firebase/firestore';
 
@@ -72,6 +73,7 @@ function AppContent() {
   const [colaboradores, setColaboradores] = useState<ColaboradorCompetencia[]>(() => IS_DEMO_MODE ? INITIAL_COLABORADORES : []);
   const [registros, setRegistros] = useState<Registro[]>(() => IS_DEMO_MODE ? INITIAL_REGISTROS : []);
   const [suppliers, setSuppliers] = useState<Fornecedor[]>(() => IS_DEMO_MODE ? INITIAL_FORNECEDORES : []);
+  const [trainings, setTrainings] = useState<Treinamento[]>([]);
 
   const [selectedDocId, setSelectedDocId] = useState<string | undefined>(undefined);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
@@ -90,7 +92,7 @@ function AppContent() {
         const [
           docRes, auditRes, fiveSRes, userRes,
           ncRes, planoRes, riscoRes, equipRes,
-          colabRes, regRes, supRes, permRes, logData
+          colabRes, regRes, supRes, permRes, trainRes, logData
         ] = await Promise.all([
           DocumentRepository.findAll(),
           AuditRepository.findAll(),
@@ -104,6 +106,7 @@ function AppContent() {
           RecordRepository.findAll(),
           SupplierRepository.findAll(),
           RolePermissionsRepository.findAll(),
+          TrainingRepository.findAll(),
           AuditService.getLogs()
         ]);
         
@@ -120,6 +123,7 @@ function AppContent() {
         if (colabRes.success && Array.isArray(colabRes.data)) setColaboradores(colabRes.data);
         if (regRes.success && Array.isArray(regRes.data)) setRegistros(regRes.data);
         if (supRes.success && Array.isArray(supRes.data)) setSuppliers(supRes.data);
+        if (trainRes.success && Array.isArray(trainRes.data)) setTrainings(trainRes.data);
         if (permRes.success && Array.isArray(permRes.data)) {
           setPermissions(permRes.data as any);
         }
@@ -142,6 +146,7 @@ function AppContent() {
     const unsubColab = CollaboratorRepository.subscribe((items) => setColaboradores(items));
     const unsubReg = RecordRepository.subscribe((items) => setRegistros(items));
     const unsubSup = SupplierRepository.subscribe((items) => setSuppliers(items));
+    const unsubTrain = TrainingRepository.subscribe((items) => setTrainings(items));
     const unsubPerms = RolePermissionsRepository.subscribe((items) => setPermissions(items as any));
     const unsubSettings = SystemSettingsRepository.subscribe((records) => {
       const pDoc = records.find(r => r.id === 'sgq_vickytex_personalizacao');
@@ -162,6 +167,7 @@ function AppContent() {
       unsubColab();
       unsubReg();
       unsubSup();
+      unsubTrain();
       unsubPerms();
       unsubSettings();
     };
@@ -264,6 +270,7 @@ function AppContent() {
     setAuditorias5s([]);
     setEquipamentos([]);
     setColaboradores([]);
+    setTrainings([]);
     setRegistros([]);
     setSuppliers([]);
     setLogs([]);
@@ -571,6 +578,7 @@ function AppContent() {
           colaboradores={colaboradores}
           registros={registros}
           fornecedores={suppliers}
+          treinamentos={trainings}
           onNavigateToDocs={() => setActiveSection('documentos')}
           onSelectDocument={handleSelectDocument}
           onNavigateToSection={setActiveSection}

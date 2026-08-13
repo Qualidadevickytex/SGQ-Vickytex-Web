@@ -1,4 +1,4 @@
-# Portal de Governança Documental e Engenharia — SGQ WEB VICKYTEX (v1.2.1)
+# Portal de Governança Documental e Engenharia — SGQ WEB VICKYTEX (v1.2.2)
 
 > 🛡️ **BEM-VINDO AO ECOSSISTEMA TÉCNICO DO SGQ WEB VICKYTEX**
 > Este portal é o ponto de entrada obrigatório para desenvolvedores, arquitetos, auditores e agentes de IA. Toda alteração no código ou infraestrutura deve manter este acervo documental 100% alinhado e sincronizado.

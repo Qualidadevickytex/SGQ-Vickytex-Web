@@ -5,6 +5,25 @@
 
 ---
 
+## [v1.2.2] - 2026-08-13 (Calendário SGQ 100% Dinâmico, Blindagem contra Tradução no DOM e Limpeza Atômica de Dados)
+
+### 🚀 Destaques da Release v1.2.2
+- **Calendário SGQ e Avaliações de Treinamento 100% Dinâmicos**:
+  - Removidos todos os eventos estáticos (`MOCK_EVENTS` / `CALENDAR_EVENTS` com dados de demonstração de Julho de 2026).
+  - O Calendário do Dashboard e dos Treinamentos agora lê em tempo real os registros reais do banco de dados (Auditorias, Treinamentos, Calibrações e Planos de Ação).
+  - Adicionado componente de Estado Vazio (*Empty State*) quando não houver agendamentos cadastrados.
+  - Removido o botão estático de integração externa com Google Calendar no widget do Dashboard.
+- **Blindagem do DOM contra Extensões de Tradução Automática**:
+  - Adicionadas as diretivas `lang="pt-BR"`, `translate="no"`, `class="notranslate"` e a meta tag `<meta name="google" content="notranslate" />` no `index.html`.
+  - Essa proteção elimina o erro crítico de execução `NotFoundError: Failed to execute 'removeChild' on 'Node'` causado pela tradução automática do Google Chrome que modificava os nós de texto do React.
+- **Aprimoramento da Limpeza Global de Dados ("Zerar Banco de Dados")**:
+  - Correção no manipulador `handleClearAllData` em `App.tsx` para garantir a exclusão atômica de documentos em todas as coleções remotas do Firestore e limpeza integral das chaves do `localStorage`.
+  - As inscrições em tempo real (`onSnapshot`) propagam o estado limpo instantaneamente para todas as telas sem necessidade de recarregar a página.
+- **Sincronização Completa da Suíte de Documentação**:
+  - Atualizados todos os manuais, matriz de rastreabilidade, arquitetura e guias de implantação para a versão v1.2.2.
+
+---
+
 ## [v1.2.1] - 2026-08-13 (Persistência Total em Tempo Real no Firestore, Suíte de 21 Repositórios e Redesign da Gamificação CEO)
 
 ### 🚀 Destaques da Release v1.2.1

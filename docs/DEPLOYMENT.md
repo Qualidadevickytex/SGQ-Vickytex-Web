@@ -1,4 +1,4 @@
-# Processo de Implantação e Deploy — SGQ WEB VICKYTEX (v1.2.0)
+# Processo de Implantação e Deploy — SGQ WEB VICKYTEX (v1.2.2)
 
 > 🟢 **FONTE OFICIAL DA VERDADE (SSOT) - DEPLOY E INFRAESTRUTURA**
 > Este documento é a referência única para build, pipelines de publicação, variáveis de ambiente, Firebase e hospedagem do SGQ Web Vickytex. Para a visão geral do sistema, consulte [`/docs/README.md`](/docs/README.md).

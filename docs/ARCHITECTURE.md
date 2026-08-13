@@ -1,4 +1,4 @@
-# Arquitetura Técnica, Design System e Infraestrutura — SGQ WEB VICKYTEX (v1.2.1)
+# Arquitetura Técnica, Design System e Infraestrutura — SGQ WEB VICKYTEX (v1.2.2)
 
 > 🟢 **FONTE OFICIAL DA VERDADE (SSOT) - ARQUITETURA E DESIGN SYSTEM**
 > Este documento é a referência única para padrões arquiteturais, hierarquia de componentes e design system.
@@ -15,7 +15,7 @@ O **SGQ Web Vickytex** segue uma estrutura de desenvolvimento modular (Screaming
 ├── assets/         # Recursos estáticos (Logotipos, vetores)
 ├── components/     # Componentes visuais atômicos e moleculares reaproveitáveis
 │   ├── ui/         # Elementos de UI puros (Bordas, botões customizados)
-│   ├── dashboard/  # Componentes internos da tela principal
+│   ├── dashboard/  # Componentes internos da tela principal e Calendário SGQ
 │   ├── documentos/ # Componentes específicos da lista mestra e revisões
 │   ├── ceo/        # Painel Executivo CEO, A3, Ideias e Gamificação
 │   └── fiveS/      # Auditorias e Dashboard do Programa 5S
@@ -34,9 +34,10 @@ O sistema é construído como uma aplicação em **React 18** compilada pelo **V
 As interações com o banco de dados utilizam uma suíte de 21 repositórios fortemente tipados (`BaseRepository<T>`), oferecendo:
 1. **Sincronização em Nuvem em Tempo Real (`onSnapshot`)**: Persistência global instantânea em todas as telas e estações da fábrica via Firestore.
 2. **Resiliência e Fallback Offline**: Armazenamento paralelo transparente no `localStorage` do navegador para operações ininterruptas mesmo sem internet.
-3. **Mecanismo Anti-Duplicação**: Desduplicação automática por `id` e atualização atômica de conjuntos de dados.
-4. **Persistência de Configurações do Sistema (`/system_settings`)**: Armazenamento em nuvem para personalização visual, fluxos parametrizados, apontamento do Google Drive e gamificação.
-5. **Painel Dinâmico "Integração com a Nuvem"**: Permite aos administradores colar ou alterar a configuração do Firebase (`firebaseConfig`) diretamente pela interface sem recompilação do código.
+3. **Mecanismo Anti-Duplicação e Estado Limpo**: Desduplicação automática por `id`, atualização atômica de conjuntos de dados e suporte a rotina completa de zeramento de base.
+4. **Blindagem do DOM contra Tradução Automática**: Marcação `translate="no"` e meta tag `<meta name="google" content="notranslate" />` que impede extensões e navegadores de corromper os nós de texto do Virtual DOM do React.
+5. **Persistência de Configurações do Sistema (`/system_settings`)**: Armazenamento em nuvem para personalização visual, fluxos parametrizados, apontamento do Google Drive e gamificação.
+6. **Painel Dinâmico "Integração com a Nuvem"**: Permite aos administradores colar ou alterar a configuração do Firebase (`firebaseConfig`) diretamente pela interface sem recompilação do código.
 
 ---
 

@@ -99,6 +99,7 @@ interface DashboardProps {
   colaboradores?: ColaboradorCompetencia[];
   registros?: any[];
   fornecedores?: any[];
+  treinamentos?: any[];
   onNavigateToDocs: () => void;
   onSelectDocument: (docId: string) => void;
   onNavigateToSection?: (section: any) => void;
@@ -117,6 +118,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
   colaboradores,
   registros,
   fornecedores,
+  treinamentos,
   onNavigateToDocs,
   onSelectDocument,
   onNavigateToSection,
@@ -192,14 +194,51 @@ export const Dashboard: React.FC<DashboardProps> = ({
   const sectors = Object.keys(sectorCount);
   const maxCount = Math.max(...(Object.values(sectorCount) as number[]), 1);
 
-  // Agenda / Calendário interativo de Julho 2026
-  const CALENDAR_EVENTS = [
-    { dia: 1, tipo: 'auditoria', titulo: 'AUD-2026-003: Calibração Serigrafia (Realizada)' },
-    { dia: 5, tipo: 'treinamento', titulo: 'Treinamento POP-ACA-002: Passadoria Brim' },
-    { dia: 15, tipo: 'auditoria', titulo: 'AUD-2026-001: Processo no Corte' },
-    { dia: 22, tipo: 'auditoria', titulo: 'AUD-2026-002: Cláusula 8.5 Costura' },
-    { dia: 28, tipo: 'treinamento', titulo: 'Treinamento Geral: Gestão de Registros da Qualidade' }
-  ];
+  // Agenda / Calendário dinâmico a partir dos dados reais do SGQ
+  const calendarEvents = React.useMemo(() => {
+    const list: Array<{ dia: number; mes: number; ano: number; tipo: 'auditoria' | 'treinamento'; titulo: string; dataFormatada: string }> = [];
+    
+    (audits || []).forEach(a => {
+      const dataStr = a.dataPlanejada || (a as any).dataAuditoria;
+      if (dataStr) {
+        const parts = dataStr.split('-');
+        if (parts.length === 3) {
+          const ano = parseInt(parts[0], 10);
+          const mes = parseInt(parts[1], 10);
+          const dia = parseInt(parts[2], 10);
+          list.push({
+            dia,
+            mes,
+            ano,
+            tipo: 'auditoria',
+            titulo: `${a.codigo || 'AUD'}: ${a.titulo}`,
+            dataFormatada: `${String(dia).padStart(2, '0')}/${String(mes).padStart(2, '0')}/${ano}`
+          });
+        }
+      }
+    });
+
+    (treinamentos || []).forEach((t: any) => {
+      if (t.dataTreinamento) {
+        const parts = t.dataTreinamento.split('-');
+        if (parts.length === 3) {
+          const ano = parseInt(parts[0], 10);
+          const mes = parseInt(parts[1], 10);
+          const dia = parseInt(parts[2], 10);
+          list.push({
+            dia,
+            mes,
+            ano,
+            tipo: 'treinamento',
+            titulo: `${t.codigo || 'TRE'}: ${t.titulo}`,
+            dataFormatada: `${String(dia).padStart(2, '0')}/${String(mes).padStart(2, '0')}/${ano}`
+          });
+        }
+      }
+    });
+
+    return list;
+  }, [audits, treinamentos]);
 
   // 1. Evolução das Notas das Auditorias 5S (Recharts Line/Area Chart)
   const sorted5s = [...finished5s].sort((a, b) => a.dataAuditoria.localeCompare(b.dataAuditoria));
@@ -646,8 +685,8 @@ export const Dashboard: React.FC<DashboardProps> = ({
                 <CalendarIcon className="w-4 h-4 mr-2 text-blue-500" />
                 Calendário SGQ
               </h4>
-              <span className="text-xs font-semibold text-blue-600 dark:text-blue-400">
-                {selectedMonth}
+              <span className="text-xs font-semibold text-blue-600 dark:text-blue-400 capitalize">
+                {new Date().toLocaleString('pt-BR', { month: 'long', year: 'numeric' })}
               </span>
             </div>
 
@@ -656,9 +695,8 @@ export const Dashboard: React.FC<DashboardProps> = ({
               <span>D</span><span>S</span><span>T</span><span>Q</span><span>Q</span><span>S</span><span>S</span>
               {Array.from({ length: 31 }).map((_, idx) => {
                 const dia = idx + 1;
-                // Deixa o dia 9 (hoje) destacado
-                const isHoje = dia === 9;
-                const ev = CALENDAR_EVENTS.find(e => e.dia === dia);
+                const isHoje = dia === new Date().getDate();
+                const ev = calendarEvents.find(e => e.dia === dia);
                 
                 return (
                   <div 
@@ -679,26 +717,30 @@ export const Dashboard: React.FC<DashboardProps> = ({
             </div>
 
             {/* Lista Mapeada de Eventos Próximos */}
-            <div className="space-y-2 max-h-32 overflow-y-auto">
-              {CALENDAR_EVENTS.filter(e => e.dia >= 9).map((ev, idx) => (
-                <div key={idx} className="flex items-start space-x-2 p-1.5 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-md transition-colors text-left">
-                  <span className={`w-2 h-2 rounded-full mt-1.5 shrink-0 ${
-                    ev.tipo === 'auditoria' ? 'bg-emerald-500' : 'bg-blue-500'
-                  }`} />
-                  <div className="min-w-0">
-                    <p className="text-xs font-semibold text-slate-800 dark:text-slate-200 truncate">
-                      {ev.titulo}
-                    </p>
-                    <p className="text-[9px] text-slate-400">Dia {ev.dia} de Julho, 2026</p>
-                  </div>
+            <div className="space-y-2 max-h-36 overflow-y-auto">
+              {calendarEvents.length === 0 ? (
+                <div className="text-center py-6 border border-dashed border-slate-200 dark:border-slate-800 rounded-xl space-y-1">
+                  <CalendarIcon className="w-5 h-5 text-slate-300 dark:text-slate-700 mx-auto" />
+                  <p className="text-xs font-bold text-slate-500">Nenhum evento agendado</p>
+                  <p className="text-[10px] text-slate-400">Auditorias e treinamentos aparecerão aqui.</p>
                 </div>
-              ))}
+              ) : (
+                calendarEvents.map((ev, idx) => (
+                  <div key={idx} className="flex items-start space-x-2 p-1.5 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-md transition-colors text-left">
+                    <span className={`w-2 h-2 rounded-full mt-1.5 shrink-0 ${
+                      ev.tipo === 'auditoria' ? 'bg-emerald-500' : 'bg-blue-500'
+                    }`} />
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold text-slate-800 dark:text-slate-200 truncate">
+                        {ev.titulo}
+                      </p>
+                      <p className="text-[9px] text-slate-400">{ev.dataFormatada}</p>
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
           </div>
-
-          <button className="w-full text-center py-2 text-xs font-bold text-blue-600 dark:text-blue-400 hover:text-blue-700 hover:bg-blue-50 dark:hover:bg-blue-950/20 rounded-lg transition-colors border border-blue-100 dark:border-blue-900 mt-4">
-            Ver Cronograma Google Calendar
-          </button>
         </div>
 
       </div>

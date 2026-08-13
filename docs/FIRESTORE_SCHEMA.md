@@ -1,7 +1,7 @@
 # Especificação Oficial do Esquema de Banco de Dados — Firebase Firestore
 
 > 🟢 **SINGLE SOURCE OF TRUTH (SSOT) — CAMADA DE DADOS FIRESTORE**
-> Este documento é a única fonte oficial sobre a modelagem de dados no **Firebase Firestore** do **SGQ WEB VICKYTEX (v1.2.1)**.
+> Este documento é a única fonte oficial sobre a modelagem de dados no **Firebase Firestore** do **SGQ WEB VICKYTEX (v1.2.2)**.
 
 ---
 

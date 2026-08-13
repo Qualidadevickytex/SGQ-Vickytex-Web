@@ -1,4 +1,4 @@
-# Manual de Operação do Usuário — SGQ WEB VICKYTEX (v1.2.1)
+# Manual de Operação do Usuário — SGQ WEB VICKYTEX (v1.2.2)
 
 > 🟢 **FONTE OFICIAL DA VERDADE (SSOT) - OPERAÇÃO DO USUÁRIO**
 > Este manual é o guia passo a passo para colaboradores, supervisores, auditores, gestores e administradores da fábrica. Para o mapa da documentação técnica, consulte [`/docs/README.md`](/docs/README.md).
@@ -26,6 +26,7 @@ Ao fazer o login, você visualizará a central estratégica da qualidade, que in
   - **Em Revisão**: Documentos que estão sendo atualizados ou aguardam aprovação.
   - **Auditorias & Não Conformidades**: Indicadores de conformidade atualizados.
 - **Gráficos de Desempenho**: Divisão visual dos documentos por setor de produção (Corte, Costura, Estamparia, etc.) e tipo (Procedimentos, Formulários, Instruções).
+- **Calendário Integrado do SGQ**: Agenda dinâmica em tempo real que mapeia automaticamente as datas de auditorias agendadas, treinamentos da equipe e calibrações de instrumentos cadastradas no sistema. Se não houver eventos cadastrados para o período, o calendário exibirá um aviso amigável de agenda livre.
 - **Atividades Recentes**: Linha do tempo mostrando quem atualizou cada processo na empresa, facilitando a rastreabilidade exigida pelos auditores da ISO.
 
 ---
