@@ -195,19 +195,47 @@ export const GamificacaoCEO: React.FC<GamificacaoCEOProps> = ({ projects, sugges
         }
       }
 
-      // Localizador estrito: SOMENTE encontra usuários já cadastrados no userMap, NUNCA cria usuários fantasmas
+      // Localizador inteligente: SOMENTE encontra usuários cadastrados no userMap, NUNCA cria usuários fantasmas
       const findRegisteredUser = (input?: string) => {
         if (!input) return null;
-        const norm = normalizeEmail(input);
+        const rawInput = input.trim();
+        if (!rawInput) return null;
+
+        const norm = normalizeEmail(rawInput);
         if (userMap.has(norm)) return userMap.get(norm)!;
 
-        const lowerInput = input.trim().toLowerCase();
+        const lowerInput = rawInput.toLowerCase();
+
+        // 1. Match exato pelo prefixo do e-mail (ex: "qualidade" -> "qualidade@vickytex.com.br")
+        for (const [key, val] of userMap.entries()) {
+          const emailPrefix = key.split('@')[0].toLowerCase();
+          if (emailPrefix === lowerInput) return val;
+        }
+
+        // 2. Match exato por nome completo
         for (const val of userMap.values()) {
-          if (val.nome.toLowerCase() === lowerInput || 
-              (lowerInput.length > 3 && (val.nome.toLowerCase().includes(lowerInput) || lowerInput.includes(val.nome.toLowerCase())))) {
+          if (val.nome.trim().toLowerCase() === lowerInput) return val;
+        }
+
+        // 3. Match pelo primeiro nome (ex: "Rodrigo" -> "Rodrigo Berto")
+        for (const val of userMap.values()) {
+          const firstName = val.nome.trim().split(' ')[0].toLowerCase();
+          if (firstName && firstName.length >= 3 && firstName === lowerInput) {
             return val;
           }
         }
+
+        // 4. Match por contenção de nome ou e-mail (mínimo 3 caracteres para evitar falsos positivos)
+        if (lowerInput.length >= 3) {
+          for (const val of userMap.values()) {
+            const valName = val.nome.toLowerCase();
+            const valEmail = val.email.toLowerCase();
+            if (valName.includes(lowerInput) || lowerInput.includes(valName) || valEmail.includes(lowerInput)) {
+              return val;
+            }
+          }
+        }
+
         return null;
       };
 
@@ -566,10 +594,31 @@ export const GamificacaoCEO: React.FC<GamificacaoCEOProps> = ({ projects, sugges
         {/* LEADERBOARD LEADING COMPONENT */}
         <div className="lg:col-span-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-5 shadow-xs flex flex-col justify-between">
           <div>
-            <h3 className="text-xs font-black uppercase text-slate-400 dark:text-slate-500 tracking-wider mb-4 flex items-center space-x-1.5">
-              <Star className="w-4 h-4 text-yellow-500" />
-              <span>Leaderboard de Colaboradores (Melhoria Contínua)</span>
-            </h3>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-xs font-black uppercase text-slate-400 dark:text-slate-500 tracking-wider flex items-center space-x-1.5">
+                <Star className="w-4 h-4 text-yellow-500" />
+                <span>Leaderboard de Colaboradores (Melhoria Contínua)</span>
+              </h3>
+              {isScoresZeroed && (
+                <span className="px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase bg-rose-500/10 text-rose-600 border border-rose-500/20">
+                  Pontuações Zeradas (Novo Ciclo)
+                </span>
+              )}
+            </div>
+
+            {isScoresZeroed && (
+              <div className="mb-3.5 p-3 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-between gap-3 text-xs text-amber-800 dark:text-amber-300">
+                <span className="text-[11px] font-medium">
+                  As pontuações históricas estão pausadas. Deseja reativar o cômputo automático de projetos e sugestões?
+                </span>
+                <button
+                  onClick={handleRestoreScores}
+                  className="px-2.5 py-1 bg-amber-600 hover:bg-amber-500 text-white font-bold rounded-lg text-[10px] shrink-0 uppercase tracking-wider"
+                >
+                  Reativar Cálculo
+                </button>
+              </div>
+            )}
 
             <div className="space-y-2.5">
               {rankingList.map((rank, index) => {
@@ -665,13 +714,15 @@ export const GamificacaoCEO: React.FC<GamificacaoCEOProps> = ({ projects, sugges
           </div>
 
           <div className="p-4 bg-indigo-500/5 dark:bg-indigo-500/10 border border-indigo-500/10 rounded-2xl space-y-2">
-            <span className="text-[10px] font-black uppercase text-indigo-600 dark:text-indigo-400 block">Como Pontuar</span>
+            <span className="text-[10px] font-black uppercase text-indigo-600 dark:text-indigo-400 block">Como Pontuar (Regras Ativas)</span>
             <ul className="text-[10px] text-slate-500 dark:text-slate-400 space-y-1.5 list-disc pl-3">
-              <li>Lançar horas de capacitação Lean: <b>+5 pts/hora</b></li>
+              <li>Capacitação Lean / Treinamento: <b>+5 pts/hora</b></li>
               <li>Submeter sugestão ao banco de ideias: <b>+15 pts</b></li>
-              <li>Ter uma sugestão de melhoria aprovada: <b>+50 pts</b></li>
+              <li>Sugestão de melhoria aprovada / implantada: <b>+50 pts</b></li>
+              <li>Liderar projeto ativo (Planejado / Execução): <b>+50 pts</b></li>
               <li>Fazer parte da equipe de um projeto: <b>+30 pts</b></li>
               <li>Concluir etapas/tollgates da metodologia: <b>+30 pts/fase</b></li>
+              <li>Concluir tarefa do cronograma de melhoria: <b>+15 pts/tarefa</b></li>
               <li>Finalizar com sucesso um projeto CEO: <b>+200 pts</b></li>
             </ul>
           </div>

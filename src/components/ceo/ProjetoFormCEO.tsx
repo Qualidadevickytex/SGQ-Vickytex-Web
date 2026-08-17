@@ -19,7 +19,9 @@ import {
 import { ProjetoCEO, MetodologiaCEO, StatusProjetoCEO } from '../../types/ceo';
 import { SectorType } from '../../types/department';
 import { Indicator } from '../../types/indicator';
-
+import { UserAccount } from '../../types/user';
+import { useAuth } from '../../contexts/AuthContext';
+import { UserRepository } from '../../services/database/repositories/user.repository';
 import { SystemSettingsRepository } from '../../services/database/repositories/systemSettings.repository';
 
 interface ProjetoFormCEOProps {
@@ -37,10 +39,22 @@ export const ProjetoFormCEO: React.FC<ProjetoFormCEOProps> = ({
   onClose,
   sectors
 }) => {
+  const { user } = useAuth();
+  const [registeredUsers, setRegisteredUsers] = useState<UserAccount[]>([]);
+
+  useEffect(() => {
+    const unsub = UserRepository.subscribe((items) => {
+      if (Array.isArray(items)) {
+        setRegisteredUsers(items);
+      }
+    });
+    return () => unsub();
+  }, []);
+
   const [titulo, setTitulo] = useState(project?.titulo || '');
   const [descricao, setDescricao] = useState(project?.descricao || '');
   const [setor, setSetor] = useState<SectorType>(project?.setor || 'Costura');
-  const [lider, setLider] = useState(project?.lider || 'supervisor.costura@vickytex.com.br');
+  const [lider, setLider] = useState(project?.lider || user?.email || 'qualidade@vickytex.com.br');
   const [patrocinador, setPatrocinador] = useState(project?.patrocinador || 'qualidade@vickytex.com.br');
   const [status, setStatus] = useState<StatusProjetoCEO>(project?.status || 'Planejado');
   const [metodologia, setMetodologia] = useState<MetodologiaCEO>(project?.metodologia || 'PDCA');
@@ -290,10 +304,16 @@ export const ProjetoFormCEO: React.FC<ProjetoFormCEOProps> = ({
                 type="email" 
                 value={lider}
                 onChange={(e) => setLider(e.target.value)}
-                placeholder="Ex: supervisor@vickytex.com.br"
+                placeholder="Ex: qualidade@vickytex.com.br"
+                list="registered-users-lider-list"
                 required
                 className="w-full px-3 py-2 border border-slate-200 dark:border-slate-800 rounded-xl bg-slate-50 dark:bg-slate-950 text-slate-700 dark:text-slate-300"
               />
+              <datalist id="registered-users-lider-list">
+                {registeredUsers.map(u => (
+                  <option key={u.id || u.email} value={u.email}>{u.name} ({u.email})</option>
+                ))}
+              </datalist>
             </div>
 
             <div className="space-y-1">
@@ -303,9 +323,15 @@ export const ProjetoFormCEO: React.FC<ProjetoFormCEOProps> = ({
                 value={patrocinador}
                 onChange={(e) => setPatrocinador(e.target.value)}
                 placeholder="Ex: gerencia@vickytex.com.br"
+                list="registered-users-patroc-list"
                 required
                 className="w-full px-3 py-2 border border-slate-200 dark:border-slate-800 rounded-xl bg-slate-50 dark:bg-slate-950 text-slate-700 dark:text-slate-300"
               />
+              <datalist id="registered-users-patroc-list">
+                {registeredUsers.map(u => (
+                  <option key={u.id || u.email} value={u.email}>{u.name} ({u.email})</option>
+                ))}
+              </datalist>
             </div>
 
             <div className="grid grid-cols-2 gap-2">
