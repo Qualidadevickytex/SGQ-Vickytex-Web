@@ -663,9 +663,9 @@ export const DEFAULT_PERSONALIZACAO: PersonalizacaoGeral = {
   auditorias5sMetaTitulo: "Meta de Qualidade 5S Vickytex",
   auditorias5sMetaSubtitulo: "A Vickytex estabelece que toda célula ou setor que obtiver uma nota média geral abaixo de 3.5 deve abrir obrigatoriamente um Plano de Ação Corretiva 5W2H focado nos sensos deficientes, visando reestruturar a disposição física das máquinas, realizar mutirões de limpeza assistida ou reorientar a equipe em reuniões diárias (DDS).",
   auditorias5sMetaGrafico: 75,
-  loginBadge: "Certificação ISO 9001:2015 em Implementação Ativa",
+  loginBadge: "Em conformidade com a ISO 9001:2015",
   loginTitulo: "A evolução do SGQ Vickytex começa aqui.",
-  loginDescricao: "Substitua de forma definitiva as planilhas de controle em Excel por um ecossistema web modular do SGQ Vickytex. Controle documentos, vistorias, não conformidades e processos têxteis em tempo real.",
+  loginDescricao: "Ecossistema web modular SGQ Vickytex. Controle documentos, vistorias, não conformidades e processos têxteis em tempo real.",
   loginVantagem1Titulo: "Lista Mestra Inteligente",
   loginVantagem1Desc: "Procedimentos, instruções e formulários sob controle rígido e assinaturas eletrônicas.",
   loginVantagem2Titulo: "Rastreabilidade Absoluta",
@@ -673,9 +673,9 @@ export const DEFAULT_PERSONALIZACAO: PersonalizacaoGeral = {
   loginVantagem3Titulo: "Auditorias Digitais & NCs",
   loginVantagem3Desc: "Gestão de Não Conformidades, Planos 5W2H e Auditorias 5S integradas.",
   loginVantagem4Titulo: "QR Code Integrado",
-  loginVantagem4Desc: "Postos de costura e corte com acesso imediato à versão vigente dos documentos.",
-  loginFooterEsquerdoLinha1: "© 2026 Vickytex S.A. — Uniformes Escolares e Profissionais de Alta Qualidade.",
-  loginFooterEsquerdoLinha2: "Desenvolvido seguindo as diretrizes estruturais de Auditoria Têxtil ISO 9001.",
+  loginVantagem4Desc: "Postos com acesso imediato à versão vigente dos documentos.",
+  loginFooterEsquerdoLinha1: "© 2026 Vickytex — Uniformes escolares.",
+  loginFooterEsquerdoLinha2: "Desenvolvido seguindo as diretrizes estruturais de auditoria Têxtil ISO 9001.",
   loginVersaoTexto: "SGQ WEB • v1.0.0",
   loginSuporteContatoTitulo: "Suporte Técnico TI - Vickytex",
   loginSuporteContatoTexto: "Se você perdeu sua senha de acesso, precisa redefinir suas credenciais corporativas, ou quer reportar uma instabilidade, fale com o suporte pelo e-mail suporte@vickytex.com.br ou abra um chamado pelo ramal interno 4100.",
@@ -699,6 +699,21 @@ export const getPersonalizacaoGeral = (): PersonalizacaoGeral => {
         }
         if (parsed.loginVersaoTexto === "SGQ WEB • V0.3" || parsed.loginVersaoTexto === "SGQ WEB • v0.3" || !parsed.loginVersaoTexto) {
           parsed.loginVersaoTexto = "SGQ WEB • v1.0.0";
+        }
+        if (parsed.loginBadge === "Certificação ISO 9001:2015 em Implementação Ativa" || !parsed.loginBadge) {
+          parsed.loginBadge = DEFAULT_PERSONALIZACAO.loginBadge;
+        }
+        if (parsed.loginDescricao?.includes("Substitua de forma definitiva as planilhas") || !parsed.loginDescricao) {
+          parsed.loginDescricao = DEFAULT_PERSONALIZACAO.loginDescricao;
+        }
+        if (parsed.loginVantagem4Desc?.includes("Postos de costura e corte") || !parsed.loginVantagem4Desc) {
+          parsed.loginVantagem4Desc = DEFAULT_PERSONALIZACAO.loginVantagem4Desc;
+        }
+        if (parsed.loginFooterEsquerdoLinha1?.includes("Vickytex S.A.") || !parsed.loginFooterEsquerdoLinha1) {
+          parsed.loginFooterEsquerdoLinha1 = DEFAULT_PERSONALIZACAO.loginFooterEsquerdoLinha1;
+        }
+        if (parsed.loginFooterEsquerdoLinha2?.includes("Auditoria Têxtil") || !parsed.loginFooterEsquerdoLinha2) {
+          parsed.loginFooterEsquerdoLinha2 = DEFAULT_PERSONALIZACAO.loginFooterEsquerdoLinha2;
         }
         return { ...DEFAULT_PERSONALIZACAO, ...parsed };
       } catch (e) {

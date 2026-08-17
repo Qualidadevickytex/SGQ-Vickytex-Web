@@ -200,7 +200,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ personalizacao: propPe
         <div className="relative my-auto space-y-8 max-w-xl py-12 lg:py-0">
           <div className="inline-flex items-center space-x-2 bg-white/10 px-3.5 py-1.5 rounded-full text-xs font-bold text-blue-100 border border-white/10 backdrop-blur-xs">
             <ShieldCheck className="w-4 h-4 text-emerald-400" />
-            <span>{personalizacao?.loginBadge || "Certificação ISO 9001:2015 em Implementação Ativa"}</span>
+            <span>{personalizacao?.loginBadge || "Em conformidade com a ISO 9001:2015"}</span>
           </div>
 
           <div className="space-y-4">
@@ -208,7 +208,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ personalizacao: propPe
               {personalizacao?.loginTitulo || "A evolução do SGQ Vickytex começa aqui."}
             </h2>
             <p className="text-sm md:text-base text-blue-100 leading-relaxed font-light">
-              {personalizacao?.loginDescricao || "Substitua de forma definitiva as planilhas de controle em Excel por um ecossistema web modular integrado ao seu Google Workspace corporativo. Controle documentos, vistorias, não conformidades e processos têxteis em tempo real."}
+              {personalizacao?.loginDescricao || "Ecossistema web modular SGQ Vickytex. Controle documentos, vistorias, não conformidades e processos têxteis em tempo real."}
             </p>
           </div>
 
@@ -242,7 +242,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ personalizacao: propPe
               <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
               <div>
                 <p className="font-bold text-white">{personalizacao?.loginVantagem4Titulo || "QR Code Integrado"}</p>
-                <p className="text-blue-200 text-[11px] mt-0.5 font-light">{personalizacao?.loginVantagem4Desc || "Postos de costura e corte com acesso imediato à versão vigente dos documentos."}</p>
+                <p className="text-blue-200 text-[11px] mt-0.5 font-light">{personalizacao?.loginVantagem4Desc || "Postos com acesso imediato à versão vigente dos documentos."}</p>
               </div>
             </div>
           </div>
@@ -250,8 +250,8 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ personalizacao: propPe
 
         {/* Footer Brand copyright */}
         <div className="relative text-xs text-blue-200/60 font-medium">
-          <p>{personalizacao?.loginFooterEsquerdoLinha1 || "© 2026 Vickytex S.A. — Uniformes Escolares e Profissionais de Alta Qualidade."}</p>
-          <p className="mt-0.5 text-[10px] font-light">{personalizacao?.loginFooterEsquerdoLinha2 || "Desenvolvido seguindo as diretrizes estruturais de Auditoria Têxtil ISO 9001."}</p>
+          <p>{personalizacao?.loginFooterEsquerdoLinha1 || "© 2026 Vickytex — Uniformes escolares."}</p>
+          <p className="mt-0.5 text-[10px] font-light">{personalizacao?.loginFooterEsquerdoLinha2 || "Desenvolvido seguindo as diretrizes estruturais de auditoria Têxtil ISO 9001."}</p>
         </div>
 
       </div>
@@ -341,7 +341,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ personalizacao: propPe
                         type="email"
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
-                        placeholder="nome.sobrenome@vickytex.com.br"
+                        placeholder="nome@vickytex.com.br"
                         className="w-full pl-10 pr-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-800 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-[#0B3A63] focus:border-transparent transition-all"
                       />
                     </div>
