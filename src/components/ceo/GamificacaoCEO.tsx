@@ -153,18 +153,36 @@ export const GamificacaoCEO: React.FC<GamificacaoCEOProps> = ({ projects, sugges
 
       const normalizeEmail = (em: string) => (em || '').trim().toLowerCase();
 
-      const getOrCreateUser = (emailInput: string, defaultName?: string) => {
-        const norm = normalizeEmail(emailInput);
-        if (!norm) return null;
+      // 1. Incluir exclusivamente os usuários cadastrados no banco de dados (dbUsers)
+      if (dbUsers.length > 0) {
+        dbUsers.forEach(acc => {
+          if (acc.email) {
+            const norm = normalizeEmail(acc.email);
+            if (norm && !userMap.has(norm)) {
+              userMap.set(norm, {
+                nome: acc.name || acc.email.split('@')[0],
+                email: acc.email.trim(),
+                projetosAtivos: 0,
+                projetosConcluidos: 0,
+                ideiasSubmetidas: 0,
+                ideiasAprovadas: 0,
+                tarefasConcluidas: 0,
+                horasTreinamento: 0,
+                pontos: 0,
+                medalhas: new Set<string>()
+              });
+            }
+          }
+        });
+      }
 
-        if (!userMap.has(norm)) {
-          // Buscar nome correspondente em dbUsers
-          const foundAccount = dbUsers.find(u => normalizeEmail(u.email) === norm);
-          
-          const resolvedName = foundAccount?.name || defaultName || emailInput.split('@')[0];
+      // Adicionar o usuário logado se ainda não estiver na lista
+      if (user && user.email) {
+        const norm = normalizeEmail(user.email);
+        if (norm && !userMap.has(norm)) {
           userMap.set(norm, {
-            nome: resolvedName,
-            email: emailInput.trim(),
+            nome: user.name || user.email.split('@')[0],
+            email: user.email.trim(),
             projetosAtivos: 0,
             projetosConcluidos: 0,
             ideiasSubmetidas: 0,
@@ -175,174 +193,126 @@ export const GamificacaoCEO: React.FC<GamificacaoCEOProps> = ({ projects, sugges
             medalhas: new Set<string>()
           });
         }
-        return userMap.get(norm)!;
+      }
+
+      // Localizador estrito: SOMENTE encontra usuários já cadastrados no userMap, NUNCA cria usuários fantasmas
+      const findRegisteredUser = (input?: string) => {
+        if (!input) return null;
+        const norm = normalizeEmail(input);
+        if (userMap.has(norm)) return userMap.get(norm)!;
+
+        const lowerInput = input.trim().toLowerCase();
+        for (const val of userMap.values()) {
+          if (val.nome.toLowerCase() === lowerInput || 
+              (lowerInput.length > 3 && (val.nome.toLowerCase().includes(lowerInput) || lowerInput.includes(val.nome.toLowerCase())))) {
+            return val;
+          }
+        }
+        return null;
       };
 
-      // 1. Incluir exclusivamente os usuários cadastrados no banco de dados (dbUsers)
-      if (dbUsers.length > 0) {
-        dbUsers.forEach(acc => {
-          if (acc.email) {
-            getOrCreateUser(acc.email, acc.name);
+      // Se as pontuações foram zeradas, NÃO acumular pontos dos históricos anteriores
+      if (!isScoresZeroed) {
+        // 2. Add real trainings from TrainingRepository (ISO 7.2 & Treinamentos)
+        dbTrainings.forEach(tr => {
+          const hours = Number(tr.duracaoHoras || 1);
+          if (tr.status === 'Realizado') {
+            // Instrutor
+            if (tr.instrutor) {
+              const u = findRegisteredUser(tr.instrutor);
+              if (u) {
+                u.horasTreinamento += hours;
+                u.pontos += hours * 5;
+                u.medalhas.add('Instrutor Lean');
+              }
+            }
+
+            // Participantes
+            (tr.participantes || []).forEach(part => {
+              if (!part) return;
+              const u = findRegisteredUser(part);
+              if (u) {
+                u.horasTreinamento += hours;
+                u.pontos += hours * 5;
+                u.medalhas.add('Estudioso Lean');
+              }
+            });
           }
         });
-      }
 
-      // Adicionar o usuário logado se ainda não estiver na lista
-      if (user && user.email) {
-        getOrCreateUser(user.email, user.name || user.email.split('@')[0]);
-      }
+        // 3. Add logged training hours from CEO Training Logs
+        loggedTrainings.forEach(log => {
+          if (!log || !log.email) return;
+          const u = findRegisteredUser(log.email) || findRegisteredUser(log.nome);
+          if (u) {
+            const h = Number(log.horas || 0);
+            u.horasTreinamento += h;
+            u.pontos += h * 5; // 5 pts per hour of continuous improvement training
+            u.medalhas.add('Estudioso Lean');
+          }
+        });
 
-      // 2. Add real trainings from TrainingRepository (ISO 7.2 & Treinamentos)
-      dbTrainings.forEach(tr => {
-        const hours = Number(tr.duracaoHoras || 1);
-        if (tr.status === 'Realizado') {
-          // Instrutor
-          if (tr.instrutor) {
-            const isEmail = tr.instrutor.includes('@');
-            let u = isEmail ? getOrCreateUser(tr.instrutor) : null;
-            if (!u) {
-              // Buscar por nome
-              for (const val of userMap.values()) {
-                if (val.nome.toLowerCase().includes(tr.instrutor.toLowerCase()) || tr.instrutor.toLowerCase().includes(val.nome.toLowerCase())) {
-                  u = val;
-                  break;
-                }
-              }
+        // 4. Map suggestions (Banco de Ideias)
+        suggestions.forEach(sug => {
+          if (!sug.autor) return;
+          const u = findRegisteredUser(sug.autor);
+
+          if (u) {
+            u.ideiasSubmetidas += 1;
+            u.pontos += 15; // 15 pts per suggestion submitted
+
+            if (sug.status === 'Aprovada' || sug.status === 'Em Implantação' || sug.status === 'Concluída') {
+              u.ideiasAprovadas += 1;
+              u.pontos += 50; // 50 pts per approved idea
+              u.medalhas.add('Mente Inovadora');
             }
+          }
+        });
+
+        // 5. Map projects (Projetos de Melhoria A3 / DMAIC / Kaizen)
+        projects.forEach(proj => {
+          // Project leader
+          if (proj.lider) {
+            const u = findRegisteredUser(proj.lider);
+
             if (u) {
-              u.horasTreinamento += hours;
-              u.pontos += hours * 5;
-              u.medalhas.add('Instrutor Lean');
+              if (proj.status === 'Concluído') {
+                u.projetosConcluidos += 1;
+                u.pontos += 200; // 200 pts per completed project
+                u.medalhas.add('Campeão Kaizen');
+              } else if (proj.status === 'Em Execução' || proj.status === 'Planejado') {
+                u.projetosAtivos += 1;
+                u.pontos += 50; // 50 pts for active leading
+              }
+
+              // Stage completion counts
+              const completedStages = proj.ferramentas?.etapas?.filter(e => e.status === 'Concluido').length || 0;
+              u.pontos += completedStages * 30; // 30 pts per completed gate/stage
             }
           }
 
-          // Participantes
-          (tr.participantes || []).forEach(part => {
-            if (!part) return;
-            const isEmail = part.includes('@');
-            let u = isEmail ? getOrCreateUser(part) : null;
-            if (!u) {
-              for (const val of userMap.values()) {
-                if (val.nome.toLowerCase().includes(part.toLowerCase()) || part.toLowerCase().includes(val.nome.toLowerCase())) {
-                  u = val;
-                  break;
-                }
-              }
-            }
+          // Project team members
+          proj.ferramentas?.equipe?.forEach(m => {
+            if (!m.email && !m.nome) return;
+            const u = findRegisteredUser(m.email) || findRegisteredUser(m.nome);
             if (u) {
-              u.horasTreinamento += hours;
-              u.pontos += hours * 5;
-              u.medalhas.add('Estudioso Lean');
+              u.pontos += 30; // 30 points for team collaboration
+              u.medalhas.add('Trabalho em Equipe');
             }
           });
-        }
-      });
 
-      // 3. Add logged training hours from CEO Training Logs
-      loggedTrainings.forEach(log => {
-        if (!log || !log.email) return;
-        const u = getOrCreateUser(log.email, log.nome);
-        if (u) {
-          const h = Number(log.horas || 0);
-          u.horasTreinamento += h;
-          u.pontos += h * 5; // 5 pts per hour of continuous improvement training
-          u.medalhas.add('Estudioso Lean');
-        }
-      });
-
-      // 4. Map suggestions (Banco de Ideias)
-      suggestions.forEach(sug => {
-        if (!sug.autor) return;
-        const isEmail = sug.autor.includes('@');
-        let u = isEmail ? getOrCreateUser(sug.autor) : null;
-        if (!u) {
-          for (const val of userMap.values()) {
-            if (val.nome.toLowerCase().includes(sug.autor.toLowerCase()) || sug.autor.toLowerCase().includes(val.nome.toLowerCase())) {
-              u = val;
-              break;
-            }
-          }
-        }
-        if (!u && isEmail) {
-          u = getOrCreateUser(sug.autor);
-        }
-
-        if (u) {
-          u.ideiasSubmetidas += 1;
-          u.pontos += 15; // 15 pts per suggestion submitted
-
-          if (sug.status === 'Aprovada' || sug.status === 'Em Implantação' || sug.status === 'Concluída') {
-            u.ideiasAprovadas += 1;
-            u.pontos += 50; // 50 pts per approved idea
-            u.medalhas.add('Mente Inovadora');
-          }
-        }
-      });
-
-      // 5. Map projects (Projetos de Melhoria A3 / DMAIC / Kaizen)
-      projects.forEach(proj => {
-        // Project leader
-        if (proj.lider) {
-          const isEmail = proj.lider.includes('@');
-          let u = isEmail ? getOrCreateUser(proj.lider) : null;
-          if (!u) {
-            for (const val of userMap.values()) {
-              if (val.nome.toLowerCase().includes(proj.lider.toLowerCase()) || proj.lider.toLowerCase().includes(val.nome.toLowerCase())) {
-                u = val;
-                break;
+          // Cronograma tasks
+          proj.ferramentas?.cronograma?.forEach(task => {
+            if (task.status === 'Concluido' && task.responsavel) {
+              const u = findRegisteredUser(task.responsavel);
+              if (u) {
+                u.tarefasConcluidas += 1;
+                u.pontos += 15; // 15 pts per finished task
               }
             }
-          }
-          if (!u && isEmail) {
-            u = getOrCreateUser(proj.lider);
-          }
-
-          if (u) {
-            if (proj.status === 'Concluído') {
-              u.projetosConcluidos += 1;
-              u.pontos += 200; // 200 pts per completed project
-              u.medalhas.add('Campeão Kaizen');
-            } else if (proj.status === 'Em Execução' || proj.status === 'Planejado') {
-              u.projetosAtivos += 1;
-              u.pontos += 50; // 50 pts for active leading
-            }
-
-            // Stage completion counts
-            const completedStages = proj.ferramentas?.etapas?.filter(e => e.status === 'Concluido').length || 0;
-            u.pontos += completedStages * 30; // 30 pts per completed gate/stage
-          }
-        }
-
-        // Project team members
-        proj.ferramentas?.equipe?.forEach(m => {
-          if (!m.email && !m.nome) return;
-          const u = m.email ? getOrCreateUser(m.email, m.nome) : null;
-          if (u) {
-            u.pontos += 30; // 30 points for team collaboration
-            u.medalhas.add('Trabalho em Equipe');
-          }
+          });
         });
-
-        // Cronograma tasks
-        proj.ferramentas?.cronograma?.forEach(task => {
-          if (task.status === 'Concluido' && task.responsavel) {
-            const isEmail = task.responsavel.includes('@');
-            let u = isEmail ? getOrCreateUser(task.responsavel) : null;
-            if (!u) {
-              for (const val of userMap.values()) {
-                if (val.nome.toLowerCase().includes(task.responsavel.toLowerCase())) {
-                  u = val;
-                  break;
-                }
-              }
-            }
-            if (u) {
-              u.tarefasConcluidas += 1;
-              u.pontos += 15; // 15 pts per finished task
-            }
-          }
-        });
-      });
+      }
 
       // Convert map to list, assign belt, and sort
       const list: ColaboradorRank[] = Array.from(userMap.values()).map(u => {
