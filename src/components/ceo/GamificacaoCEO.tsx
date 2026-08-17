@@ -32,6 +32,7 @@ import { Treinamento } from '../../types/training';
 import { UserAccount } from '../../types/user';
 import { useAuth } from '../../contexts/AuthContext';
 import { ConfirmModal } from '../common/ConfirmModal';
+import { INITIAL_USER_ACCOUNTS } from '../../utils/mockData';
 import { SystemSettingsRepository } from '../../services/database/repositories/systemSettings.repository';
 import { TrainingRepository } from '../../services/database/repositories/training.repository';
 import { UserRepository } from '../../services/database/repositories/user.repository';
@@ -76,9 +77,13 @@ export const GamificacaoCEO: React.FC<GamificacaoCEOProps> = ({ projects, sugges
     return saved ? JSON.parse(saved) : {};
   });
 
-  // Zeroed scores state
+  // Zeroed scores state e reset timestamp para controle rigoroso do ciclo
   const [isScoresZeroed, setIsScoresZeroed] = useState<boolean>(() => {
     return localStorage.getItem('sgq_vickytex_ceo_scores_zeroed') === 'true';
+  });
+  const [resetTimestamp, setResetTimestamp] = useState<number>(() => {
+    const saved = localStorage.getItem('sgq_vickytex_ceo_reset_timestamp');
+    return saved ? Number(saved) : 0;
   });
   const [isZeroScoresModalOpen, setIsZeroScoresModalOpen] = useState(false);
 
@@ -105,6 +110,7 @@ export const GamificacaoCEO: React.FC<GamificacaoCEOProps> = ({ projects, sugges
       const zeroDoc = records.find(r => r.id === 'sgq_vickytex_ceo_scores_zeroed');
       if (zeroDoc && zeroDoc.data !== undefined) {
         setIsScoresZeroed(Boolean(zeroDoc.data.zeroed));
+        setResetTimestamp(Number(zeroDoc.data.timestamp || 0));
       }
     });
 
@@ -133,7 +139,12 @@ export const GamificacaoCEO: React.FC<GamificacaoCEOProps> = ({ projects, sugges
 
   useEffect(() => {
     localStorage.setItem('sgq_vickytex_ceo_scores_zeroed', isScoresZeroed ? 'true' : 'false');
-  }, [isScoresZeroed]);
+    if (resetTimestamp) {
+      localStorage.setItem('sgq_vickytex_ceo_reset_timestamp', resetTimestamp.toString());
+    } else {
+      localStorage.removeItem('sgq_vickytex_ceo_reset_timestamp');
+    }
+  }, [isScoresZeroed, resetTimestamp]);
 
   // Recalculate ranking whenever projects, suggestions, trainings, or logged trainings change
   useEffect(() => {
@@ -152,29 +163,29 @@ export const GamificacaoCEO: React.FC<GamificacaoCEOProps> = ({ projects, sugges
       }>();
 
       const normalizeEmail = (em: string) => (em || '').trim().toLowerCase();
+      const normalizeText = (txt: string) => (txt || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase();
 
-      // 1. Incluir exclusivamente os usuários cadastrados no banco de dados (dbUsers)
-      if (dbUsers.length > 0) {
-        dbUsers.forEach(acc => {
-          if (acc.email) {
-            const norm = normalizeEmail(acc.email);
-            if (norm && !userMap.has(norm)) {
-              userMap.set(norm, {
-                nome: acc.name || acc.email.split('@')[0],
-                email: acc.email.trim(),
-                projetosAtivos: 0,
-                projetosConcluidos: 0,
-                ideiasSubmetidas: 0,
-                ideiasAprovadas: 0,
-                tarefasConcluidas: 0,
-                horasTreinamento: 0,
-                pontos: 0,
-                medalhas: new Set<string>()
-              });
-            }
+      // 1. Incluir os usuários cadastrados (dbUsers ou fallback INITIAL_USER_ACCOUNTS)
+      const allRegisteredUsers = (dbUsers && dbUsers.length > 0) ? dbUsers : INITIAL_USER_ACCOUNTS;
+      allRegisteredUsers.forEach(acc => {
+        if (acc.email) {
+          const norm = normalizeEmail(acc.email);
+          if (norm && !userMap.has(norm)) {
+            userMap.set(norm, {
+              nome: acc.name || acc.email.split('@')[0],
+              email: acc.email.trim(),
+              projetosAtivos: 0,
+              projetosConcluidos: 0,
+              ideiasSubmetidas: 0,
+              ideiasAprovadas: 0,
+              tarefasConcluidas: 0,
+              horasTreinamento: 0,
+              pontos: 0,
+              medalhas: new Set<string>()
+            });
           }
-        });
-      }
+        }
+      });
 
       // Adicionar o usuário logado se ainda não estiver na lista
       if (user && user.email) {
@@ -201,48 +212,79 @@ export const GamificacaoCEO: React.FC<GamificacaoCEOProps> = ({ projects, sugges
         const rawInput = input.trim();
         if (!rawInput) return null;
 
+        // Se for e-mail direto
         const norm = normalizeEmail(rawInput);
         if (userMap.has(norm)) return userMap.get(norm)!;
 
         const lowerInput = rawInput.toLowerCase();
+        const normInput = normalizeText(rawInput);
 
         // 1. Match exato pelo prefixo do e-mail (ex: "qualidade" -> "qualidade@vickytex.com.br")
         for (const [key, val] of userMap.entries()) {
           const emailPrefix = key.split('@')[0].toLowerCase();
-          if (emailPrefix === lowerInput) return val;
+          if (emailPrefix === lowerInput || normalizeText(emailPrefix) === normInput) return val;
         }
 
-        // 2. Match exato por nome completo
+        // 2. Match exato por nome completo cadastrado
         for (const val of userMap.values()) {
-          if (val.nome.trim().toLowerCase() === lowerInput) return val;
+          if (val.nome.trim().toLowerCase() === lowerInput || normalizeText(val.nome) === normInput) return val;
         }
 
-        // 3. Match pelo primeiro nome (ex: "Rodrigo" -> "Rodrigo Berto")
+        // 3. Match por email sem domínio se input for um email ou login
         for (const val of userMap.values()) {
-          const firstName = val.nome.trim().split(' ')[0].toLowerCase();
-          if (firstName && firstName.length >= 3 && firstName === lowerInput) {
-            return val;
+          if (val.email.toLowerCase() === lowerInput || normalizeText(val.email) === normInput) return val;
+        }
+
+        // 4. Match seguro por primeiro nome ou partes de nome caso não haja ambiguidade
+        const matchingCandidates: typeof userMap extends Map<any, infer V> ? V[] : never = [];
+        for (const val of userMap.values()) {
+          const valNormName = normalizeText(val.nome);
+          const valFirst = valNormName.split(' ')[0];
+          const inputFirst = normInput.split(' ')[0];
+
+          if (valFirst && valFirst.length >= 3 && (valFirst === inputFirst || valNormName.includes(normInput) || normInput.includes(valNormName))) {
+            matchingCandidates.push(val);
           }
         }
-
-        // 4. Match por contenção de nome ou e-mail (mínimo 3 caracteres para evitar falsos positivos)
-        if (lowerInput.length >= 3) {
-          for (const val of userMap.values()) {
-            const valName = val.nome.toLowerCase();
-            const valEmail = val.email.toLowerCase();
-            if (valName.includes(lowerInput) || lowerInput.includes(valName) || valEmail.includes(lowerInput)) {
-              return val;
-            }
-          }
+        if (matchingCandidates.length === 1) {
+          return matchingCandidates[0];
         }
 
         return null;
       };
 
-      // Se as pontuações foram zeradas, NÃO acumular pontos dos históricos anteriores
+      // Se as pontuações foram zeradas e não há timestamp ou está explicitamente congelado
       if (!isScoresZeroed) {
-        // 2. Add real trainings from TrainingRepository (ISO 7.2 & Treinamentos)
+        // Função utilitária para verificar se o item pertence ao ciclo atual (após resetTimestamp se existir)
+        const isItemFromCurrentCycle = (dateStr?: string, createdStr?: string) => {
+          if (!resetTimestamp || resetTimestamp === 0) return true;
+          try {
+            if (createdStr) {
+              const itemTime = new Date(createdStr).getTime();
+              if (!isNaN(itemTime)) return itemTime >= resetTimestamp;
+            }
+            if (dateStr) {
+              const itemTime = new Date(dateStr).getTime();
+              if (!isNaN(itemTime)) return itemTime >= resetTimestamp;
+            }
+          } catch (e) {
+            // Em caso de erro, ignorar
+          }
+          return false;
+        };
+
+        // 2. Add real trainings from TrainingRepository (ISO 7.2 & Treinamentos), desconsiderando duplicados criados via CEO logs
         dbTrainings.forEach(tr => {
+          // Se for gerado pelo log do CEO ou CAP-CEO-LEAN, ignorar aqui para pontuar apenas uma vez via loggedTrainings
+          if (tr.id?.startsWith('tr-ceo-') || tr.codigo?.startsWith('TRE-CEO-') || tr.documentoId === 'CAP-CEO-LEAN') {
+            return;
+          }
+
+          // Se houver ciclo zerado anterior, apenas considerar treinamentos deste novo ciclo
+          if (resetTimestamp > 0 && !isItemFromCurrentCycle(tr.dataTreinamento, (tr as any).criadoEm)) {
+            return;
+          }
+
           const hours = Number(tr.duracaoHoras || 1);
           if (tr.status === 'Realizado') {
             // Instrutor
@@ -255,8 +297,9 @@ export const GamificacaoCEO: React.FC<GamificacaoCEOProps> = ({ projects, sugges
               }
             }
 
-            // Participantes
-            (tr.participantes || []).forEach(part => {
+            // Participantes (set para evitar duplicidade no mesmo treinamento)
+            const uniqueParticipants = Array.from(new Set(tr.participantes || []));
+            uniqueParticipants.forEach(part => {
               if (!part) return;
               const u = findRegisteredUser(part);
               if (u) {
@@ -270,12 +313,12 @@ export const GamificacaoCEO: React.FC<GamificacaoCEOProps> = ({ projects, sugges
 
         // 3. Add logged training hours from CEO Training Logs
         loggedTrainings.forEach(log => {
-          if (!log || !log.email) return;
-          const u = findRegisteredUser(log.email) || findRegisteredUser(log.nome);
+          if (!log) return;
+          const u = (log.email ? findRegisteredUser(log.email) : null) || (log.nome ? findRegisteredUser(log.nome) : null);
           if (u) {
             const h = Number(log.horas || 0);
             u.horasTreinamento += h;
-            u.pontos += h * 5; // 5 pts per hour of continuous improvement training
+            u.pontos += h * 5; // 5 pts por hora de capacitação
             u.medalhas.add('Estudioso Lean');
           }
         });
@@ -283,6 +326,11 @@ export const GamificacaoCEO: React.FC<GamificacaoCEOProps> = ({ projects, sugges
         // 4. Map suggestions (Banco de Ideias)
         suggestions.forEach(sug => {
           if (!sug.autor) return;
+          // Se houver ciclo zerado anterior, apenas considerar ideias submetidas no novo ciclo
+          if (resetTimestamp > 0 && !isItemFromCurrentCycle(sug.dataSubmissao, sug.criadoEm)) {
+            return;
+          }
+
           const u = findRegisteredUser(sug.autor);
 
           if (u) {
@@ -299,6 +347,11 @@ export const GamificacaoCEO: React.FC<GamificacaoCEOProps> = ({ projects, sugges
 
         // 5. Map projects (Projetos de Melhoria A3 / DMAIC / Kaizen)
         projects.forEach(proj => {
+          // Se houver ciclo zerado anterior, apenas considerar projetos do novo ciclo
+          if (resetTimestamp > 0 && !isItemFromCurrentCycle(proj.dataInicio, proj.criadoEm)) {
+            return;
+          }
+
           // Project leader
           if (proj.lider) {
             const u = findRegisteredUser(proj.lider);
@@ -386,25 +439,30 @@ export const GamificacaoCEO: React.FC<GamificacaoCEOProps> = ({ projects, sugges
     };
 
     calculateRankings();
-  }, [projects, suggestions, dbTrainings, loggedTrainings, dbUsers, manualAdjustments, isScoresZeroed, user]);
+  }, [projects, suggestions, dbTrainings, loggedTrainings, dbUsers, manualAdjustments, isScoresZeroed, resetTimestamp, user]);
 
   const handleConfirmResetScores = () => {
+    const now = Date.now();
     setIsScoresZeroed(true);
+    setResetTimestamp(now);
     setLoggedTrainings([]);
     setManualAdjustments({});
     localStorage.setItem('sgq_vickytex_ceo_training_logs', '[]');
     localStorage.removeItem('sgq_vickytex_ceo_gamification_adjustments');
     localStorage.setItem('sgq_vickytex_ceo_scores_zeroed', 'true');
+    localStorage.setItem('sgq_vickytex_ceo_reset_timestamp', now.toString());
     SystemSettingsRepository.create({ id: 'sgq_vickytex_ceo_training_logs', items: [] }).catch(console.error);
     SystemSettingsRepository.create({ id: 'sgq_vickytex_ceo_gamification_adjustments', data: {} }).catch(console.error);
-    SystemSettingsRepository.create({ id: 'sgq_vickytex_ceo_scores_zeroed', data: { zeroed: true } }).catch(console.error);
+    SystemSettingsRepository.create({ id: 'sgq_vickytex_ceo_scores_zeroed', data: { zeroed: true, timestamp: now } }).catch(console.error);
     setIsZeroScoresModalOpen(false);
   };
 
   const handleRestoreScores = () => {
     setIsScoresZeroed(false);
+    setResetTimestamp(0);
     localStorage.removeItem('sgq_vickytex_ceo_scores_zeroed');
-    SystemSettingsRepository.create({ id: 'sgq_vickytex_ceo_scores_zeroed', data: { zeroed: false } }).catch(console.error);
+    localStorage.removeItem('sgq_vickytex_ceo_reset_timestamp');
+    SystemSettingsRepository.create({ id: 'sgq_vickytex_ceo_scores_zeroed', data: { zeroed: false, timestamp: 0 } }).catch(console.error);
   };
 
   const handleLogHours = async (e: React.FormEvent) => {
@@ -426,11 +484,11 @@ export const GamificacaoCEO: React.FC<GamificacaoCEOProps> = ({ projects, sugges
     setLoggedTrainings(updatedLogs);
     localStorage.setItem('sgq_vickytex_ceo_training_logs', JSON.stringify(updatedLogs));
 
-    // Se estiver zerado, reativar pontuação para que o novo lançamento apareça imediatamente
+    // Se estiver zerado (congelado), reativar o cômputo para este novo ciclo mantendo o filtro a partir da data de zeramento
     if (isScoresZeroed) {
       setIsScoresZeroed(false);
-      localStorage.removeItem('sgq_vickytex_ceo_scores_zeroed');
-      SystemSettingsRepository.create({ id: 'sgq_vickytex_ceo_scores_zeroed', data: { zeroed: false } }).catch(console.error);
+      localStorage.setItem('sgq_vickytex_ceo_scores_zeroed', 'false');
+      SystemSettingsRepository.create({ id: 'sgq_vickytex_ceo_scores_zeroed', data: { zeroed: false, timestamp: resetTimestamp } }).catch(console.error);
     }
 
     // Persistir em Firestore tanto no SystemSettings quanto no TrainingRepository oficial
@@ -545,16 +603,14 @@ export const GamificacaoCEO: React.FC<GamificacaoCEOProps> = ({ projects, sugges
               <span>Manutenção do Leaderboard</span>
             </button>
 
-            {isScoresZeroed && (
-              <button
-                onClick={handleRestoreScores}
-                className="px-3 py-1.5 bg-emerald-950/60 hover:bg-emerald-900/80 text-emerald-300 border border-emerald-800/50 font-medium rounded-lg transition-colors flex items-center space-x-1.5"
-                title="Recalcular pontos automáticos de projetos e treinamentos"
-              >
-                <TrendingUp className="w-3.5 h-3.5 text-emerald-400" />
-                <span>Restaurar Pontuação Automática</span>
-              </button>
-            )}
+            <button
+              onClick={handleRestoreScores}
+              className="px-3 py-1.5 bg-emerald-950/60 hover:bg-emerald-900/80 text-emerald-300 border border-emerald-800/50 font-medium rounded-lg transition-colors flex items-center space-x-1.5"
+              title="Recalcular e restaurar pontos automáticos de todos os projetos, ideias e treinamentos"
+            >
+              <TrendingUp className="w-3.5 h-3.5 text-emerald-400" />
+              <span>Restaurar Pontuação Automática</span>
+            </button>
 
             <button
               onClick={() => setIsZeroScoresModalOpen(true)}
@@ -568,27 +624,7 @@ export const GamificacaoCEO: React.FC<GamificacaoCEOProps> = ({ projects, sugges
         </div>
       </div>
 
-      {/* 2. Ranks Summary / Info Row */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {[
-          { title: 'Yellow Belt', pts: '60+ pts', desc: 'Introdução ao Kaizen, preenchimento de GUT, Pareto e SWOT.', color: 'bg-yellow-500', text: 'text-yellow-800' },
-          { title: 'Green Belt', pts: '180+ pts', desc: 'Liderança de projetos PDCA, mapeamento SIPOC, Ishikawa e 5 Whys.', color: 'bg-emerald-500', text: 'text-emerald-800' },
-          { title: 'Black Belt', pts: '350+ pts', desc: 'Liderança avançada DMAIC, cronogramas complexos e redução de tempos.', color: 'bg-slate-900', text: 'text-slate-100' },
-          { title: 'Master Black Belt', pts: '600+ pts', desc: 'Análise de ROI, Payback, consolidação de planos e mentoria Lean.', color: 'bg-indigo-600', text: 'text-indigo-100' }
-        ].map(r => (
-          <div key={r.title} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 shadow-xs">
-            <div className="flex items-center justify-between mb-2">
-              <span className={`inline-block px-2.5 py-1 rounded-lg text-[9px] font-black uppercase ${r.color} ${r.text}`}>
-                {r.title}
-              </span>
-              <span className="text-[10px] font-bold text-slate-400">{r.pts}</span>
-            </div>
-            <p className="text-[10px] text-slate-500 leading-relaxed font-medium">{r.desc}</p>
-          </div>
-        ))}
-      </div>
-
-      {/* 3. Leaderboard and Achievements Grid */}
+      {/* 2. Leaderboard and Achievements Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         
         {/* LEADERBOARD LEADING COMPONENT */}
@@ -605,20 +641,6 @@ export const GamificacaoCEO: React.FC<GamificacaoCEOProps> = ({ projects, sugges
                 </span>
               )}
             </div>
-
-            {isScoresZeroed && (
-              <div className="mb-3.5 p-3 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-between gap-3 text-xs text-amber-800 dark:text-amber-300">
-                <span className="text-[11px] font-medium">
-                  As pontuações históricas estão pausadas. Deseja reativar o cômputo automático de projetos e sugestões?
-                </span>
-                <button
-                  onClick={handleRestoreScores}
-                  className="px-2.5 py-1 bg-amber-600 hover:bg-amber-500 text-white font-bold rounded-lg text-[10px] shrink-0 uppercase tracking-wider"
-                >
-                  Reativar Cálculo
-                </button>
-              </div>
-            )}
 
             <div className="space-y-2.5">
               {rankingList.map((rank, index) => {
@@ -697,7 +719,7 @@ export const GamificacaoCEO: React.FC<GamificacaoCEOProps> = ({ projects, sugges
               <span>Log de Capacitações e Treinamentos</span>
             </h3>
 
-            <div className="space-y-2.5 max-h-80 overflow-y-auto pr-1">
+            <div className="space-y-2.5 max-h-56 overflow-y-auto pr-1">
               {loggedTrainings.map((log) => (
                 <div key={log.id} className="p-3 border border-slate-100 dark:border-slate-800/80 rounded-xl bg-slate-50/50 dark:bg-slate-950/20 text-xs">
                   <div className="flex justify-between items-start gap-1">
@@ -713,18 +735,42 @@ export const GamificacaoCEO: React.FC<GamificacaoCEOProps> = ({ projects, sugges
             </div>
           </div>
 
-          <div className="p-4 bg-indigo-500/5 dark:bg-indigo-500/10 border border-indigo-500/10 rounded-2xl space-y-2">
-            <span className="text-[10px] font-black uppercase text-indigo-600 dark:text-indigo-400 block">Como Pontuar (Regras Ativas)</span>
-            <ul className="text-[10px] text-slate-500 dark:text-slate-400 space-y-1.5 list-disc pl-3">
-              <li>Capacitação Lean / Treinamento: <b>+5 pts/hora</b></li>
-              <li>Submeter sugestão ao banco de ideias: <b>+15 pts</b></li>
-              <li>Sugestão de melhoria aprovada / implantada: <b>+50 pts</b></li>
-              <li>Liderar projeto ativo (Planejado / Execução): <b>+50 pts</b></li>
-              <li>Fazer parte da equipe de um projeto: <b>+30 pts</b></li>
-              <li>Concluir etapas/tollgates da metodologia: <b>+30 pts/fase</b></li>
-              <li>Concluir tarefa do cronograma de melhoria: <b>+15 pts/tarefa</b></li>
-              <li>Finalizar com sucesso um projeto CEO: <b>+200 pts</b></li>
-            </ul>
+          <div className="p-4 bg-indigo-500/5 dark:bg-indigo-500/10 border border-indigo-500/10 rounded-2xl space-y-4">
+            <div>
+              <span className="text-[10px] font-black uppercase text-indigo-600 dark:text-indigo-400 block mb-2">Como Pontuar (Regras Ativas)</span>
+              <ul className="text-[10px] text-slate-600 dark:text-slate-400 space-y-1.5 list-disc pl-3">
+                <li>Capacitação Lean / Treinamento: <b>+5 pts/hora</b></li>
+                <li>Submeter sugestão ao banco de ideias: <b>+15 pts</b></li>
+                <li>Sugestão de melhoria aprovada / implantada: <b>+50 pts</b></li>
+                <li>Liderar projeto ativo (Planejado / Execução): <b>+50 pts</b></li>
+                <li>Fazer parte da equipe de um projeto: <b>+30 pts</b></li>
+                <li>Concluir etapas/tollgates da metodologia: <b>+30 pts/fase</b></li>
+                <li>Concluir tarefa do cronograma de melhoria: <b>+15 pts/tarefa</b></li>
+                <li>Finalizar com sucesso um projeto CEO: <b>+200 pts</b></li>
+              </ul>
+            </div>
+
+            <div className="pt-3 border-t border-indigo-500/15 space-y-2">
+              <span className="text-[10px] font-black uppercase text-indigo-600 dark:text-indigo-400 block">Níveis de Certificação Belt</span>
+              <div className="grid grid-cols-1 gap-2 text-[10px]">
+                <div className="flex items-start gap-2 bg-white/60 dark:bg-slate-900/60 p-2 rounded-xl border border-slate-200/60 dark:border-slate-800">
+                  <span className="px-2 py-0.5 rounded text-[8px] font-black uppercase bg-yellow-500 text-yellow-950 shrink-0">Yellow Belt (60+ pts)</span>
+                  <span className="text-slate-500 dark:text-slate-400 text-[9px] leading-tight">Introdução ao Kaizen, preenchimento de GUT, Pareto e SWOT.</span>
+                </div>
+                <div className="flex items-start gap-2 bg-white/60 dark:bg-slate-900/60 p-2 rounded-xl border border-slate-200/60 dark:border-slate-800">
+                  <span className="px-2 py-0.5 rounded text-[8px] font-black uppercase bg-emerald-500 text-white shrink-0">Green Belt (180+ pts)</span>
+                  <span className="text-slate-500 dark:text-slate-400 text-[9px] leading-tight">Liderança de projetos PDCA, mapeamento SIPOC, Ishikawa e 5 Whys.</span>
+                </div>
+                <div className="flex items-start gap-2 bg-white/60 dark:bg-slate-900/60 p-2 rounded-xl border border-slate-200/60 dark:border-slate-800">
+                  <span className="px-2 py-0.5 rounded text-[8px] font-black uppercase bg-slate-900 text-white shrink-0">Black Belt (350+ pts)</span>
+                  <span className="text-slate-500 dark:text-slate-400 text-[9px] leading-tight">Liderança avançada DMAIC, cronogramas complexos e redução de tempos.</span>
+                </div>
+                <div className="flex items-start gap-2 bg-white/60 dark:bg-slate-900/60 p-2 rounded-xl border border-slate-200/60 dark:border-slate-800">
+                  <span className="px-2 py-0.5 rounded text-[8px] font-black uppercase bg-indigo-600 text-white shrink-0">Master Black Belt (600+ pts)</span>
+                  <span className="text-slate-500 dark:text-slate-400 text-[9px] leading-tight">Análise de ROI, Payback, consolidação de planos e mentoria Lean.</span>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -749,27 +795,57 @@ export const GamificacaoCEO: React.FC<GamificacaoCEOProps> = ({ projects, sugges
 
             <form onSubmit={handleLogHours} className="space-y-4 text-xs">
               <div className="space-y-1">
-                <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Colaborador</label>
-                <input 
-                  type="text" 
-                  value={trainingUserName}
-                  onChange={(e) => setTrainingUserName(e.target.value)}
-                  placeholder="Nome Completo"
-                  required
-                  className="w-full px-3 py-2 border border-slate-200 dark:border-slate-800 rounded-xl bg-slate-50"
-                />
+                <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Selecionar Colaborador Cadastrado</label>
+                <select
+                  value={trainingUserEmail}
+                  onChange={(e) => {
+                    const selectedEmail = e.target.value;
+                    setTrainingUserEmail(selectedEmail);
+                    const found = dbUsers.find(u => u.email.toLowerCase() === selectedEmail.toLowerCase());
+                    if (found) {
+                      setTrainingUserName(found.name);
+                    } else if (selectedEmail === user?.email) {
+                      setTrainingUserName(user.name);
+                    }
+                  }}
+                  className="w-full px-3 py-2 border border-slate-200 dark:border-slate-800 rounded-xl bg-slate-50 font-bold"
+                >
+                  <option value="">-- Escolha um colaborador --</option>
+                  {user && (
+                    <option value={user.email}>{user.name} ({user.email}) - Usuário Atual</option>
+                  )}
+                  {dbUsers.map(u => (
+                    u.email !== user?.email ? (
+                      <option key={u.id} value={u.email}>{u.name} ({u.email})</option>
+                    ) : null
+                  ))}
+                </select>
               </div>
 
-              <div className="space-y-1">
-                <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Email Institucional</label>
-                <input 
-                  type="email" 
-                  value={trainingUserEmail}
-                  onChange={(e) => setTrainingUserEmail(e.target.value)}
-                  placeholder="email@vickytex.com.br"
-                  required
-                  className="w-full px-3 py-2 border border-slate-200 dark:border-slate-800 rounded-xl bg-slate-50"
-                />
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Nome Confirmado</label>
+                  <input 
+                    type="text" 
+                    value={trainingUserName}
+                    onChange={(e) => setTrainingUserName(e.target.value)}
+                    placeholder="Nome Completo"
+                    required
+                    className="w-full px-3 py-2 border border-slate-200 dark:border-slate-800 rounded-xl bg-slate-50 font-medium"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Email Confirmado</label>
+                  <input 
+                    type="email" 
+                    value={trainingUserEmail}
+                    onChange={(e) => setTrainingUserEmail(e.target.value)}
+                    placeholder="email@vickytex.com.br"
+                    required
+                    className="w-full px-3 py-2 border border-slate-200 dark:border-slate-800 rounded-xl bg-slate-50 font-medium"
+                  />
+                </div>
               </div>
 
               <div className="grid grid-cols-3 gap-3">

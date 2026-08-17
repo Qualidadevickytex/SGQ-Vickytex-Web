@@ -48,7 +48,7 @@ export const INITIAL_COLABORADORES: ColaboradorCompetencia[] = [
   { id: 'col-7', nome: 'Mateus Oliveira', cargo: 'Costureiro de Fechamento', setor: 'Costura', documentosAssinados: ['POP-COS-002'], status: 'Apto' }
 ];
 
-const INITIAL_TREINAMENTOS: Treinamento[] = [
+export const INITIAL_TREINAMENTOS: Treinamento[] = [
   {
     id: 'tr-001',
     codigo: 'TRE-2026-001',
