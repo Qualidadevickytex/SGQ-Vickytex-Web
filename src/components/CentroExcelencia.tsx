@@ -25,6 +25,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { getSectors } from '../utils/mockData';
 import { SectorType } from '../types/department';
 import { ProjetoCEO, SugestaoCEO } from '../types/ceo';
+import { PlanoAcao } from '../types/actionPlan';
 import { DashboardCEO } from './ceo/DashboardCEO';
 import { SugestoesCEO } from './ceo/SugestoesCEO';
 import { ProjetoFormCEO } from './ceo/ProjetoFormCEO';
@@ -33,7 +34,19 @@ import { GamificacaoCEO } from './ceo/GamificacaoCEO';
 
 const getDynamicSectors = (): SectorType[] => (getSectors() as SectorType[]);
 
-export const CentroExcelencia: React.FC<{ personalizacao?: any }> = () => {
+interface CentroExcelenciaProps {
+  personalizacao?: any;
+  planos?: PlanoAcao[];
+  onAddPlano?: (plano: PlanoAcao) => void;
+  onNavigateToPlanos?: () => void;
+}
+
+export const CentroExcelencia: React.FC<CentroExcelenciaProps> = ({ 
+  personalizacao,
+  planos = [],
+  onAddPlano,
+  onNavigateToPlanos
+}) => {
   const { user } = useAuth();
   const { 
     projects, 
@@ -431,7 +444,10 @@ export const CentroExcelencia: React.FC<{ personalizacao?: any }> = () => {
                 onAddSuggestion={submitSugestao} 
                 onUpdateSuggestion={handleUpdateSuggestion} 
                 onDeleteSuggestion={deleteSugestao}
-                sectors={getDynamicSectors()} 
+                sectors={getDynamicSectors()}
+                planos={planos}
+                onAddPlano={onAddPlano}
+                onNavigateToPlanos={onNavigateToPlanos}
               />
             )}
 

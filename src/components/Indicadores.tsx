@@ -50,6 +50,7 @@ import {
   Radar
 } from 'recharts';
 import { PersonalizacaoGeral } from '../utils/mockData';
+import { useAuth } from '../contexts/AuthContext';
 import { IndicatorRepository } from '../services/database/repositories/indicator.repository';
 import { CriticalAnalysesRepository } from '../services/firebase/repositories/criticalAnalysis.repository';
 import { IndicadorDesempenho } from '../types/indicator';
@@ -164,7 +165,7 @@ const INITIAL_INDICADORES: Indicador[] = [
     requisitoISO: '8.2.1 - Comunicação com o Cliente',
     descricao: 'Percentual de reclamações de clientes (RNC Externa) tratadas e respondidas dentro do SLA estabelecido de 5 dias úteis.',
     formula: '(Reclamações Fechadas no Prazo / Total de Reclamações Fechadas) × 100',
-    responsavel: 'Mariana Silva (Garantia da Qualidade)',
+    responsavel: 'Rodrigo Berto (Garantia da Qualidade)',
     historico: [
       { mes: 'Jan', valor: 90 },
       { mes: 'Fev', valor: 92 },
@@ -227,7 +228,7 @@ const INITIAL_ANALISES: AnaliseCritica[] = [
     data: '2026-06-15',
     indicadorId: 'kpi-2',
     indicadorNome: 'Índice de Defeitos e Retrabalho (Segunda Qualidade)',
-    avaliador: 'Mariana Silva (Qualidade)',
+    avaliador: 'Rodrigo Berto (Qualidade)',
     conclusao: 'Meta batida consecutivamente em Maio e Junho após a implementação dos novos guias de costura dupla. Processo está estabilizado.',
     statusAcao: 'Sob Controle'
   },
@@ -297,6 +298,7 @@ const mapFromRepo = (repoInd: any): Indicador => {
 };
 
 export const Indicadores: React.FC<IndicadoresProps> = ({ onAddLog, personalizacao }) => {
+  const { user } = useAuth();
   const [indicadores, setIndicadores] = useState<Indicador[]>(() => {
     return import.meta.env.VITE_DEMO_MODE === 'true' ? INITIAL_INDICADORES : [];
   });
@@ -396,7 +398,7 @@ export const Indicadores: React.FC<IndicadoresProps> = ({ onAddLog, personalizac
   });
 
   const [newCritica, setNewCritica] = useState({
-    indicadorId: 'kpi-1',
+    indicadorId: '',
     conclusao: '',
     statusAcao: 'Sob Controle' as 'Necessita Ação' | 'Sob Controle' | 'Plano Aberto',
     linkPlanoId: ''
@@ -640,27 +642,37 @@ export const Indicadores: React.FC<IndicadoresProps> = ({ onAddLog, personalizac
   // Handler para Adicionar Análise Crítica
   const handleAddCritica = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newCritica.conclusao) return;
+    if (!newCritica.conclusao || !newCritica.conclusao.trim()) return;
 
-    const targetKpi = indicadores.find(k => k.id === newCritica.indicadorId);
-    if (!targetKpi) return;
+    // Resolução resiliente do indicador alvo
+    const targetKpi = indicadores.find(k => k.id === newCritica.indicadorId) 
+      || indicadores.find(k => k.id === selectedKpiId) 
+      || (indicadores.length > 0 ? indicadores[0] : null);
+
+    const indId = targetKpi ? targetKpi.id : (newCritica.indicadorId || selectedKpiId || 'kpi-geral');
+    const indNome = targetKpi ? targetKpi.nome : 'Indicador da Qualidade';
+
+    const evaluatorName = user?.name 
+      ? `${user.name}${user.role ? ` (${user.role})` : ''}` 
+      : 'Mariana Silva (Qualidade)';
 
     const created: AnaliseCritica = {
       id: `ana-${Date.now()}`,
       data: new Date().toISOString().split('T')[0],
-      indicadorId: newCritica.indicadorId,
-      indicadorNome: targetKpi.nome,
-      avaliador: 'Mariana Silva (Qualidade)',
-      conclusao: newCritica.conclusao,
+      indicadorId: indId,
+      indicadorNome: indNome,
+      avaliador: evaluatorName,
+      conclusao: newCritica.conclusao.trim(),
       statusAcao: newCritica.statusAcao,
-      linkPlanoId: newCritica.linkPlanoId || undefined
+      linkPlanoId: newCritica.linkPlanoId?.trim() || undefined
     };
 
     setAnalises(prev => [created, ...prev]);
     setShowAddCriticaModal(false);
-    onAddLog('Indicadores', `Registrou análise crítica de qualidade (ISO 9.3) para o indicador "${targetKpi.nome}"`);
+    onAddLog('Indicadores', `Registrou análise crítica de qualidade (ISO 9.3) para o indicador "${indNome}"`);
+    
     setNewCritica({
-      indicadorId: 'kpi-1',
+      indicadorId: indId,
       conclusao: '',
       statusAcao: 'Sob Controle',
       linkPlanoId: ''
@@ -670,6 +682,20 @@ export const Indicadores: React.FC<IndicadoresProps> = ({ onAddLog, personalizac
       await CriticalAnalysesRepository.create(created as any);
     } catch (err) {
       console.error('Falha ao salvar análise crítica no Firestore:', err);
+    }
+  };
+
+  // Handler para Deletar Análise Crítica
+  const handleDeleteCritica = async (id: string) => {
+    const target = analises.find(a => a.id === id);
+    setAnalises(prev => prev.filter(a => a.id !== id));
+    if (target) {
+      onAddLog('Indicadores', `Excluiu a análise crítica do indicador "${target.indicadorNome}"`);
+    }
+    try {
+      await CriticalAnalysesRepository.delete(id);
+    } catch (err) {
+      console.error('Falha ao excluir análise crítica do Firestore:', err);
     }
   };
 
@@ -1233,7 +1259,15 @@ export const Indicadores: React.FC<IndicadoresProps> = ({ onAddLog, personalizac
 
               <button
                 id="btn-add-critica"
-                onClick={() => setShowAddCriticaModal(true)}
+                onClick={() => {
+                  setNewCritica({
+                    indicadorId: selectedKpiId || indicadores[0]?.id || '',
+                    conclusao: '',
+                    statusAcao: 'Sob Controle',
+                    linkPlanoId: ''
+                  });
+                  setShowAddCriticaModal(true);
+                }}
                 className="flex items-center space-x-1 px-3 py-1.5 bg-indigo-50 dark:bg-indigo-950/40 hover:bg-indigo-100 dark:hover:bg-indigo-900 text-indigo-600 dark:text-indigo-400 text-xs font-bold rounded-lg border border-indigo-200/50 dark:border-indigo-900/50 transition-colors cursor-pointer"
               >
                 <Plus className="w-3.5 h-3.5" />
@@ -1262,13 +1296,22 @@ export const Indicadores: React.FC<IndicadoresProps> = ({ onAddLog, personalizac
                   </div>
 
                   <div className="flex flex-col items-end gap-1.5 shrink-0 self-start sm:self-center">
-                    <span className={`px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wider font-mono ${
-                      critica.statusAcao === 'Sob Controle'
-                        ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/20'
-                        : 'bg-red-50 text-red-600 dark:bg-red-950/20 animate-pulse'
-                    }`}>
-                      {critica.statusAcao}
-                    </span>
+                    <div className="flex items-center gap-1.5">
+                      <span className={`px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wider font-mono ${
+                        critica.statusAcao === 'Sob Controle'
+                          ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/20'
+                          : 'bg-red-50 text-red-600 dark:bg-red-950/20 animate-pulse'
+                      }`}>
+                        {critica.statusAcao}
+                      </span>
+                      <button
+                        onClick={() => handleDeleteCritica(critica.id)}
+                        className="p-1 text-slate-400 hover:text-red-600 dark:hover:text-red-400 rounded-md hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"
+                        title="Excluir parecer"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                    </div>
                     {critica.linkPlanoId && (
                       <span className="text-[9px] font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/20 px-1.5 py-0.5 rounded-sm font-mono">
                         Ref: {critica.linkPlanoId}
@@ -1616,15 +1659,18 @@ export const Indicadores: React.FC<IndicadoresProps> = ({ onAddLog, personalizac
             <form onSubmit={handleAddCritica} className="space-y-4 text-xs font-medium text-slate-700 dark:text-slate-300">
               
               <div className="space-y-1.5">
-                <label className="text-[10px] font-extrabold text-slate-500">Indicador Alvo</label>
+                <label className="text-[10px] font-extrabold text-slate-500">Indicador Alvo *</label>
                 <select
-                  value={newCritica.indicadorId}
+                  value={newCritica.indicadorId || (indicadores.length > 0 ? indicadores[0].id : '')}
                   onChange={(e) => setNewCritica({ ...newCritica, indicadorId: e.target.value })}
                   className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-2.5 text-slate-800 dark:text-slate-100 focus:outline-hidden"
                 >
                   {indicadores.map((kpi) => (
-                    <option key={kpi.id} value={kpi.id}>{kpi.nome}</option>
+                    <option key={kpi.id} value={kpi.id}>{kpi.nome} ({kpi.setor})</option>
                   ))}
+                  {indicadores.length === 0 && (
+                    <option value="kpi-geral">Indicador Geral SGQ</option>
+                  )}
                 </select>
               </div>
 

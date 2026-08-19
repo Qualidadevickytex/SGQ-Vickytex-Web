@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Settings, Plus, Trash2, Check, ArrowRight, Info, Award, ShieldAlert, ArrowUp, ArrowDown, Pencil } from 'lucide-react';
 import { DocumentType, ApprovalFlow, ApprovalFlowStep, DocumentStatus } from '../../types';
 import { SystemSettingsRepository } from '../../services/database/repositories/systemSettings.repository';
+import { getDocumentTypes, DOCUMENT_TYPES } from '../../utils/mockData';
 
 interface FluxosParametrizadosProps {
   onClose?: () => void;
@@ -80,7 +81,8 @@ export const getSavedFlows = (): ApprovalFlow[] => {
 
 export const FluxosParametrizados: React.FC<FluxosParametrizadosProps> = ({ onClose }) => {
   const [flows, setFlows] = useState<ApprovalFlow[]>(() => getSavedFlows());
-  const [selectedType, setSelectedType] = useState<DocumentType>('POP');
+  const [availableDocTypes, setAvailableDocTypes] = useState<{ type: string; name: string; description: string }[]>(() => getDocumentTypes());
+  const [selectedType, setSelectedType] = useState<string>('POP');
   const [activeFlow, setActiveFlow] = useState<ApprovalFlow | null>(null);
 
   // Perfis dinâmicos cadastrados no sistema (Perfis & Permissões)
@@ -126,29 +128,47 @@ export const FluxosParametrizados: React.FC<FluxosParametrizadosProps> = ({ onCl
   // Subscrição onSnapshot em tempo real no Firestore para sincronizar entre usuários
   useEffect(() => {
     const unsub = SystemSettingsRepository.subscribe((records) => {
-      const rec = records.find(r => r.id === 'sgq_vickytex_fluxos_documentos');
-      if (rec && Array.isArray(rec.items) && rec.items.length > 0) {
-        setFlows(rec.items);
+      const recFlows = records.find(r => r.id === 'sgq_vickytex_fluxos_documentos');
+      if (recFlows && Array.isArray(recFlows.items) && recFlows.items.length > 0) {
+        setFlows(recFlows.items);
+      }
+
+      const recDocTypes = records.find(r => r.id === 'sgq_vickytex_tipos_documentos');
+      if (recDocTypes && Array.isArray(recDocTypes.items) && recDocTypes.items.length > 0) {
+        setAvailableDocTypes(recDocTypes.items);
+      } else {
+        setAvailableDocTypes(getDocumentTypes());
       }
     });
     return () => unsub();
   }, []);
 
   useEffect(() => {
+    // Sincronizar caso o tipo selecionado não esteja na lista inicial
+    if (availableDocTypes.length > 0 && !availableDocTypes.some(t => t.type === selectedType)) {
+      setSelectedType(availableDocTypes[0].type);
+    }
+  }, [availableDocTypes]);
+
+  useEffect(() => {
     const flow = flows.find(f => f.tipoDocumento === selectedType);
     if (flow) {
       setActiveFlow(flow);
     } else {
+      const typeInfo = availableDocTypes.find(t => t.type === selectedType);
       setActiveFlow({
         id: `flow-${selectedType.toLowerCase()}`,
-        tipoDocumento: selectedType,
-        nome: `Fluxo Customizado - ${selectedType}`,
-        etapas: []
+        tipoDocumento: selectedType as DocumentType,
+        nome: `Fluxo Padrão - ${typeInfo?.name || selectedType}`,
+        etapas: [
+          { id: '1', etapaNumero: 1, perfilResponsavel: 'Elaborador', descricao: `Elaboração inicial de ${selectedType}`, statusAlvo: 'Elaboração', statusSeRejeitado: 'Rascunho' },
+          { id: '2', etapaNumero: 2, perfilResponsavel: 'Qualidade', descricao: 'Homologação e aprovação pela Qualidade', statusAlvo: 'Publicação', statusSeRejeitado: 'Elaboração' }
+        ]
       });
     }
     // Cancelar qualquer edição pendente quando mudar o tipo do documento
     handleCancelEdit();
-  }, [selectedType, flows]);
+  }, [selectedType, flows, availableDocTypes]);
 
   const handleSaveFlows = (updatedFlows: ApprovalFlow[]) => {
     setFlows(updatedFlows);
@@ -323,19 +343,21 @@ export const FluxosParametrizados: React.FC<FluxosParametrizadosProps> = ({ onCl
         {/* Seletor de Tipo Documental */}
         <div className="space-y-2">
           <label className="block text-xs font-bold text-slate-400 uppercase">Selecione o Tipo</label>
-          <div className="flex flex-col space-y-1.5">
-            {(['POP', 'FOR', 'IT', 'MAN', 'LIST'] as DocumentType[]).map((type) => (
+          <div className="flex flex-col space-y-1.5 max-h-[480px] overflow-y-auto pr-1">
+            {availableDocTypes.map((docTypeItem) => (
               <button
-                key={type}
-                onClick={() => setSelectedType(type)}
+                key={docTypeItem.type}
+                onClick={() => setSelectedType(docTypeItem.type)}
                 className={`px-4 py-3 text-left rounded-xl text-xs font-bold transition-all flex items-center justify-between cursor-pointer ${
-                  selectedType === type
+                  selectedType === docTypeItem.type
                     ? 'bg-blue-600 text-white shadow-xs'
                     : 'bg-slate-50 hover:bg-slate-100 dark:bg-slate-800/40 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200/40 dark:border-slate-700/40'
                 }`}
               >
-                <span>{type === 'POP' ? 'POP - Procedimento' : type === 'FOR' ? 'FOR - Formulário' : type === 'IT' ? 'IT - Instrução' : type === 'MAN' ? 'MAN - Manual' : 'LIST - Lista Mestra'}</span>
-                <ArrowRight className="w-3.5 h-3.5 opacity-60" />
+                <div className="flex flex-col truncate mr-2">
+                  <span className="truncate">{docTypeItem.type} - {docTypeItem.name}</span>
+                </div>
+                <ArrowRight className="w-3.5 h-3.5 opacity-60 shrink-0" />
               </button>
             ))}
           </div>

@@ -29,6 +29,7 @@ import { SugestaoCEO, StatusSugestaoCEO } from '../../types/ceo';
 import { SectorType } from '../../types/department';
 import { UserProfile } from '../../types/user';
 import { PlanoAcao } from '../../types/actionPlan';
+import { ActionPlanRepository } from '../../services/database/repositories/actionPlan.repository';
 
 interface SugestoesCEOProps {
   suggestions: SugestaoCEO[];
@@ -37,6 +38,9 @@ interface SugestoesCEOProps {
   onUpdateSuggestion: (id: string, updates: Partial<SugestaoCEO>) => Promise<boolean>;
   onDeleteSuggestion?: (id: string) => Promise<boolean>;
   sectors: SectorType[];
+  planos?: PlanoAcao[];
+  onAddPlano?: (plano: PlanoAcao) => void;
+  onNavigateToPlanos?: () => void;
 }
 
 export const SugestoesCEO: React.FC<SugestoesCEOProps> = ({
@@ -45,7 +49,10 @@ export const SugestoesCEO: React.FC<SugestoesCEOProps> = ({
   onAddSuggestion,
   onUpdateSuggestion,
   onDeleteSuggestion,
-  sectors
+  sectors,
+  planos = [],
+  onAddPlano,
+  onNavigateToPlanos
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedStatus, setSelectedStatus] = useState<string>('TODOS');
@@ -155,6 +162,10 @@ export const SugestoesCEO: React.FC<SugestoesCEOProps> = ({
     e.preventDefault();
     if (!evaluatingId) return;
 
+    const currentEvalFeedback = evalFeedback;
+    const targetSugId = evaluatingId;
+    const isApproving = evalStatus === 'Aprovada';
+
     const updates: Partial<SugestaoCEO> = {
       status: evalStatus,
       avaliacaoComite: evalFeedback,
@@ -162,11 +173,10 @@ export const SugestoesCEO: React.FC<SugestoesCEOProps> = ({
       notaFacilidade: evalEase
     };
 
-    const success = await onUpdateSuggestion(evaluatingId, updates);
+    const success = await onUpdateSuggestion(targetSugId, updates);
     if (success) {
-      // If approved, let's also prompt to create an action plan automatically or simulate it!
-      if (evalStatus === 'Aprovada') {
-        instantiateActionPlan(evaluatingId);
+      if (isApproving) {
+        await instantiateActionPlan(targetSugId, currentEvalFeedback);
       }
       setEvaluatingId(null);
       setEvalFeedback('');
@@ -174,36 +184,59 @@ export const SugestoesCEO: React.FC<SugestoesCEOProps> = ({
   };
 
   // Automated instantiation of Action Plan 5W2H
-  const instantiateActionPlan = (sugId: string) => {
+  const instantiateActionPlan = async (sugId: string, customFeedback?: string) => {
     const sug = suggestions.find(s => s.id === sugId);
     if (!sug) return;
 
     try {
-      const savedPlanosRaw = localStorage.getItem('sgq_vickytex_planos');
-      const currentPlanos: PlanoAcao[] = savedPlanosRaw ? JSON.parse(savedPlanosRaw) : [];
+      const feedbackText = customFeedback !== undefined ? customFeedback : (sug.avaliacaoComite || evalFeedback || 'Aprovado pelo comitê técnico do CEO.');
+      const deadline = new Date();
+      deadline.setDate(deadline.getDate() + 30);
+      const deadlineStr = deadline.toISOString().split('T')[0];
 
-      const newPlanoCode = `PA-CEO-${Math.floor(100 + Math.random() * 900)}`;
+      const newPlanoCode = `PA-${sug.codigo || `SUG-${Date.now().toString().slice(-4)}`}`;
       const newPlano: PlanoAcao = {
-        id: `plano-${Date.now()}`,
+        id: `plano-ceo-${sug.id || Date.now()}`,
         codigo: newPlanoCode,
-        titulo: `Implantar Sugestão: ${sug.titulo}`,
+        titulo: `Implantar Melhoria: ${sug.titulo}`,
         setor: sug.setor,
         status: 'Planejado',
         dataCriacao: new Date().toISOString().split('T')[0],
-        oQue: `Implementar a melhoria operacional sugerida: ${sug.titulo}`,
-        porQue: `Sugerido por ${sug.autor}. Descrição: ${sug.descricao}`,
-        onde: `Setor de ${sug.setor}`,
-        quando: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 30 dias
-        quem: sug.autor,
-        como: `Mapear passos com o comitê e implantar conforme feedback: ${evalFeedback}`,
+        oQue: `Implementar melhoria contínua (${sug.codigo}): ${sug.titulo}`,
+        porQue: `Ideia de melhoria submetida por ${sug.autor || 'Colaborador'}. Detalhes: ${sug.descricao}`,
+        onde: `Setor de ${sug.setor} - Instalações da Vickytex`,
+        quando: deadlineStr,
+        quem: sug.autor || user?.name || user?.email || 'Qualidade Vickytex',
+        como: `1. Mapear escopo e viabilidade técnica;\n2. Executar cronograma conforme diretrizes do comitê: ${feedbackText};\n3. Acompanhar ganhos de produtividade e qualidade.`,
         quantoCusta: 0
       };
 
-      currentPlanos.push(newPlano);
-      localStorage.setItem('sgq_vickytex_planos', JSON.stringify(currentPlanos));
+      // 1. Salvar no Firestore
+      try {
+        await ActionPlanRepository.create(newPlano);
+      } catch (err) {
+        console.error('Erro ao salvar plano no Firestore via repository:', err);
+      }
 
-      // Link Plano ID to Suggestion
-      onUpdateSuggestion(sugId, { planoAcaoId: newPlano.id });
+      // 2. Salvar no estado global do App (se passado)
+      if (onAddPlano) {
+        onAddPlano(newPlano);
+      }
+
+      // 3. Fallback no localStorage
+      try {
+        const savedPlanosRaw = localStorage.getItem('sgq_vickytex_planos');
+        const currentPlanos: PlanoAcao[] = savedPlanosRaw ? JSON.parse(savedPlanosRaw) : [];
+        if (!currentPlanos.some(p => p.id === newPlano.id || p.codigo === newPlano.codigo)) {
+          currentPlanos.unshift(newPlano);
+          localStorage.setItem('sgq_vickytex_planos', JSON.stringify(currentPlanos));
+        }
+      } catch (lsErr) {
+        console.error('Erro ao atualizar localStorage de planos:', lsErr);
+      }
+
+      // 4. Vincular Plano ID à Sugestão
+      await onUpdateSuggestion(sugId, { planoAcaoId: newPlano.id });
     } catch (err) {
       console.error('Failed to instantiate 5W2H Action Plan', err);
     }
@@ -415,15 +448,42 @@ export const SugestoesCEO: React.FC<SugestoesCEOProps> = ({
                     ) : null}
 
                     {/* Action plan linkage info */}
-                    {sug.planoAcaoId && (
-                      <div className="flex items-center space-x-1 text-[9px] text-emerald-600 dark:text-emerald-400 font-bold mt-1">
-                        <FileText className="w-3 h-3" />
-                        <span>Plano de Ação 5W2H gerado com sucesso!</span>
+                    {sug.planoAcaoId ? (
+                      <div className="flex items-center justify-between bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/40 rounded-xl p-2 mt-1">
+                        <div className="flex items-center space-x-1.5 text-[10px] text-emerald-700 dark:text-emerald-400 font-bold">
+                          <FileText className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                          <span>Plano 5W2H Vinculado</span>
+                        </div>
+                        {onNavigateToPlanos && (
+                          <button
+                            type="button"
+                            onClick={onNavigateToPlanos}
+                            className="inline-flex items-center space-x-1 text-[10px] bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-2 py-1 rounded-lg transition-colors shadow-2xs"
+                          >
+                            <span>Abrir Planos</span>
+                            <ArrowRight className="w-3 h-3" />
+                          </button>
+                        )}
                       </div>
-                    )}
+                    ) : sug.status === 'Aprovada' ? (
+                      <div className="flex items-center justify-between bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/40 rounded-xl p-2 mt-1">
+                        <div className="flex items-center space-x-1 text-[10px] text-amber-700 dark:text-amber-400 font-medium">
+                          <AlertCircle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                          <span>Ideia Aprovada</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => instantiateActionPlan(sug.id, sug.avaliacaoComite)}
+                          className="inline-flex items-center space-x-1 text-[10px] bg-amber-600 hover:bg-amber-700 text-white font-bold px-2.5 py-1 rounded-lg transition-colors shadow-2xs"
+                        >
+                          <Plus className="w-3 h-3" />
+                          <span>Gerar 5W2H</span>
+                        </button>
+                      </div>
+                    ) : null}
 
                     {/* Evaluator trigger */}
-                    {isEvaluator && !sug.planoAcaoId && (
+                    {isEvaluator && (
                       <button
                         onClick={() => startEvaluation(sug)}
                         className="w-full mt-2 inline-flex items-center justify-center space-x-1 px-3 py-1.5 border border-slate-200 dark:border-slate-800 hover:border-blue-500 hover:text-blue-600 text-slate-600 dark:text-slate-400 font-bold rounded-xl text-[10px] transition-colors"

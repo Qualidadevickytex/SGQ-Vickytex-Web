@@ -25,7 +25,8 @@ import {
   X,
   Save,
   ShieldCheck,
-  RotateCcw
+  RotateCcw,
+  Undo2
 } from 'lucide-react';
 import { ProjetoCEO, SugestaoCEO } from '../../types/ceo';
 import { Treinamento } from '../../types/training';
@@ -33,6 +34,7 @@ import { UserAccount } from '../../types/user';
 import { useAuth } from '../../contexts/AuthContext';
 import { ConfirmModal } from '../common/ConfirmModal';
 import { INITIAL_USER_ACCOUNTS } from '../../utils/mockData';
+import { INITIAL_TREINAMENTOS } from '../Treinamentos';
 import { SystemSettingsRepository } from '../../services/database/repositories/systemSettings.repository';
 import { TrainingRepository } from '../../services/database/repositories/training.repository';
 import { UserRepository } from '../../services/database/repositories/user.repository';
@@ -85,7 +87,13 @@ export const GamificacaoCEO: React.FC<GamificacaoCEOProps> = ({ projects, sugges
     const saved = localStorage.getItem('sgq_vickytex_ceo_reset_timestamp');
     return saved ? Number(saved) : 0;
   });
+  const [previousResetTimestamp, setPreviousResetTimestamp] = useState<number>(() => {
+    const saved = localStorage.getItem('sgq_vickytex_ceo_prev_reset_timestamp');
+    return saved ? Number(saved) : 0;
+  });
   const [isZeroScoresModalOpen, setIsZeroScoresModalOpen] = useState(false);
+  const [isRestoreScoresModalOpen, setIsRestoreScoresModalOpen] = useState(false);
+  const [isUndoResetModalOpen, setIsUndoResetModalOpen] = useState(false);
 
   const [maintenanceModalOpen, setMaintenanceModalOpen] = useState(false);
   const [selectedUserForMaint, setSelectedUserForMaint] = useState<string>('');
@@ -111,12 +119,20 @@ export const GamificacaoCEO: React.FC<GamificacaoCEOProps> = ({ projects, sugges
       if (zeroDoc && zeroDoc.data !== undefined) {
         setIsScoresZeroed(Boolean(zeroDoc.data.zeroed));
         setResetTimestamp(Number(zeroDoc.data.timestamp || 0));
+        if (zeroDoc.data.previousTimestamp !== undefined) {
+          setPreviousResetTimestamp(Number(zeroDoc.data.previousTimestamp || 0));
+        }
       }
     });
 
     const unsubTrainings = TrainingRepository.subscribe((items) => {
       if (Array.isArray(items)) {
-        setDbTrainings(items);
+        if (items.length > 0) {
+          setDbTrainings(items);
+        } else {
+          // Se o banco estiver sem registros de treinamento, usar os treinamentos iniciais padrão
+          setDbTrainings(INITIAL_TREINAMENTOS);
+        }
       }
     });
 
@@ -144,7 +160,12 @@ export const GamificacaoCEO: React.FC<GamificacaoCEOProps> = ({ projects, sugges
     } else {
       localStorage.removeItem('sgq_vickytex_ceo_reset_timestamp');
     }
-  }, [isScoresZeroed, resetTimestamp]);
+    if (previousResetTimestamp) {
+      localStorage.setItem('sgq_vickytex_ceo_prev_reset_timestamp', previousResetTimestamp.toString());
+    } else {
+      localStorage.removeItem('sgq_vickytex_ceo_prev_reset_timestamp');
+    }
+  }, [isScoresZeroed, resetTimestamp, previousResetTimestamp]);
 
   // Recalculate ranking whenever projects, suggestions, trainings, or logged trainings change
   useEffect(() => {
@@ -314,6 +335,11 @@ export const GamificacaoCEO: React.FC<GamificacaoCEOProps> = ({ projects, sugges
         // 3. Add logged training hours from CEO Training Logs
         loggedTrainings.forEach(log => {
           if (!log) return;
+          // Se houver ciclo zerado anterior, apenas considerar logs de treinamento do ciclo atual
+          if (resetTimestamp > 0 && !isItemFromCurrentCycle(log.data, log.criadoEm || (log.id?.startsWith('log-') ? new Date(Number(log.id.replace('log-', ''))).toISOString() : undefined))) {
+            return;
+          }
+
           const u = (log.email ? findRegisteredUser(log.email) : null) || (log.nome ? findRegisteredUser(log.nome) : null);
           if (u) {
             const h = Number(log.horas || 0);
@@ -443,26 +469,75 @@ export const GamificacaoCEO: React.FC<GamificacaoCEOProps> = ({ projects, sugges
 
   const handleConfirmResetScores = () => {
     const now = Date.now();
+    const prev = resetTimestamp;
+    setPreviousResetTimestamp(prev);
     setIsScoresZeroed(true);
     setResetTimestamp(now);
-    setLoggedTrainings([]);
     setManualAdjustments({});
-    localStorage.setItem('sgq_vickytex_ceo_training_logs', '[]');
     localStorage.removeItem('sgq_vickytex_ceo_gamification_adjustments');
     localStorage.setItem('sgq_vickytex_ceo_scores_zeroed', 'true');
     localStorage.setItem('sgq_vickytex_ceo_reset_timestamp', now.toString());
-    SystemSettingsRepository.create({ id: 'sgq_vickytex_ceo_training_logs', items: [] }).catch(console.error);
+    if (prev) {
+      localStorage.setItem('sgq_vickytex_ceo_prev_reset_timestamp', prev.toString());
+    }
     SystemSettingsRepository.create({ id: 'sgq_vickytex_ceo_gamification_adjustments', data: {} }).catch(console.error);
-    SystemSettingsRepository.create({ id: 'sgq_vickytex_ceo_scores_zeroed', data: { zeroed: true, timestamp: now } }).catch(console.error);
+    SystemSettingsRepository.create({ 
+      id: 'sgq_vickytex_ceo_scores_zeroed', 
+      data: { zeroed: true, timestamp: now, previousTimestamp: prev } 
+    }).catch(console.error);
     setIsZeroScoresModalOpen(false);
   };
 
-  const handleRestoreScores = () => {
+  const handleUndoResetScores = async () => {
+    const restoredTimestamp = previousResetTimestamp || 0;
     setIsScoresZeroed(false);
-    setResetTimestamp(0);
-    localStorage.removeItem('sgq_vickytex_ceo_scores_zeroed');
-    localStorage.removeItem('sgq_vickytex_ceo_reset_timestamp');
-    SystemSettingsRepository.create({ id: 'sgq_vickytex_ceo_scores_zeroed', data: { zeroed: false, timestamp: 0 } }).catch(console.error);
+    setResetTimestamp(restoredTimestamp);
+    setPreviousResetTimestamp(0);
+    localStorage.setItem('sgq_vickytex_ceo_scores_zeroed', 'false');
+    if (restoredTimestamp > 0) {
+      localStorage.setItem('sgq_vickytex_ceo_reset_timestamp', restoredTimestamp.toString());
+    } else {
+      localStorage.removeItem('sgq_vickytex_ceo_reset_timestamp');
+    }
+    localStorage.removeItem('sgq_vickytex_ceo_prev_reset_timestamp');
+
+    try {
+      await SystemSettingsRepository.create({ 
+        id: 'sgq_vickytex_ceo_scores_zeroed', 
+        data: { zeroed: false, timestamp: restoredTimestamp, previousTimestamp: 0 } 
+      });
+    } catch (e) {
+      console.error('Erro ao desfazer zeramento no Firestore:', e);
+    } finally {
+      setIsUndoResetModalOpen(false);
+    }
+  };
+
+  const handleRestoreScores = async () => {
+    // Reverter para o ciclo/timestamp anterior (última pontuação obtida antes do zeramento)
+    const restoredTimestamp = previousResetTimestamp || 0;
+    setIsScoresZeroed(false);
+    setResetTimestamp(restoredTimestamp);
+    setPreviousResetTimestamp(0);
+    localStorage.setItem('sgq_vickytex_ceo_scores_zeroed', 'false');
+    if (restoredTimestamp > 0) {
+      localStorage.setItem('sgq_vickytex_ceo_reset_timestamp', restoredTimestamp.toString());
+    } else {
+      localStorage.removeItem('sgq_vickytex_ceo_reset_timestamp');
+    }
+    localStorage.removeItem('sgq_vickytex_ceo_prev_reset_timestamp');
+    
+    // Atualizar no Firestore mantendo os logs de treinamento e recuperando as pontuações registradas
+    try {
+      await SystemSettingsRepository.create({ 
+        id: 'sgq_vickytex_ceo_scores_zeroed', 
+        data: { zeroed: false, timestamp: restoredTimestamp, previousTimestamp: 0 } 
+      });
+    } catch (e) {
+      console.error('Erro ao restaurar pontuações no Firestore:', e);
+    } finally {
+      setIsRestoreScoresModalOpen(false);
+    }
   };
 
   const handleLogHours = async (e: React.FormEvent) => {
@@ -603,8 +678,19 @@ export const GamificacaoCEO: React.FC<GamificacaoCEOProps> = ({ projects, sugges
               <span>Manutenção do Leaderboard</span>
             </button>
 
+            {previousResetTimestamp > 0 && (
+              <button
+                onClick={() => setIsUndoResetModalOpen(true)}
+                className="px-3 py-1.5 bg-amber-950/60 hover:bg-amber-900/80 text-amber-300 border border-amber-800/50 font-medium rounded-lg transition-colors flex items-center space-x-1.5 animate-pulse"
+                title="Reverter o último zeramento e restaurar os pontos e lançamentos do ciclo imediatamente anterior"
+              >
+                <Undo2 className="w-3.5 h-3.5 text-amber-400" />
+                <span>Desfazer Zeramento</span>
+              </button>
+            )}
+
             <button
-              onClick={handleRestoreScores}
+              onClick={() => setIsRestoreScoresModalOpen(true)}
               className="px-3 py-1.5 bg-emerald-950/60 hover:bg-emerald-900/80 text-emerald-300 border border-emerald-800/50 font-medium rounded-lg transition-colors flex items-center space-x-1.5"
               title="Recalcular e restaurar pontos automáticos de todos os projetos, ideias e treinamentos"
             >
@@ -1044,6 +1130,28 @@ export const GamificacaoCEO: React.FC<GamificacaoCEOProps> = ({ projects, sugges
         variant="danger"
         onConfirm={handleConfirmResetScores}
         onClose={() => setIsZeroScoresModalOpen(false)}
+      />
+
+      {/* Confirm Undo Reset Modal */}
+      <ConfirmModal
+        isOpen={isUndoResetModalOpen}
+        title="Desfazer Último Zeramento"
+        message="Deseja desfazer o último zeramento efetuado e restaurar as pontuações e lançamentos do ciclo anterior (como os 40 pontos lançados)? O ranking voltará ao estado imediatamente anterior ao último zeramento."
+        confirmLabel="Desfazer e Restaurar Ciclo"
+        variant="warning"
+        onConfirm={handleUndoResetScores}
+        onClose={() => setIsUndoResetModalOpen(false)}
+      />
+
+      {/* Confirm Restore Scores Modal */}
+      <ConfirmModal
+        isOpen={isRestoreScoresModalOpen}
+        title="Restaurar Pontuação Automática"
+        message="Deseja restaurar a pontuação para a última pontuação obtida? O sistema reverterá o estado de zeramento e recuperará as pontuações e lançamentos registrados no ciclo anterior."
+        confirmLabel="Restaurar Última Pontuação"
+        variant="warning"
+        onConfirm={handleRestoreScores}
+        onClose={() => setIsRestoreScoresModalOpen(false)}
       />
 
     </div>

@@ -32,12 +32,12 @@ interface LoginScreenProps {
 
 const PRESET_ACCOUNTS = [
   {
-    name: 'Mariana Silva',
+    name: 'Rodrigo Berto',
     email: 'qualidade@vickytex.com.br',
     role: 'Qualidade',
     password: 'mariana2026',
-    desc: 'Gestora do SGQ, controle de documentos e revisões.',
-    avatar: 'https://api.dicebear.com/7.x/adventurer/svg?seed=Mariana',
+    desc: 'Gestor do SGQ, controle de documentos e revisões.',
+    avatar: 'https://api.dicebear.com/7.x/adventurer/svg?seed=Rodrigo',
     color: 'border-blue-500/20 hover:border-blue-500 bg-blue-50/40 dark:bg-blue-950/20',
     badge: 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300'
   },

@@ -22,7 +22,7 @@ import {
   Pencil,
   Award
 } from 'lucide-react';
-import { Auditoria, NaoConformidade, SectorType, Documento } from '../types';
+import { Auditoria, NaoConformidade, SectorType, Documento, PlanoAcao } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { SECTORS, getSectors, PersonalizacaoGeral } from '../utils/mockData';
 import { SystemSettingsRepository } from '../services/database/repositories/systemSettings.repository';
@@ -31,12 +31,15 @@ interface AuditoriasNCProps {
   audits: Auditoria[];
   ncs: NaoConformidade[];
   documents: Documento[];
+  planos?: PlanoAcao[];
   onAddAudit: (audit: Auditoria) => void;
   onUpdateAudit: (audit: Auditoria) => void;
   onDeleteAudit: (id: string) => void;
   onAddNC: (nc: NaoConformidade) => void;
   onUpdateNC: (nc: NaoConformidade) => void;
   onDeleteNC: (id: string) => void;
+  onAddPlano?: (plano: PlanoAcao) => void;
+  onNavigateToPlanos?: () => void;
   onAddLog: (action: string, details: string, docId?: string) => void;
   personalizacao?: PersonalizacaoGeral;
 }
@@ -45,12 +48,15 @@ export const AuditoriasNC: React.FC<AuditoriasNCProps> = ({
   audits,
   ncs,
   documents,
+  planos = [],
   onAddAudit,
   onUpdateAudit,
   onDeleteAudit,
   onAddNC,
   onUpdateNC,
   onDeleteNC,
+  onAddPlano,
+  onNavigateToPlanos,
   onAddLog,
   personalizacao
 }) => {
@@ -88,14 +94,14 @@ export const AuditoriasNC: React.FC<AuditoriasNCProps> = ({
   const [auditToDelete, setAuditToDelete] = useState<Auditoria | null>(null);
   const [ncToDelete, setNcToDelete] = useState<NaoConformidade | null>(null);
 
-  // Lista de Auditores do Sistema (Perfis & Usuários)
+  // Lista de Auditores e Usuários do Sistema (Perfis & Usuários)
   const systemAuditors = useMemo(() => {
     const list: string[] = [];
     if (user?.name) {
       list.push(user.name);
     }
     const defaultAuditors = [
-      'Mariana Silva (Qualidade)',
+      'Rodrigo Berto (Qualidade)',
       'Carlos Eduardo (Gerente SGQ)',
       'Roberto Costa (Supervisor Costura)',
       'Ana Souza (Qualidade)'
@@ -130,7 +136,7 @@ export const AuditoriasNC: React.FC<AuditoriasNCProps> = ({
       titulo: '',
       dataPlanejada: '',
       setor: 'Corte',
-      auditor: user?.name || systemAuditors[0] || 'Mariana Silva (Qualidade)'
+      auditor: user?.name || systemAuditors[0] || 'Rodrigo Berto (Qualidade)'
     });
     setIsAuditModalOpen(true);
   };
@@ -154,7 +160,7 @@ export const AuditoriasNC: React.FC<AuditoriasNCProps> = ({
       titulo: '',
       descricao: '',
       setor: 'Corte',
-      responsavel: '',
+      responsavel: user?.name || systemAuditors[0] || 'Rodrigo Berto (Qualidade)',
       documentoRelacionadoId: '',
       origem: origens[0] || 'Auditoria Interna'
     });
@@ -181,7 +187,7 @@ export const AuditoriasNC: React.FC<AuditoriasNCProps> = ({
     titulo: '',
     dataPlanejada: '',
     setor: 'Corte' as SectorType,
-    auditor: 'Mariana Silva (Qualidade)'
+    auditor: user?.name || 'Rodrigo Berto (Qualidade)'
   });
 
   // Formulário: Nova Não Conformidade
@@ -190,7 +196,7 @@ export const AuditoriasNC: React.FC<AuditoriasNCProps> = ({
     titulo: '',
     descricao: '',
     setor: 'Corte' as SectorType,
-    responsavel: '',
+    responsavel: user?.name || 'Rodrigo Berto (Qualidade)',
     documentoRelacionadoId: '',
     origem: origens[0] || 'Auditoria Interna'
   });
@@ -226,7 +232,7 @@ export const AuditoriasNC: React.FC<AuditoriasNCProps> = ({
       };
 
       onAddAudit(audit);
-      onAddLog('Sincronizou Agenda', `Auditoria programada ${audit.codigo} sincronizada com Google Calendar corporativo.`, undefined);
+      onAddLog('Programou Auditoria', `Auditoria interna ${audit.codigo} programada com sucesso para o setor ${audit.setor}.`, undefined);
     }
 
     setIsAuditModalOpen(false);
@@ -237,7 +243,7 @@ export const AuditoriasNC: React.FC<AuditoriasNCProps> = ({
       titulo: '',
       dataPlanejada: '',
       setor: 'Corte',
-      auditor: 'Mariana Silva (Qualidade)'
+      auditor: user?.name || 'Rodrigo Berto (Qualidade)'
     });
   };
 
@@ -249,6 +255,8 @@ export const AuditoriasNC: React.FC<AuditoriasNCProps> = ({
       return;
     }
 
+    const defaultResp = user?.name || systemAuditors[0] || 'Rodrigo Berto (Qualidade)';
+
     if (editingNC) {
       const updated: NaoConformidade = {
         ...editingNC,
@@ -256,7 +264,7 @@ export const AuditoriasNC: React.FC<AuditoriasNCProps> = ({
         titulo: newNc.titulo.trim(),
         descricao: newNc.descricao.trim(),
         setor: newNc.setor,
-        responsavel: newNc.responsavel.trim() || 'Mariana Silva (Qualidade)',
+        responsavel: newNc.responsavel.trim() || defaultResp,
         documentoRelacionadoId: newNc.documentoRelacionadoId || undefined,
         origem: newNc.origem
       };
@@ -270,7 +278,7 @@ export const AuditoriasNC: React.FC<AuditoriasNCProps> = ({
         descricao: newNc.descricao.trim(),
         dataAbertura: new Date().toISOString().split('T')[0],
         setor: newNc.setor,
-        responsavel: newNc.responsavel.trim() || 'Mariana Silva (Qualidade)',
+        responsavel: newNc.responsavel.trim() || defaultResp,
         status: 'Aberta',
         documentoRelacionadoId: newNc.documentoRelacionadoId || undefined,
         origem: newNc.origem
@@ -288,10 +296,57 @@ export const AuditoriasNC: React.FC<AuditoriasNCProps> = ({
       titulo: '',
       descricao: '',
       setor: 'Corte',
-      responsavel: '',
+      responsavel: user?.name || systemAuditors[0] || 'Rodrigo Berto (Qualidade)',
       documentoRelacionadoId: '',
       origem: origens[0] || 'Auditoria Interna'
     });
+  };
+
+  // Gerar Plano de Ação 5W2H automaticamente a partir da NC
+  const handleGenerate5W2H = (nc: NaoConformidade) => {
+    // Verificar se já existe um plano para esta NC
+    const existingPlan = planos.find(p => p.naoConformidadeId === nc.id || p.codigo === `PA-${nc.codigo}`);
+    
+    if (existingPlan) {
+      const irParaPlanos = window.confirm(`Já existe o Plano de Ação ${existingPlan.codigo} vinculado a esta NC (${nc.codigo}). Deseja ir para o módulo de Planos de Ação 5W2H para visualizá-lo?`);
+      if (irParaPlanos && onNavigateToPlanos) {
+        onNavigateToPlanos();
+      }
+      return;
+    }
+
+    // Calcular data limite padrão (+15 dias)
+    const deadline = new Date();
+    deadline.setDate(deadline.getDate() + 15);
+    const deadlineStr = deadline.toISOString().split('T')[0];
+
+    const newPA: PlanoAcao = {
+      id: `pa_${Date.now()}`,
+      codigo: `PA-${nc.codigo}`,
+      titulo: `Tratativa Corretiva: ${nc.titulo}`,
+      setor: nc.setor,
+      status: 'Planejado',
+      dataCriacao: new Date().toISOString().split('T')[0],
+      oQue: `Eliminar a causa-raiz da Não Conformidade (${nc.codigo}): ${nc.descricao}`,
+      porQue: `Garantir a conformidade dos processos com a norma ISO 9001 e evitar reincidência de falhas no setor de ${nc.setor}.`,
+      onde: `Setor de ${nc.setor} - Instalações da Vickytex`,
+      quando: deadlineStr,
+      quem: nc.responsavel || user?.name || 'Rodrigo Berto (Qualidade)',
+      como: `1. Realizar análise de causa raiz (Ishikawa/5 Porquês);\n2. Definir e executar plano de correção;\n3. Revisar procedimentos operacionais;\n4. Validar eficácia da ação após conclusão.`,
+      quantoCusta: 0,
+      documentoId: nc.documentoRelacionadoId,
+      naoConformidadeId: nc.id
+    };
+
+    if (onAddPlano) {
+      onAddPlano(newPA);
+    }
+    onAddLog('5W2H Gerado', `Plano de Ação 5W2H (${newPA.codigo}) gerado automaticamente para a NC ${nc.codigo}.`, nc.documentoRelacionadoId);
+
+    const redirect = window.confirm(`Plano de Ação 5W2H (${newPA.codigo}) gerado com sucesso para a NC ${nc.codigo}!\n\nResponsável: ${newPA.quem}\nPrazo: ${newPA.quando}\n\nDeseja acessar o módulo de Planos de Ação 5W2H agora para detalhar o cronograma?`);
+    if (redirect && onNavigateToPlanos) {
+      onNavigateToPlanos();
+    }
   };
 
   return (
@@ -426,14 +481,6 @@ export const AuditoriasNC: React.FC<AuditoriasNCProps> = ({
                     </p>
                   </div>
                 </div>
-
-                <button 
-                  onClick={() => alert(`Auditoria ${aud.codigo} sincronizada e vinculada com Google Calendar da Vickytex.`)}
-                  className="w-full mt-4 py-1.5 text-[10px] font-bold text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-lg transition-colors flex items-center justify-center space-x-1"
-                >
-                  <Sparkles className="w-3 h-3 text-amber-500 animate-pulse" />
-                  <span>Sincronizar Google Agenda</span>
-                </button>
               </div>
             ))}
           </div>
@@ -519,13 +566,23 @@ export const AuditoriasNC: React.FC<AuditoriasNCProps> = ({
                     <span className="text-[9px] font-bold text-slate-400 uppercase">Responsável Tratativa</span>
                     <p className="font-semibold text-slate-700 dark:text-slate-300 mt-0.5">{nc.responsavel}</p>
                   </div>
-                  <button 
-                    onClick={() => alert(`Plano de ação e cronograma gerados para tratar a NC ${nc.codigo}.`)}
-                    className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold rounded-lg text-[10px] transition-colors flex items-center justify-center space-x-1"
-                  >
-                    <BookmarkCheck className="w-3.5 h-3.5 text-blue-500" />
-                    <span>Plano de Ação (5W2H)</span>
-                  </button>
+                  {(() => {
+                    const hasPlan = planos.some(p => p.naoConformidadeId === nc.id || p.codigo === `PA-${nc.codigo}`);
+                    return (
+                      <button 
+                        onClick={() => handleGenerate5W2H(nc)}
+                        className={`px-3 py-1.5 font-bold rounded-lg text-[10px] transition-colors flex items-center justify-center space-x-1 ${
+                          hasPlan 
+                            ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 border border-emerald-200 dark:border-emerald-800'
+                            : 'bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200'
+                        }`}
+                        title={hasPlan ? "Plano de Ação 5W2H já gerado. Clique para abrir/visualizar." : "Gerar Plano de Ação 5W2H automaticamente"}
+                      >
+                        <BookmarkCheck className={`w-3.5 h-3.5 ${hasPlan ? 'text-emerald-600 dark:text-emerald-400' : 'text-blue-500'}`} />
+                        <span>{hasPlan ? 'Ver Plano 5W2H' : 'Gerar Plano 5W2H'}</span>
+                      </button>
+                    );
+                  })()}
                 </div>
               </div>
             ))}
@@ -638,7 +695,7 @@ export const AuditoriasNC: React.FC<AuditoriasNCProps> = ({
                 type="submit"
                 className="w-full py-2.5 mt-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg text-xs transition-colors shadow-xs"
               >
-                {editingAudit ? 'Salvar Alterações da Auditoria' : 'Salvar e Sincronizar Google Calendar'}
+                {editingAudit ? 'Salvar Alterações da Auditoria' : 'Salvar e Programar Auditoria'}
               </button>
             </form>
           </div>
@@ -742,11 +799,17 @@ export const AuditoriasNC: React.FC<AuditoriasNCProps> = ({
                   <label className="text-[11px] font-bold text-slate-600 dark:text-slate-400 uppercase font-sans">Responsável Tratativa *</label>
                   <input
                     type="text"
-                    placeholder="Ex: Roberto Costa"
+                    list="nc-responsaveis-list"
+                    placeholder="Ex: Rodrigo Berto"
                     className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-800 dark:text-slate-100 focus:outline-hidden font-medium"
                     value={newNc.responsavel}
                     onChange={(e) => setNewNc({ ...newNc, responsavel: e.target.value })}
                   />
+                  <datalist id="nc-responsaveis-list">
+                    {systemAuditors.map((resp) => (
+                      <option key={resp} value={resp} />
+                    ))}
+                  </datalist>
                 </div>
               </div>
 

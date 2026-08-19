@@ -27,6 +27,7 @@ import {
 } from 'lucide-react';
 import { Documento, Equipamento, Calibracao, SectorType } from '../types';
 import { SECTORS, getSectors, PersonalizacaoGeral } from '../utils/mockData';
+import { useAuth } from '../contexts/AuthContext';
 import { SystemSettingsRepository } from '../services/database/repositories/systemSettings.repository';
 import { EquipmentRepository } from '../services/database/repositories/equipment.repository';
 
@@ -153,6 +154,7 @@ export const CalibracaoComponent: React.FC<CalibracaoProps> = ({
   equipamentos,
   setEquipamentos
 }) => {
+  const { user } = useAuth();
   const [sectorsList] = useState<string[]>(() => getSectors());
   const [activeTab, setActiveTab] = useState<'inventario' | 'certificados'>('inventario');
 
@@ -494,7 +496,7 @@ export const CalibracaoComponent: React.FC<CalibracaoProps> = ({
         </div>
         
         <div class="footer-info">
-          Assinado digitalmente por Mariana Silva (Gestora SGQ Vickytex) via Google Auth SSO. Rastreável sob protocolo: REQUISITO-7-1-5-METROLOGIA-2026.
+          Assinado digitalmente por ${user?.name ? `${user.name} (Gestor SGQ Vickytex)` : 'Gestão da Qualidade Vickytex'} via Google Auth SSO. Rastreável sob protocolo: REQUISITO-7-1-5-METROLOGIA-2026.
         </div>
       </div>
     `;
@@ -1539,7 +1541,7 @@ export const CalibracaoComponent: React.FC<CalibracaoProps> = ({
 
               {/* Rodapé */}
               <div className="p-3 bg-blue-50/50 dark:bg-blue-950/20 border border-blue-100 dark:border-blue-900 rounded-lg text-[9px] text-slate-500 dark:text-slate-400 text-center leading-relaxed font-mono">
-                Assinado digitalmente por Mariana Silva (Gestora SGQ Vickytex) via Google Auth SSO. Rastreável sob protocolo: REQUISITO-7-1-5-METROLOGIA-2026.
+                Assinado digitalmente por {user?.name ? `${user.name} (Gestor SGQ Vickytex)` : 'Gestão da Qualidade Vickytex'} via Google Auth SSO. Rastreável sob protocolo: REQUISITO-7-1-5-METROLOGIA-2026.
               </div>
 
             </div>

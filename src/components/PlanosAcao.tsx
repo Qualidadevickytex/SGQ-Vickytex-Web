@@ -362,7 +362,7 @@ export const PlanosAcaoComponent: React.FC<PlanosAcaoProps> = ({
           </div>
           <div class="sign-box">
             <div class="sign-line"></div>
-            <p class="sign-name">Mariana Silva (Qualidade)</p>
+            <p class="sign-name">${user?.name ? `${user.name} (Qualidade)` : 'Gestão da Qualidade Vickytex'}</p>
             <p class="sign-role">Gestão da Qualidade Vickytex</p>
           </div>
         </div>
@@ -1368,7 +1368,7 @@ export const PlanosAcaoComponent: React.FC<PlanosAcaoProps> = ({
                 <div className="text-center space-y-8">
                   <div className="border-t border-slate-500 w-4/5 mx-auto"></div>
                   <div>
-                    <p className="font-bold">Mariana Silva (Qualidade)</p>
+                    <p className="font-bold">{user?.name ? `${user.name} (Qualidade)` : 'Gestão da Qualidade Vickytex'}</p>
                     <p className="text-[10px] text-slate-500">Gestão da Qualidade Vickytex</p>
                   </div>
                 </div>

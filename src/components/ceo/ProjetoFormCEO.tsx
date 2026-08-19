@@ -18,7 +18,8 @@ import {
 } from 'lucide-react';
 import { ProjetoCEO, MetodologiaCEO, StatusProjetoCEO } from '../../types/ceo';
 import { SectorType } from '../../types/department';
-import { Indicator } from '../../types/indicator';
+import { IndicatorRepository } from '../../services/database/repositories/indicator.repository';
+import { IndicadorDesempenho } from '../../types/indicator';
 import { UserAccount } from '../../types/user';
 import { useAuth } from '../../contexts/AuthContext';
 import { UserRepository } from '../../services/database/repositories/user.repository';
@@ -79,30 +80,30 @@ export const ProjetoFormCEO: React.FC<ProjetoFormCEOProps> = ({
   const [selectedIndicators, setSelectedIndicators] = useState<string[]>(project?.indicadoresImpactados || []);
 
   // Loaded system indicators
-  const [systemIndicators, setSystemIndicators] = useState<Indicator[]>([]);
+  const [systemIndicators, setSystemIndicators] = useState<IndicadorDesempenho[]>([]);
 
   useEffect(() => {
-    // Load existing indicators from local storage
-    try {
-      const saved = localStorage.getItem('sgq_vickytex_indicadores');
-      if (saved) {
-        setSystemIndicators(JSON.parse(saved));
-      } else {
-        // Fallback standard KPIs
-        setSystemIndicators([
-          { id: 'IND-OEE', codigo: 'IND-OEE', nome: 'Eficiência Global (OEE) - Costura', setor: 'Costura', meta: 85, unidade: '%', frequenciaMensuracao: 'Mensal', valoresMensais: {}, responsavel: 'Mariana' },
-          { id: 'IND-PROD', codigo: 'IND-PROD', nome: 'Produtividade de Costura', setor: 'Costura', meta: 1000, unidade: 'Pçs/Dia', frequenciaMensuracao: 'Mensal', valoresMensais: {}, responsavel: 'Mariana' },
-          { id: 'IND-DESPERDICIO', codigo: 'IND-DESPERDICIO', nome: 'Índice de Desperdício de Malha', setor: 'Corte', meta: 1.5, unidade: '%', frequenciaMensuracao: 'Mensal', valoresMensais: {}, responsavel: 'Carlos' }
-        ]);
+    // Carregar indicadores do repositório Firebase/local
+    const unsub = IndicatorRepository.subscribe((items) => {
+      if (Array.isArray(items) && items.length > 0) {
+        setSystemIndicators(items);
       }
-    } catch (e) {
-      console.error(e);
-    }
+    });
+
+    IndicatorRepository.findAll().then((res) => {
+      if (res.success && res.data && res.data.length > 0) {
+        setSystemIndicators(res.data);
+      }
+    }).catch(err => {
+      console.error('[ProjetoFormCEO] Erro ao carregar indicadores:', err);
+    });
+
+    return () => unsub();
   }, []);
 
-  const handleIndicatorToggle = (cod: string) => {
+  const handleIndicatorToggle = (identifier: string) => {
     setSelectedIndicators(prev => 
-      prev.includes(cod) ? prev.filter(c => c !== cod) : [...prev, cod]
+      prev.includes(identifier) ? prev.filter(c => c !== identifier) : [...prev, identifier]
     );
   };
 
@@ -399,17 +400,24 @@ export const ProjetoFormCEO: React.FC<ProjetoFormCEOProps> = ({
             <div className="sm:col-span-2 space-y-1.5">
               <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Indicadores de Desempenho Impactados (KPIs)</label>
               <div className="border border-slate-200 dark:border-slate-800 rounded-xl p-2.5 max-h-24 overflow-y-auto bg-slate-50 dark:bg-slate-950 grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {systemIndicators.map(ind => (
-                  <label key={ind.id} className="flex items-center space-x-2 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-900 p-1 rounded-md transition-colors">
-                    <input 
-                      type="checkbox"
-                      checked={selectedIndicators.includes(ind.codigo)}
-                      onChange={() => handleIndicatorToggle(ind.codigo)}
-                      className="rounded text-blue-600 focus:ring-blue-500 w-3.5 h-3.5"
-                    />
-                    <span className="text-[10px] font-semibold text-slate-700 dark:text-slate-300 font-mono">[{ind.codigo}] {ind.nome}</span>
-                  </label>
-                ))}
+                {systemIndicators.map(ind => {
+                  const codeOrId = ind.codigo || ind.id;
+                  const isChecked = selectedIndicators.includes(codeOrId) || selectedIndicators.includes(ind.id) || (ind.codigo ? selectedIndicators.includes(ind.codigo) : false);
+                  return (
+                    <label key={ind.id} className="flex items-center space-x-2 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-900 p-1.5 rounded-lg transition-colors">
+                      <input 
+                        type="checkbox"
+                        checked={isChecked}
+                        onChange={() => handleIndicatorToggle(codeOrId)}
+                        className="rounded text-blue-600 focus:ring-blue-500 w-3.5 h-3.5"
+                      />
+                      <span className="text-[11px] font-semibold text-slate-700 dark:text-slate-300">
+                        <span className="font-mono text-blue-600 dark:text-blue-400 font-bold mr-1">[{codeOrId}]</span>
+                        {ind.nome}
+                      </span>
+                    </label>
+                  );
+                })}
               </div>
             </div>
 

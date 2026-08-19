@@ -227,8 +227,8 @@ function AppContent() {
   const handleAddLog = (action: string, details: string, docId?: string) => {
     const newLog: ActivityLog = {
       id: `log-${Date.now()}`,
-      usuarioEmail: user?.email || 'qualidade@vickytex.com.br',
-      usuarioNome: user?.name || 'Mariana Silva',
+      usuarioEmail: user?.email || 'sistema@vickytex.com.br',
+      usuarioNome: user?.name || user?.email?.split('@')[0] || 'Usuário do Sistema',
       usuarioRole: user?.role || 'Qualidade',
       acao: action,
       detalhes: details,
@@ -615,12 +615,15 @@ function AppContent() {
           audits={audits}
           ncs={ncs}
           documents={documents}
+          planos={planos}
           onAddAudit={handleAddAudit}
           onUpdateAudit={handleUpdateAudit}
           onDeleteAudit={handleDeleteAudit}
           onAddNC={handleAddNC}
           onUpdateNC={handleUpdateNC}
           onDeleteNC={handleDeleteNC}
+          onAddPlano={handleAddPlano}
+          onNavigateToPlanos={() => setActiveSection('planos')}
           onAddLog={handleAddLog}
           personalizacao={personalizacao}
         />
@@ -732,7 +735,12 @@ function AppContent() {
 
       {/* Módulo de Melhoria Contínua (Metodologias PDCA, DMAIC, Lean, Kaizen) */}
       {activeSection === 'ceo' && (
-        <CentroExcelencia personalizacao={personalizacao} />
+        <CentroExcelencia 
+          personalizacao={personalizacao} 
+          planos={planos}
+          onAddPlano={handleAddPlano}
+          onNavigateToPlanos={() => setActiveSection('planos')}
+        />
       )}
 
       {/* Módulo de Avaliação de Fornecedores (ISO 8.4) */}

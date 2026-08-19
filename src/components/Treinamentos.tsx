@@ -55,7 +55,7 @@ export const INITIAL_TREINAMENTOS: Treinamento[] = [
     documentoId: 'POP-COR-001',
     titulo: 'Treinamento Prático: Tempo de Descanso e Alinhamento do Enfesto de Malha',
     dataTreinamento: '2026-02-14',
-    instrutor: 'Mariana Silva (Qualidade)',
+    instrutor: 'Rodrigo Berto (Qualidade)',
     setor: 'Corte',
     duracaoHoras: 2,
     participantes: ['Roberto Costa', 'Clara Mendes'],

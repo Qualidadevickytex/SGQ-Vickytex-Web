@@ -336,7 +336,7 @@ export const INITIAL_AUDITORIAS: Auditoria[] = [
     titulo: 'Auditoria de Processo no Setor de Corte e Modelagem',
     dataPlanejada: '2026-07-15',
     setor: 'Corte',
-    auditor: 'Mariana Silva (Qualidade)',
+    auditor: 'Rodrigo Berto (Qualidade)',
     status: 'Agendada'
   },
   {
@@ -354,7 +354,7 @@ export const INITIAL_AUDITORIAS: Auditoria[] = [
     titulo: 'Verificação da Calibração e Manutenção de Flash Cure',
     dataPlanejada: '2026-07-01',
     setor: 'Estamparia',
-    auditor: 'Mariana Silva (Qualidade)',
+    auditor: 'Rodrigo Berto (Qualidade)',
     status: 'Realizada'
   }
 ];

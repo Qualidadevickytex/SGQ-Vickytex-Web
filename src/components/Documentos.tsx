@@ -5,7 +5,7 @@ import {
 } from 'lucide-react';
 import { Documento, DocumentType, SectorType, DocumentStatus } from '../types';
 import { useAuth } from '../contexts/AuthContext';
-import { SECTORS, getSectors, DOCUMENT_TYPES, PersonalizacaoGeral } from '../utils/mockData';
+import { SECTORS, getSectors, DOCUMENT_TYPES, getDocumentTypes, PersonalizacaoGeral } from '../utils/mockData';
 import { getSavedFlows } from './Documentos/FluxosParametrizados';
 import { DocumentoDashboard } from './Documentos/DocumentoDashboard';
 import { DocumentoListaMestra } from './Documentos/DocumentoListaMestra';
@@ -42,11 +42,13 @@ export const Documentos: React.FC<DocumentosProps> = ({
   const [isFormModalOpen, setIsFormModalOpen] = useState(false);
   const [editingDoc, setEditingDoc] = useState<Documento | null>(null);
 
-  // Lista dinâmica de setores
+  // Lista dinâmica de setores e tipos documentais
   const [sectorsList, setSectorsList] = useState<string[]>(() => getSectors());
+  const [docTypesList, setDocTypesList] = useState<{ type: string; name: string; description: string }[]>(() => getDocumentTypes());
 
   useEffect(() => {
     setSectorsList(getSectors());
+    setDocTypesList(getDocumentTypes());
   }, [isFormModalOpen, activeTab]);
 
   // Modal QR Code
@@ -352,7 +354,7 @@ export const Documentos: React.FC<DocumentosProps> = ({
               <DocumentoListaMestra
                 documents={documents}
                 sectorsList={sectorsList}
-                docTypesList={DOCUMENT_TYPES}
+                docTypesList={docTypesList as any}
                 selectedDocId={selectedDocId}
                 setSelectedDocId={setSelectedDocId}
                 onOpenNewDoc={handleOpenNew}
@@ -437,7 +439,7 @@ export const Documentos: React.FC<DocumentosProps> = ({
                     onChange={(e) => setFormTipo(e.target.value as DocumentType)}
                     className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-semibold text-slate-800 dark:text-slate-100 focus:outline-hidden"
                   >
-                    {DOCUMENT_TYPES.map(t => (
+                    {docTypesList.map(t => (
                       <option key={t.type} value={t.type}>{t.type} - {t.name}</option>
                     ))}
                   </select>
