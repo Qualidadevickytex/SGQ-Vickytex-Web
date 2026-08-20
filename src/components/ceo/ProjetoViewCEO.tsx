@@ -90,21 +90,13 @@ export const ProjetoViewCEO: React.FC<ProjetoViewCEOProps> = ({
   const [tools, setTools] = useState<FerramentasCEO>(() => {
     const f = { ...project.ferramentas };
     
-    // Initialize VSM if not present or empty
-    if (!f.vsm || !f.vsm.etapas || f.vsm.etapas.length === 0) {
+    // Initialize VSM if not present
+    if (!f.vsm) {
       f.vsm = {
-        etapas: [
-          { id: 'vsm-1', etapa: 'Recebimento de Tecidos & Insumos', tempoCiclo: 15, tempoPreparacao: 30, disponibilidade: 98, estoqueFila: 200, tempoFila: 120, agregaValor: false },
-          { id: 'vsm-2', etapa: 'Enfesto e Corte Automatizado', tempoCiclo: 45, tempoPreparacao: 20, disponibilidade: 92, estoqueFila: 80, tempoFila: 90, agregaValor: true },
-          { id: 'vsm-3', etapa: 'Estamparia / Bordado', tempoCiclo: 30, tempoPreparacao: 15, disponibilidade: 88, estoqueFila: 150, tempoFila: 180, agregaValor: true },
-          { id: 'vsm-4', etapa: 'Costura e Facção Industrial', tempoCiclo: 90, tempoPreparacao: 10, disponibilidade: 90, estoqueFila: 400, tempoFila: 240, agregaValor: true },
-          { id: 'vsm-5', etapa: 'Passadoria, Dobra e Acabamento', tempoCiclo: 20, tempoPreparacao: 5, disponibilidade: 95, estoqueFila: 50, tempoFila: 45, agregaValor: true },
-          { id: 'vsm-6', etapa: 'Controle de Qualidade (SGQ)', tempoCiclo: 10, tempoPreparacao: 0, disponibilidade: 100, estoqueFila: 20, tempoFila: 15, agregaValor: false },
-          { id: 'vsm-7', etapa: 'Embalagem e Expedição', tempoCiclo: 12, tempoPreparacao: 10, disponibilidade: 99, estoqueFila: 10, tempoFila: 10, agregaValor: true }
-        ],
-        tempoAgregaValor: 217,
-        tempoNaoAgregaValor: 725,
-        eficienciaCiclo: 23.0
+        etapas: [],
+        tempoAgregaValor: 0,
+        tempoNaoAgregaValor: 0,
+        eficienciaCiclo: 0
       };
     }
 
@@ -646,16 +638,7 @@ export const ProjetoViewCEO: React.FC<ProjetoViewCEOProps> = ({
   };
 
   // Pareto Chart Data - Dynamic in tools.pareto
-  const defaultPareto: ParetoCauseItem[] = [
-    { id: 'p1', causa: 'Regulagem Incorreta', ocorrencias: 42 },
-    { id: 'p2', causa: 'Falta de Kit Setup', ocorrencias: 28 },
-    { id: 'p3', causa: 'Chaves Desorganizadas', ocorrencias: 18 },
-    { id: 'p4', causa: 'Demora Transporte Fios', ocorrencias: 9 },
-    { id: 'p5', causa: 'Espera Liberação Mecânico', ocorrencias: 5 },
-    { id: 'p6', causa: 'Outros', ocorrencias: 3 }
-  ];
-
-  const paretoCauses = (tools.pareto && tools.pareto.length > 0) ? tools.pareto : defaultPareto;
+  const paretoCauses = tools.pareto || [];
   const sortedParetoCauses = [...paretoCauses].sort((a, b) => b.ocorrencias - a.ocorrencias);
 
   const totalLosses = sortedParetoCauses.reduce((sum, item) => sum + item.ocorrencias, 0);
@@ -1967,19 +1950,27 @@ export const ProjetoViewCEO: React.FC<ProjetoViewCEOProps> = ({
                   <span>Análise de Pareto (Perdas Operacionais 80/20)</span>
                 </h3>
 
-                <div className="h-44">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <ComposedChart data={paretoChartData} margin={{ top: 5, right: 0, left: -20, bottom: 0 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" className="dark:stroke-slate-850" />
-                      <XAxis dataKey="causa" stroke="#94a3b8" fontSize={8} tickLine={false} />
-                      <YAxis yAxisId="left" stroke="#94a3b8" fontSize={8} />
-                      <YAxis yAxisId="right" orientation="right" stroke="#10b981" fontSize={8} domain={[0, 100]} />
-                      <Tooltip contentStyle={{ fontSize: '10px' }} />
-                      <Bar yAxisId="left" dataKey="Frequência" fill="#3b82f6" radius={[2, 2, 0, 0]} />
-                      <Line yAxisId="right" dataKey="Acumulado (%)" stroke="#10b981" strokeWidth={2} dot={{ r: 3 }} />
-                    </ComposedChart>
-                  </ResponsiveContainer>
-                </div>
+                {sortedParetoCauses.length > 0 ? (
+                  <div className="h-44">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <ComposedChart data={paretoChartData} margin={{ top: 5, right: 0, left: -20, bottom: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" className="dark:stroke-slate-850" />
+                        <XAxis dataKey="causa" stroke="#94a3b8" fontSize={8} tickLine={false} />
+                        <YAxis yAxisId="left" stroke="#94a3b8" fontSize={8} />
+                        <YAxis yAxisId="right" orientation="right" stroke="#10b981" fontSize={8} domain={[0, 100]} />
+                        <Tooltip contentStyle={{ fontSize: '10px' }} />
+                        <Bar yAxisId="left" dataKey="Frequência" fill="#3b82f6" radius={[2, 2, 0, 0]} />
+                        <Line yAxisId="right" dataKey="Acumulado (%)" stroke="#10b981" strokeWidth={2} dot={{ r: 3 }} />
+                      </ComposedChart>
+                    </ResponsiveContainer>
+                  </div>
+                ) : (
+                  <div className="h-36 flex flex-col items-center justify-center text-center p-4 border border-dashed border-slate-200 dark:border-slate-800 rounded-xl">
+                    <Activity className="w-6 h-6 text-slate-300 dark:text-slate-600 mb-1" />
+                    <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400">Nenhuma causa cadastrada</span>
+                    <span className="text-[9px] text-slate-400">Adicione causas e ocorrências abaixo para gerar a análise 80/20.</span>
+                  </div>
+                )}
 
                 {/* Pareto Data Table with Edit/Delete/Add */}
                 <div className="space-y-2 border-t border-slate-100 dark:border-slate-800 pt-3">
@@ -1989,52 +1980,58 @@ export const ProjetoViewCEO: React.FC<ProjetoViewCEOProps> = ({
                   </div>
 
                   <div className="space-y-1.5 max-h-40 overflow-y-auto">
-                    {sortedParetoCauses.map((p, idx) => (
-                      <div key={p.id} className="bg-slate-50 dark:bg-slate-950 p-2 rounded-lg border border-slate-200 dark:border-slate-800 flex items-center justify-between text-[11px]">
-                        {editingParetoId === p.id ? (
-                          <div className="flex items-center gap-2 w-full">
-                            <input
-                              type="text"
-                              value={editParetoCause}
-                              onChange={(e) => setEditParetoCause(e.target.value)}
-                              className="flex-1 p-1 bg-white dark:bg-slate-900 border rounded text-xs font-bold"
-                            />
-                            <input
-                              type="number"
-                              value={editParetoCount}
-                              onChange={(e) => setEditParetoCount(Number(e.target.value))}
-                              className="w-16 p-1 bg-white dark:bg-slate-900 border rounded text-xs font-bold text-center"
-                            />
-                            <button onClick={saveEditPareto} className="p-1 text-emerald-600 hover:text-emerald-700">
-                              <Check className="w-3.5 h-3.5" />
-                            </button>
-                            <button onClick={() => setEditingParetoId(null)} className="p-1 text-slate-400">
-                              <X className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        ) : (
-                          <>
-                            <div className="flex items-center space-x-2">
-                              <span className="font-mono text-[9px] font-bold text-blue-600 bg-blue-50 dark:bg-blue-950/40 px-1.5 rounded">
-                                #{idx + 1}
-                              </span>
-                              <span className="font-bold text-slate-800 dark:text-slate-200">{p.causa}</span>
+                    {sortedParetoCauses.length > 0 ? (
+                      sortedParetoCauses.map((p, idx) => (
+                        <div key={p.id} className="bg-slate-50 dark:bg-slate-950 p-2 rounded-lg border border-slate-200 dark:border-slate-800 flex items-center justify-between text-[11px]">
+                          {editingParetoId === p.id ? (
+                            <div className="flex items-center gap-2 w-full">
+                              <input
+                                type="text"
+                                value={editParetoCause}
+                                onChange={(e) => setEditParetoCause(e.target.value)}
+                                className="flex-1 p-1 bg-white dark:bg-slate-900 border rounded text-xs font-bold"
+                              />
+                              <input
+                                type="number"
+                                value={editParetoCount}
+                                onChange={(e) => setEditParetoCount(Number(e.target.value))}
+                                className="w-16 p-1 bg-white dark:bg-slate-900 border rounded text-xs font-bold text-center"
+                              />
+                              <button onClick={saveEditPareto} className="p-1 text-emerald-600 hover:text-emerald-700">
+                                <Check className="w-3.5 h-3.5" />
+                              </button>
+                              <button onClick={() => setEditingParetoId(null)} className="p-1 text-slate-400">
+                                <X className="w-3.5 h-3.5" />
+                              </button>
                             </div>
-                            <div className="flex items-center space-x-3">
-                              <span className="font-black text-slate-700 dark:text-slate-300">{p.ocorrencias} ocor.</span>
-                              <div className="flex space-x-1">
-                                <button onClick={() => startEditPareto(p)} className="p-1 text-slate-400 hover:text-blue-600">
-                                  <Pencil className="w-3 h-3" />
-                                </button>
-                                <button onClick={() => removeParetoItem(p.id)} className="p-1 text-slate-400 hover:text-rose-600">
-                                  <Trash2 className="w-3 h-3" />
-                                </button>
+                          ) : (
+                            <>
+                              <div className="flex items-center space-x-2">
+                                <span className="font-mono text-[9px] font-bold text-blue-600 bg-blue-50 dark:bg-blue-950/40 px-1.5 rounded">
+                                  #{idx + 1}
+                                </span>
+                                <span className="font-bold text-slate-800 dark:text-slate-200">{p.causa}</span>
                               </div>
-                            </div>
-                          </>
-                        )}
+                              <div className="flex items-center space-x-3">
+                                <span className="font-black text-slate-700 dark:text-slate-300">{p.ocorrencias} ocor.</span>
+                                <div className="flex space-x-1">
+                                  <button onClick={() => startEditPareto(p)} className="p-1 text-slate-400 hover:text-blue-600">
+                                    <Pencil className="w-3 h-3" />
+                                  </button>
+                                  <button onClick={() => removeParetoItem(p.id)} className="p-1 text-slate-400 hover:text-rose-600">
+                                    <Trash2 className="w-3 h-3" />
+                                  </button>
+                                </div>
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      ))
+                    ) : (
+                      <div className="text-center py-3 text-[10px] text-slate-400 italic">
+                        Nenhuma ocorrência registrada ainda.
                       </div>
-                    ))}
+                    )}
                   </div>
 
                   {/* Add New Pareto Cause */}
@@ -2776,42 +2773,50 @@ export const ProjetoViewCEO: React.FC<ProjetoViewCEOProps> = ({
             <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-xl border border-slate-150 dark:border-slate-850 space-y-3 overflow-x-auto">
               <span className="text-[10px] font-black uppercase text-slate-500 block">Diagrama de Escada de Tempo do VSM (Lead Time Ladder)</span>
               
-              <div className="min-w-[800px] flex items-stretch py-4">
-                {tools.vsm?.etapas?.map((s, idx) => {
-                  return (
-                    <div key={s.id} className="flex-1 flex flex-col justify-between border-r last:border-0 border-slate-200 dark:border-slate-800 px-2 relative">
-                      {/* Process Box */}
-                      <div className="bg-white dark:bg-slate-900 p-3 rounded-lg border border-slate-200 dark:border-slate-800 text-center space-y-1 z-10">
-                        <span className="font-mono text-[9px] font-bold text-blue-600 bg-blue-50 dark:bg-blue-950/40 px-1.5 py-0.5 rounded">Etapa {idx+1}</span>
-                        <h4 className="text-[10px] font-black truncate text-slate-800 dark:text-slate-100" title={s.etapa}>{s.etapa}</h4>
-                        <div className="grid grid-cols-2 gap-1 text-[8px] font-mono text-slate-500 font-bold">
-                          <div>C/T: {s.tempoCiclo}m</div>
-                          <div>C/O: {s.tempoPreparacao}m</div>
-                          <div className="col-span-2">Disp: {s.disponibilidade}%</div>
+              {tools.vsm?.etapas && tools.vsm.etapas.length > 0 ? (
+                <div className="min-w-[800px] flex items-stretch py-4">
+                  {tools.vsm.etapas.map((s, idx) => {
+                    return (
+                      <div key={s.id} className="flex-1 flex flex-col justify-between border-r last:border-0 border-slate-200 dark:border-slate-800 px-2 relative">
+                        {/* Process Box */}
+                        <div className="bg-white dark:bg-slate-900 p-3 rounded-lg border border-slate-200 dark:border-slate-800 text-center space-y-1 z-10">
+                          <span className="font-mono text-[9px] font-bold text-blue-600 bg-blue-50 dark:bg-blue-950/40 px-1.5 py-0.5 rounded">Etapa {idx+1}</span>
+                          <h4 className="text-[10px] font-black truncate text-slate-800 dark:text-slate-100" title={s.etapa}>{s.etapa}</h4>
+                          <div className="grid grid-cols-2 gap-1 text-[8px] font-mono text-slate-500 font-bold">
+                            <div>C/T: {s.tempoCiclo}m</div>
+                            <div>C/O: {s.tempoPreparacao}m</div>
+                            <div className="col-span-2">Disp: {s.disponibilidade}%</div>
+                          </div>
                         </div>
-                      </div>
 
-                      {/* Stock Inventory */}
-                      <div className="my-3 flex flex-col items-center justify-center space-y-1">
-                        <span className="text-[12px]">⚠️</span>
-                        <span className="text-[9px] font-black text-amber-600 bg-amber-50 dark:bg-amber-950/30 px-1 rounded">Fila: {s.estoqueFila} un</span>
-                      </div>
+                        {/* Stock Inventory */}
+                        <div className="my-3 flex flex-col items-center justify-center space-y-1">
+                          <span className="text-[12px]">⚠️</span>
+                          <span className="text-[9px] font-black text-amber-600 bg-amber-50 dark:bg-amber-950/30 px-1 rounded">Fila: {s.estoqueFila} un</span>
+                        </div>
 
-                      {/* Timeline Ladder Section */}
-                      <div className="h-16 flex flex-col justify-end font-mono text-[9px] relative mt-2 pt-2 border-t border-slate-200 dark:border-slate-800">
-                        {/* Wait line (Top shelf) */}
-                        <div className="h-6 flex items-center justify-center border-b border-dashed border-rose-200 dark:border-rose-900 bg-rose-50/10 text-rose-500 font-bold" title="Tempo sem agregação de valor">
-                          Espera: {s.tempoFila}m
-                        </div>
-                        {/* Process line (Bottom shelf) */}
-                        <div className={`h-6 flex items-center justify-center ${s.agregaValor ? 'bg-emerald-500/10 text-emerald-600 border-l border-r border-emerald-200 dark:border-emerald-800' : 'bg-rose-500/10 text-rose-500 border-l border-r border-rose-200 dark:border-rose-800'} font-bold`}>
-                          Proc: {s.tempoCiclo}m ({s.agregaValor ? 'VA' : 'NVA'})
+                        {/* Timeline Ladder Section */}
+                        <div className="h-16 flex flex-col justify-end font-mono text-[9px] relative mt-2 pt-2 border-t border-slate-200 dark:border-slate-800">
+                          {/* Wait line (Top shelf) */}
+                          <div className="h-6 flex items-center justify-center border-b border-dashed border-rose-200 dark:border-rose-900 bg-rose-50/10 text-rose-500 font-bold" title="Tempo sem agregação de valor">
+                            Espera: {s.tempoFila}m
+                          </div>
+                          {/* Process line (Bottom shelf) */}
+                          <div className={`h-6 flex items-center justify-center ${s.agregaValor ? 'bg-emerald-500/10 text-emerald-600 border-l border-r border-emerald-200 dark:border-emerald-800' : 'bg-rose-500/10 text-rose-500 border-l border-r border-rose-200 dark:border-rose-800'} font-bold`}>
+                            Proc: {s.tempoCiclo}m ({s.agregaValor ? 'VA' : 'NVA'})
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  );
-                })}
-              </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="py-8 text-center text-slate-400">
+                  <Activity className="w-6 h-6 mx-auto text-slate-300 dark:text-slate-600 mb-1" />
+                  <span className="text-xs font-bold block text-slate-600 dark:text-slate-300">Nenhuma etapa cadastrada no VSM</span>
+                  <span className="text-[10px] text-slate-400">Cadastre as etapas do processo produtivo ao lado para desenhar a escada de valor.</span>
+                </div>
+              )}
             </div>
 
             {/* VSM Steps Table and Form */}
@@ -2835,35 +2840,43 @@ export const ProjetoViewCEO: React.FC<ProjetoViewCEOProps> = ({
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                      {tools.vsm?.etapas?.map((s, idx) => (
-                        <tr key={s.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-950/20">
-                          <td className="p-3 font-extrabold text-slate-800 dark:text-slate-200">
-                            {idx + 1}. {s.etapa}
-                          </td>
-                          <td className="p-3 font-mono font-bold">{s.tempoCiclo}m</td>
-                          <td className="p-3 font-mono text-slate-500">{s.tempoPreparacao}m</td>
-                          <td className="p-3 font-mono text-amber-600 font-bold">{s.estoqueFila} un</td>
-                          <td className="p-3 font-mono text-slate-600 dark:text-slate-400 font-bold">{s.tempoFila}m</td>
-                          <td className="p-3 text-center">
-                            <span className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider ${
-                              s.agregaValor 
-                                ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/30 dark:text-emerald-400' 
-                                : 'bg-rose-50 text-rose-600 dark:bg-rose-950/30 dark:text-rose-400'
-                            }`}>
-                              {s.agregaValor ? 'VA (Sim)' : 'NVA (Não)'}
-                            </span>
-                          </td>
-                          <td className="p-3 text-right">
-                            <button
-                              onClick={() => removeVsmStep(s.id)}
-                              className="text-slate-400 hover:text-red-500 transition-colors"
-                              title="Remover etapa"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
+                      {tools.vsm?.etapas && tools.vsm.etapas.length > 0 ? (
+                        tools.vsm.etapas.map((s, idx) => (
+                          <tr key={s.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-950/20">
+                            <td className="p-3 font-extrabold text-slate-800 dark:text-slate-200">
+                              {idx + 1}. {s.etapa}
+                            </td>
+                            <td className="p-3 font-mono font-bold">{s.tempoCiclo}m</td>
+                            <td className="p-3 font-mono text-slate-500">{s.tempoPreparacao}m</td>
+                            <td className="p-3 font-mono text-amber-600 font-bold">{s.estoqueFila} un</td>
+                            <td className="p-3 font-mono text-slate-600 dark:text-slate-400 font-bold">{s.tempoFila}m</td>
+                            <td className="p-3 text-center">
+                              <span className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider ${
+                                s.agregaValor 
+                                  ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/30 dark:text-emerald-400' 
+                                  : 'bg-rose-50 text-rose-600 dark:bg-rose-950/30 dark:text-rose-400'
+                              }`}>
+                                {s.agregaValor ? 'VA (Sim)' : 'NVA (Não)'}
+                              </span>
+                            </td>
+                            <td className="p-3 text-right">
+                              <button
+                                onClick={() => removeVsmStep(s.id)}
+                                className="text-slate-400 hover:text-red-500 transition-colors"
+                                title="Remover etapa"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr>
+                          <td colSpan={7} className="p-6 text-center text-xs text-slate-400">
+                            Nenhuma etapa inserida no mapeamento de fluxo de valor.
                           </td>
                         </tr>
-                      ))}
+                      )}
                     </tbody>
                   </table>
                 </div>

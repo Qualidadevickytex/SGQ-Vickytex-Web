@@ -737,11 +737,19 @@ export const Treinamentos: React.FC<TreinamentosProps> = ({
             <p className="text-[10px] font-bold text-blue-200/80 font-mono">APTIDÃO GERAL DO SGQ</p>
             <div className="flex items-baseline space-x-1.5">
               <span className="text-2xl font-black text-white font-mono">{aptidaoPercent}%</span>
-              <span className="text-[10px] text-emerald-400 font-bold flex items-center">
-                <TrendingUp className="w-3 h-3 mr-0.5" /> +4%
-              </span>
+              {totalColaboradores > 0 ? (
+                <span className="text-[10px] text-emerald-400 font-bold flex items-center">
+                  <TrendingUp className="w-3 h-3 mr-0.5" /> {aptos}/{totalColaboradores} aptos
+                </span>
+              ) : (
+                <span className="text-[10px] text-blue-200/60 font-medium">
+                  0 cadastrados
+                </span>
+              )}
             </div>
-            <p className="text-[9px] text-blue-200/60">Colaboradores aptos em seus setores</p>
+            <p className="text-[9px] text-blue-200/60">
+              {totalColaboradores === 0 ? 'Nenhum colaborador cadastrado' : 'Colaboradores aptos em seus setores'}
+            </p>
           </div>
           <div className="space-y-1">
             <p className="text-[10px] font-bold text-blue-200/80 font-mono">PESSOAL MONITORADO</p>
@@ -757,7 +765,7 @@ export const Treinamentos: React.FC<TreinamentosProps> = ({
             <p className="text-[10px] font-bold text-blue-200/80 font-mono">REQUISITO 7.2 AUDITÁVEL</p>
             <div className="flex items-center space-x-1 text-xs text-emerald-400 font-bold">
               <CheckCircle2 className="w-4 h-4" />
-              <span>Evidência Pronta</span>
+              <span>{totalColaboradores > 0 ? 'Evidência Pronta' : 'Aguardando Registros'}</span>
             </div>
             <p className="text-[9px] text-blue-200/60">Assinaturas digitais de conformidade</p>
           </div>
