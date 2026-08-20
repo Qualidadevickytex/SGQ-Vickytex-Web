@@ -66,53 +66,77 @@ export const Configuracoes: React.FC<ConfiguracoesProps> = ({
   const [activeSubTab, setActiveSubTab] = useState<string>('setores');
 
   // Estados para tabelas de Cadastro & Parâmetros por Módulo
-  const [fornecedoresCategorias, setFornecedoresCategorias] = useState<string[]>([
-    "Fios e Fibras",
-    "Serviços de Tinturaria",
-    "Embalagens",
-    "Produtos Químicos",
-    "Manutenção",
-    "Calibração",
-    "Serviços de Facção/Costura",
-    "Outros"
-  ]);
+  const [fornecedoresCategorias, setFornecedoresCategorias] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('sgq_vickytex_fornecedores_categorias');
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return [
+      "Fios e Fibras",
+      "Serviços de Tinturaria",
+      "Embalagens",
+      "Produtos Químicos",
+      "Manutenção",
+      "Calibração",
+      "Serviços de Facção/Costura",
+      "Outros"
+    ];
+  });
   const [newFornecedoresCat, setNewFornecedoresCat] = useState('');
   const [editingFornecedoresCatIdx, setEditingFornecedoresCatIdx] = useState<number | null>(null);
   const [editingFornecedoresCatVal, setEditingFornecedoresCatVal] = useState('');
 
-  const [calibracaoTipos, setCalibracaoTipos] = useState<string[]>([
-    "Balança de Precisão",
-    "Termômetro Digital",
-    "Paquímetro Digital",
-    "Micrômetro",
-    "Cronômetro",
-    "Manômetro",
-    "Trena Metálica"
-  ]);
+  const [calibracaoTipos, setCalibracaoTipos] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('sgq_vickytex_calibracao_tipos');
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return [
+      "Balança de Precisão",
+      "Termômetro Digital",
+      "Paquímetro Digital",
+      "Micrômetro",
+      "Cronômetro",
+      "Manômetro",
+      "Trena Metálica"
+    ];
+  });
   const [newCalibracaoTipo, setNewCalibracaoTipo] = useState('');
   const [editingCalibracaoTipoIdx, setEditingCalibracaoTipoIdx] = useState<number | null>(null);
   const [editingCalibracaoTipoVal, setEditingCalibracaoTipoVal] = useState('');
 
-  const [auditoriasOrigens, setAuditoriasOrigens] = useState<string[]>([
-    "Auditoria Interna",
-    "Auditoria Externa",
-    "Reclamação de Cliente",
-    "Inspeção de Qualidade",
-    "Desvio de Processo",
-    "Autodeclaração"
-  ]);
+  const [auditoriasOrigens, setAuditoriasOrigens] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('sgq_vickytex_auditorias_origens');
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return [
+      "Auditoria Interna",
+      "Auditoria Externa",
+      "Reclamação de Cliente",
+      "Inspeção de Qualidade",
+      "Desvio de Processo",
+      "Autodeclaração"
+    ];
+  });
   const [newAuditoriasOrigem, setNewAuditoriasOrigem] = useState('');
   const [editingAuditoriasOrigemIdx, setEditingAuditoriasOrigemIdx] = useState<number | null>(null);
   const [editingAuditoriasOrigemVal, setEditingAuditoriasOrigemVal] = useState('');
 
-  const [riscosCategorias, setRiscosCategorias] = useState<string[]>([
-    "Operacional",
-    "Financeiro",
-    "Regulatório/Conformidade",
-    "Estratégico",
-    "Ambiental",
-    "Tecnológico"
-  ]);
+  const [riscosCategorias, setRiscosCategorias] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('sgq_vickytex_riscos_categorias');
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return [
+      "Operacional",
+      "Financeiro",
+      "Regulatório/Conformidade",
+      "Estratégico",
+      "Ambiental",
+      "Tecnológico"
+    ];
+  });
   const [newRiscosCategoria, setNewRiscosCategoria] = useState('');
   const [editingRiscosCategoriaIdx, setEditingRiscosCategoriaIdx] = useState<number | null>(null);
   const [editingRiscosCategoriaVal, setEditingRiscosCategoriaVal] = useState('');
@@ -170,7 +194,13 @@ export const Configuracoes: React.FC<ConfiguracoesProps> = ({
     }
   ];
 
-  const [metodologias, setMetodologias] = useState(DEFAULT_METODOLOGIAS);
+  const [metodologias, setMetodologias] = useState(() => {
+    try {
+      const saved = localStorage.getItem('sgq_vickytex_metodologias_config');
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return DEFAULT_METODOLOGIAS;
+  });
 
   const [editingMetodologiaId, setEditingMetodologiaId] = useState<string | null>(null);
   const [editingMetodologiaVal, setEditingMetodologiaVal] = useState({ explicacao: '', ferramentas: '' });
@@ -181,18 +211,25 @@ export const Configuracoes: React.FC<ConfiguracoesProps> = ({
       records.forEach((rec) => {
         if (rec.id === 'sgq_vickytex_fornecedores_categorias' && Array.isArray(rec.items)) {
           setFornecedoresCategorias(rec.items);
+          try { localStorage.setItem('sgq_vickytex_fornecedores_categorias', JSON.stringify(rec.items)); } catch {}
         } else if (rec.id === 'sgq_vickytex_calibracao_tipos' && Array.isArray(rec.items)) {
           setCalibracaoTipos(rec.items);
+          try { localStorage.setItem('sgq_vickytex_calibracao_tipos', JSON.stringify(rec.items)); } catch {}
         } else if (rec.id === 'sgq_vickytex_auditorias_origens' && Array.isArray(rec.items)) {
           setAuditoriasOrigens(rec.items);
+          try { localStorage.setItem('sgq_vickytex_auditorias_origens', JSON.stringify(rec.items)); } catch {}
         } else if (rec.id === 'sgq_vickytex_riscos_categorias' && Array.isArray(rec.items)) {
           setRiscosCategorias(rec.items);
+          try { localStorage.setItem('sgq_vickytex_riscos_categorias', JSON.stringify(rec.items)); } catch {}
         } else if (rec.id === 'sgq_vickytex_metodologias_config' && Array.isArray(rec.items)) {
           setMetodologias(rec.items);
+          try { localStorage.setItem('sgq_vickytex_metodologias_config', JSON.stringify(rec.items)); } catch {}
         } else if (rec.id === 'sgq_vickytex_setores' && Array.isArray(rec.items)) {
           setSectors(rec.items);
+          try { localStorage.setItem('sgq_vickytex_setores', JSON.stringify(rec.items)); } catch {}
         } else if (rec.id === 'sgq_vickytex_tipos_documentos' && Array.isArray(rec.items)) {
           setDocTypes(rec.items);
+          try { localStorage.setItem('sgq_vickytex_tipos_documentos', JSON.stringify(rec.items)); } catch {}
         }
       });
     });
@@ -201,6 +238,11 @@ export const Configuracoes: React.FC<ConfiguracoesProps> = ({
   }, []);
 
   const saveSettingToFirestore = (id: string, items: any) => {
+    try {
+      localStorage.setItem(id, JSON.stringify(items));
+    } catch (e) {
+      console.warn(`[Configuracoes] localStorage save error for ${id}:`, e);
+    }
     SystemSettingsRepository.create({ id, items }).catch(err => {
       console.error(`[Configuracoes] Error saving ${id} to Firestore:`, err);
     });
@@ -259,7 +301,6 @@ export const Configuracoes: React.FC<ConfiguracoesProps> = ({
     setShowSyncNotice(true);
   };
 
-
   const handleMoveCalibracaoTipo = (idx: number, dir: 'up' | 'down') => {
     const targetIdx = dir === 'up' ? idx - 1 : idx + 1;
     if (targetIdx < 0 || targetIdx >= calibracaoTipos.length) return;
@@ -268,6 +309,7 @@ export const Configuracoes: React.FC<ConfiguracoesProps> = ({
     updated[idx] = updated[targetIdx];
     updated[targetIdx] = temp;
     setCalibracaoTipos(updated);
+    saveSettingToFirestore('sgq_vickytex_calibracao_tipos', updated);
     setShowSyncNotice(true);
   };
 
@@ -279,6 +321,7 @@ export const Configuracoes: React.FC<ConfiguracoesProps> = ({
     updated[idx] = updated[targetIdx];
     updated[targetIdx] = temp;
     setAuditoriasOrigens(updated);
+    saveSettingToFirestore('sgq_vickytex_auditorias_origens', updated);
     setShowSyncNotice(true);
   };
 
@@ -290,6 +333,7 @@ export const Configuracoes: React.FC<ConfiguracoesProps> = ({
     updated[idx] = updated[targetIdx];
     updated[targetIdx] = temp;
     setRiscosCategorias(updated);
+    saveSettingToFirestore('sgq_vickytex_riscos_categorias', updated);
     setShowSyncNotice(true);
   };
 
@@ -302,7 +346,9 @@ export const Configuracoes: React.FC<ConfiguracoesProps> = ({
       alert('Esta categoria já existe!');
       return;
     }
-    setFornecedoresCategorias([...fornecedoresCategorias, clean]);
+    const updated = [...fornecedoresCategorias, clean];
+    setFornecedoresCategorias(updated);
+    saveSettingToFirestore('sgq_vickytex_fornecedores_categorias', updated);
     setNewFornecedoresCat('');
     onAddLog('Configurações', `Adicionou a categoria de fornecedor "${clean}".`);
     setShowSyncNotice(true);
@@ -314,6 +360,7 @@ export const Configuracoes: React.FC<ConfiguracoesProps> = ({
     const updated = [...fornecedoresCategorias];
     updated[idx] = clean;
     setFornecedoresCategorias(updated);
+    saveSettingToFirestore('sgq_vickytex_fornecedores_categorias', updated);
     setEditingFornecedoresCatIdx(null);
     onAddLog('Configurações', `Alterou categoria de fornecedor para "${clean}".`);
     setShowSyncNotice(true);
@@ -323,6 +370,7 @@ export const Configuracoes: React.FC<ConfiguracoesProps> = ({
     const name = fornecedoresCategorias[idx];
     const updated = fornecedoresCategorias.filter((_, i) => i !== idx);
     setFornecedoresCategorias(updated);
+    saveSettingToFirestore('sgq_vickytex_fornecedores_categorias', updated);
     onAddLog('Configurações', `Removeu a categoria de fornecedor "${name}".`);
     setShowSyncNotice(true);
   };
@@ -336,7 +384,9 @@ export const Configuracoes: React.FC<ConfiguracoesProps> = ({
       alert('Este tipo já existe!');
       return;
     }
-    setCalibracaoTipos([...calibracaoTipos, clean]);
+    const updated = [...calibracaoTipos, clean];
+    setCalibracaoTipos(updated);
+    saveSettingToFirestore('sgq_vickytex_calibracao_tipos', updated);
     setNewCalibracaoTipo('');
     onAddLog('Configurações', `Adicionou o tipo de instrumento de medição "${clean}".`);
     setShowSyncNotice(true);
@@ -348,6 +398,7 @@ export const Configuracoes: React.FC<ConfiguracoesProps> = ({
     const updated = [...calibracaoTipos];
     updated[idx] = clean;
     setCalibracaoTipos(updated);
+    saveSettingToFirestore('sgq_vickytex_calibracao_tipos', updated);
     setEditingCalibracaoTipoIdx(null);
     onAddLog('Configurações', `Alterou tipo de instrumento para "${clean}".`);
     setShowSyncNotice(true);
@@ -357,6 +408,7 @@ export const Configuracoes: React.FC<ConfiguracoesProps> = ({
     const name = calibracaoTipos[idx];
     const updated = calibracaoTipos.filter((_, i) => i !== idx);
     setCalibracaoTipos(updated);
+    saveSettingToFirestore('sgq_vickytex_calibracao_tipos', updated);
     onAddLog('Configurações', `Removeu o tipo de instrumento "${name}".`);
     setShowSyncNotice(true);
   };
@@ -370,7 +422,9 @@ export const Configuracoes: React.FC<ConfiguracoesProps> = ({
       alert('Esta origem de não conformidade já existe!');
       return;
     }
-    setAuditoriasOrigens([...auditoriasOrigens, clean]);
+    const updated = [...auditoriasOrigens, clean];
+    setAuditoriasOrigens(updated);
+    saveSettingToFirestore('sgq_vickytex_auditorias_origens', updated);
     setNewAuditoriasOrigem('');
     onAddLog('Configurações', `Adicionou origem de não conformidade "${clean}".`);
     setShowSyncNotice(true);
@@ -382,6 +436,7 @@ export const Configuracoes: React.FC<ConfiguracoesProps> = ({
     const updated = [...auditoriasOrigens];
     updated[idx] = clean;
     setAuditoriasOrigens(updated);
+    saveSettingToFirestore('sgq_vickytex_auditorias_origens', updated);
     setEditingAuditoriasOrigemIdx(null);
     onAddLog('Configurações', `Alterou origem de não conformidade para "${clean}".`);
     setShowSyncNotice(true);
@@ -391,6 +446,7 @@ export const Configuracoes: React.FC<ConfiguracoesProps> = ({
     const name = auditoriasOrigens[idx];
     const updated = auditoriasOrigens.filter((_, i) => i !== idx);
     setAuditoriasOrigens(updated);
+    saveSettingToFirestore('sgq_vickytex_auditorias_origens', updated);
     onAddLog('Configurações', `Removeu a origem de NC "${name}".`);
     setShowSyncNotice(true);
   };
@@ -404,7 +460,9 @@ export const Configuracoes: React.FC<ConfiguracoesProps> = ({
       alert('Esta categoria de risco já existe!');
       return;
     }
-    setRiscosCategorias([...riscosCategorias, clean]);
+    const updated = [...riscosCategorias, clean];
+    setRiscosCategorias(updated);
+    saveSettingToFirestore('sgq_vickytex_riscos_categorias', updated);
     setNewRiscosCategoria('');
     onAddLog('Configurações', `Adicionou categoria de risco "${clean}".`);
     setShowSyncNotice(true);
@@ -416,6 +474,7 @@ export const Configuracoes: React.FC<ConfiguracoesProps> = ({
     const updated = [...riscosCategorias];
     updated[idx] = clean;
     setRiscosCategorias(updated);
+    saveSettingToFirestore('sgq_vickytex_riscos_categorias', updated);
     setEditingRiscosCategoriaIdx(null);
     onAddLog('Configurações', `Alterou categoria de risco para "${clean}".`);
     setShowSyncNotice(true);
@@ -425,6 +484,7 @@ export const Configuracoes: React.FC<ConfiguracoesProps> = ({
     const name = riscosCategorias[idx];
     const updated = riscosCategorias.filter((_, i) => i !== idx);
     setRiscosCategorias(updated);
+    saveSettingToFirestore('sgq_vickytex_riscos_categorias', updated);
     onAddLog('Configurações', `Removeu a categoria de risco "${name}".`);
     setShowSyncNotice(true);
   };

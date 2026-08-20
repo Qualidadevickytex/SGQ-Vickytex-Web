@@ -34,7 +34,8 @@ import {
   getItensAuditados, 
   getFotografias, 
   getPlanosAcao5S,
-  setStoreData
+  setStoreData,
+  subscribeStoreKey
 } from '../utils/fiveSStore';
 
 interface Auditorias5SProps {
@@ -64,7 +65,7 @@ export const Auditorias5SComponent: React.FC<Auditorias5SProps> = ({
   // State of current menu tab
   const [menu, setMenu] = useState<'indicadores' | 'auditorias' | 'planos' | 'configuracao'>('indicadores');
 
-  // Load dynamic 5S normalized tables from localStorage
+  // Load dynamic 5S normalized tables from Store with realtime subscriptions
   const [setores, setSetores] = useState(() => getSetores());
   const [sensos, setSensos] = useState(() => getSensos());
   const [requisitos, setRequisitos] = useState(() => getRequisitos());
@@ -75,19 +76,49 @@ export const Auditorias5SComponent: React.FC<Auditorias5SProps> = ({
   const [fotos, setFotos] = useState(() => getFotografias());
   const [planos5S, setPlanos5S] = useState(() => getPlanosAcao5S());
 
-  // Seed default dataset if not present on first load
+  // Real-time synchronization subscriptions across all 5S submodules
   useEffect(() => {
     seedMockDataIfEmpty(auditorias);
-    // Reload state after potential seeding
-    setSetores(getSetores());
-    setSensos(getSensos());
-    setRequisitos(getRequisitos());
-    setClassificacoes(getClassificacoes());
-    setConfig(getConfiguracao());
-    setCiclos(getCiclos());
-    setItens(getItensAuditados());
-    setFotos(getFotografias());
-    setPlanos5S(getPlanosAcao5S());
+
+    const unsubSetores = subscribeStoreKey('sgq_5s_setores', (data: any) => {
+      if (Array.isArray(data)) setSetores(data);
+    });
+    const unsubSensos = subscribeStoreKey('sgq_5s_sensos', (data: any) => {
+      if (Array.isArray(data)) setSensos(data);
+    });
+    const unsubReqs = subscribeStoreKey('sgq_5s_requisitos', (data: any) => {
+      if (Array.isArray(data)) setRequisitos(data);
+    });
+    const unsubClasses = subscribeStoreKey('sgq_5s_classificacoes', (data: any) => {
+      if (Array.isArray(data)) setClassificacoes(data);
+    });
+    const unsubConfig = subscribeStoreKey('sgq_5s_configuracao', (data: any) => {
+      if (data && typeof data === 'object') setConfig(data);
+    });
+    const unsubCiclos = subscribeStoreKey('sgq_5s_ciclos', (data: any) => {
+      if (Array.isArray(data)) setCiclos(data);
+    });
+    const unsubItens = subscribeStoreKey('sgq_5s_itens', (data: any) => {
+      if (Array.isArray(data)) setItens(data);
+    });
+    const unsubFotos = subscribeStoreKey('sgq_5s_fotos', (data: any) => {
+      if (Array.isArray(data)) setFotos(data);
+    });
+    const unsubPlanos = subscribeStoreKey('sgq_5s_planos', (data: any) => {
+      if (Array.isArray(data)) setPlanos5S(data);
+    });
+
+    return () => {
+      unsubSetores();
+      unsubSensos();
+      unsubReqs();
+      unsubClasses();
+      unsubConfig();
+      unsubCiclos();
+      unsubItens();
+      unsubFotos();
+      unsubPlanos();
+    };
   }, [auditorias]);
 
   // Wrappers to update and persist collections locally & trigger sync

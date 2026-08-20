@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ConfirmModal } from '../common/ConfirmModal';
 import { motion } from 'motion/react';
 import { 
@@ -47,6 +47,12 @@ import {
 } from 'lucide-react';
 import { ProjetoCEO, FerramentasCEO, MembroEquipe, SipocData, VocItem, BrainstormingIdea, GutItem, SwotData, FiveWhysItem, ParetoCauseItem, IshikawaData, FluxoStep, CronogramaTask, EvidenciaFile, EtapaMetodologia, VsmStep, DmaicPhase } from '../../types/ceo';
 import { SectorType } from '../../types/department';
+import { NotificationRepository } from '../../services/database/repositories/notification.repository';
+import { ActionPlanRepository } from '../../services/database/repositories/actionPlan.repository';
+import { AuditRepository } from '../../services/database/repositories/audit.repository';
+import { DocumentRepository } from '../../services/database/repositories/document.repository';
+import { SystemSettingsRepository } from '../../services/database/repositories/systemSettings.repository';
+import { AuditLogsRepository } from '../../services/firebase/repositories/auditLog.repository';
 
 interface ProjetoViewCEOProps {
   project: ProjetoCEO;
@@ -65,11 +71,9 @@ type SubTabType =
   | 'swot' 
   | 'causa' 
   | 'fluxo' 
-  | 'vsm'
-  | 'dmaic'
+  | 'vsm' 
+  | 'dmaic' 
   | 'evidencias';
-
-import { NotificationRepository } from '../../services/database/repositories/notification.repository';
 
 export const ProjetoViewCEO: React.FC<ProjetoViewCEOProps> = ({
   project,
@@ -98,9 +102,9 @@ export const ProjetoViewCEO: React.FC<ProjetoViewCEOProps> = ({
           { id: 'vsm-6', etapa: 'Controle de Qualidade (SGQ)', tempoCiclo: 10, tempoPreparacao: 0, disponibilidade: 100, estoqueFila: 20, tempoFila: 15, agregaValor: false },
           { id: 'vsm-7', etapa: 'Embalagem e Expedição', tempoCiclo: 12, tempoPreparacao: 10, disponibilidade: 99, estoqueFila: 10, tempoFila: 10, agregaValor: true }
         ],
-        tempoAgregaValor: 217, // sum of VA times
-        tempoNaoAgregaValor: 725, // sum of wait times (120+90+180+240+45+15+10) + non-VA times (15+10)
-        eficienciaCiclo: 23.0 // process cycle efficiency percentage
+        tempoAgregaValor: 217,
+        tempoNaoAgregaValor: 725,
+        eficienciaCiclo: 23.0
       };
     }
 
@@ -145,6 +149,15 @@ export const ProjetoViewCEO: React.FC<ProjetoViewCEOProps> = ({
     return f;
   });
 
+  // Keep state synchronized with real-time updates from Firestore
+  useEffect(() => {
+    if (project.ferramentas) {
+      setTools(prev => ({ ...prev, ...project.ferramentas }));
+    }
+    setCalcInvestimento(project.investimento);
+    setCalcRetornoEsperado(project.retornoEsperado);
+  }, [project.id, project.investimento, project.retornoEsperado, project.ferramentas]);
+
   const saveTools = async (updatedTools: FerramentasCEO) => {
     setIsSaving(true);
     setTools(updatedTools);
@@ -152,8 +165,8 @@ export const ProjetoViewCEO: React.FC<ProjetoViewCEOProps> = ({
     setIsSaving(false);
   };
 
-  // Cross-module integrations loaded from LocalStorage
-  const [availableAudits] = useState<any[]>(() => {
+  // Cross-module integrations loaded from Firestore Repositories + LocalStorage fallback
+  const [availableAudits, setAvailableAudits] = useState<any[]>(() => {
     const saved = localStorage.getItem('sgq_vickytex_audits');
     return saved ? JSON.parse(saved) : [];
   });
@@ -163,10 +176,24 @@ export const ProjetoViewCEO: React.FC<ProjetoViewCEOProps> = ({
     return saved ? JSON.parse(saved) : [];
   });
 
-  const [availableDocs] = useState<any[]>(() => {
+  const [availableDocs, setAvailableDocs] = useState<any[]>(() => {
     const saved = localStorage.getItem('sgq_vickytex_documents');
     return saved ? JSON.parse(saved) : [];
   });
+
+  useEffect(() => {
+    AuditRepository.findAll().then(res => {
+      if (res.success && res.data.length > 0) setAvailableAudits(res.data);
+    }).catch(() => {});
+
+    ActionPlanRepository.findAll().then(res => {
+      if (res.success && res.data.length > 0) setAvailablePlans(res.data);
+    }).catch(() => {});
+
+    DocumentRepository.findAll().then(res => {
+      if (res.success && res.data.length > 0) setAvailableDocs(res.data);
+    }).catch(() => {});
+  }, []);
 
   // Calculations & parameters state
   const [calcInvestimento, setCalcInvestimento] = useState<number>(project.investimento);
@@ -317,7 +344,7 @@ export const ProjetoViewCEO: React.FC<ProjetoViewCEOProps> = ({
       codigo: `PA-CEO-${project.codigo}`,
       titulo: `Plano Kaizen - ${project.titulo}`,
       setor: project.setor,
-      status: 'Em Andamento',
+      status: 'Em Andamento' as const,
       dataCriacao: new Date().toISOString().split('T')[0],
       oQue: `Implementar melhorias e ações mitigadoras do projeto de excelência operacional ${project.codigo}`,
       porQue: `Garantir as metas de produtividade da metodologia ${project.metodologia}`,
@@ -333,6 +360,9 @@ export const ProjetoViewCEO: React.FC<ProjetoViewCEOProps> = ({
     plansList.unshift(newPlan);
     localStorage.setItem('sgq_vickytex_planos', JSON.stringify(plansList));
     setAvailablePlans(plansList);
+
+    // Persist directly to Firestore database action_plans collection
+    ActionPlanRepository.create(newPlan).catch(err => console.warn('[ProjetoViewCEO] Firestore ActionPlan create error:', err));
 
     setLinkedPlanoId(newPlan.id);
     const updatedTools = {
@@ -368,15 +398,17 @@ export const ProjetoViewCEO: React.FC<ProjetoViewCEOProps> = ({
     // Save points to training logs to automatically boost leaderboard
     const savedLogs = localStorage.getItem('sgq_vickytex_ceo_training_logs');
     const logsList = savedLogs ? JSON.parse(savedLogs) : [];
-    logsList.unshift({
+    const newTrainingLog = {
       id: `tlog-${Date.now()}`,
       nome: project.lider.split('@')[0],
       email: project.lider,
       horas: Number(calcTrainingHours),
       tema: `Treinamento Prático Lean - Projeto ${project.codigo}`,
       data: new Date().toISOString().split('T')[0]
-    });
+    };
+    logsList.unshift(newTrainingLog);
     localStorage.setItem('sgq_vickytex_ceo_training_logs', JSON.stringify(logsList));
+    SystemSettingsRepository.create({ id: 'sgq_vickytex_ceo_training_logs', items: logsList }).catch(() => {});
 
     NotificationRepository.create({
       titulo: 'Horas Práticas de Belt Registradas',

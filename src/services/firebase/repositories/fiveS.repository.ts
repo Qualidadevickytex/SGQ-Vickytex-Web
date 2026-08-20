@@ -21,6 +21,8 @@ class FiveSRepositoryClass extends BaseRepository<Auditoria5S> {
       id: rec.id,
       codigo: rec.codigo || `AUD5S-${rec.id}`,
       setor: rec.setor || rec.sector || 'Geral',
+      setorId: rec.setor_id || rec.setorId,
+      cicloId: rec.ciclo_id || rec.cicloId,
       auditor: rec.auditor || '',
       dataAuditoria: rec.data_auditoria || rec.dataAuditoria || new Date().toISOString(),
       seiri: rec.seiri || 0,
@@ -30,7 +32,13 @@ class FiveSRepositoryClass extends BaseRepository<Auditoria5S> {
       shitsuke: rec.shitsuke || 0,
       mediaGeral: rec.media_geral || rec.mediaGeral || 0,
       observacoes: rec.observacoes || '',
-      status: rec.status || 'Finalizada'
+      status: rec.status || 'Finalizada',
+      pontuacaoMaxima: rec.pontuacao_maxima || rec.pontuacaoMaxima,
+      pontuacaoObtida: rec.pontuacao_obtida || rec.pontuacaoObtida,
+      totalPenalidades: rec.total_penalidades || rec.totalPenalidades,
+      indiceConformidade: rec.indice_conformidade || rec.indiceConformidade,
+      classificacaoId: rec.classificacao_id || rec.classificacaoId,
+      fotos: rec.fotos || []
     };
   }
 
@@ -39,6 +47,8 @@ class FiveSRepositoryClass extends BaseRepository<Auditoria5S> {
       codigo: data.codigo,
       data_auditoria: data.dataAuditoria,
       setor: data.setor,
+      setor_id: data.setorId,
+      ciclo_id: data.cicloId,
       auditor: data.auditor,
       seiri: data.seiri,
       seiton: data.seiton,
@@ -47,7 +57,13 @@ class FiveSRepositoryClass extends BaseRepository<Auditoria5S> {
       shitsuke: data.shitsuke,
       media_geral: data.mediaGeral,
       observacoes: data.observacoes,
-      status: data.status
+      status: data.status,
+      pontuacao_maxima: data.pontuacaoMaxima,
+      pontuacao_obtida: data.pontuacaoObtida,
+      total_penalidades: data.totalPenalidades,
+      indice_conformidade: data.indiceConformidade,
+      classificacao_id: data.classificacaoId,
+      fotos: data.fotos || []
     };
   }
 

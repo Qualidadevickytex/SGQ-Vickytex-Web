@@ -100,6 +100,41 @@ import { SystemSettingsRepository } from '../services/database/repositories/syst
 
 // --- IN-MEMORY CACHE & FIRESTORE REALTIME SYNC ---
 
+type ListenerCallback<T> = (data: T) => void;
+const listeners: Record<string, Set<ListenerCallback<any>>> = {
+  sgq_5s_setores: new Set(),
+  sgq_5s_sensos: new Set(),
+  sgq_5s_requisitos: new Set(),
+  sgq_5s_classificacoes: new Set(),
+  sgq_5s_configuracao: new Set(),
+  sgq_5s_ciclos: new Set(),
+  sgq_5s_itens: new Set(),
+  sgq_5s_fotos: new Set(),
+  sgq_5s_planos: new Set()
+};
+
+export const subscribeStoreKey = <T>(key: string, callback: ListenerCallback<T>): (() => void) => {
+  if (!listeners[key]) {
+    listeners[key] = new Set();
+  }
+  listeners[key].add(callback);
+  // Notificar imediatamente com o valor atual em cache
+  callback(getStoreData<T>(key, inMemoryStore[key]));
+  return () => {
+    listeners[key]?.delete(callback);
+  };
+};
+
+const notifyListeners = (key: string, data: any) => {
+  listeners[key]?.forEach(cb => {
+    try {
+      cb(data);
+    } catch (e) {
+      console.error(`[FiveSStore] Error in listener for ${key}:`, e);
+    }
+  });
+};
+
 const inMemoryStore: Record<string, any> = {
   sgq_5s_setores: INITIAL_SETORES,
   sgq_5s_sensos: INITIAL_SENSOS,
@@ -118,14 +153,30 @@ export const initFiveSStoreSync = () => {
   if (isSubscribed) return;
   isSubscribed = true;
 
+  // Carregar inicial do Firestore
+  SystemSettingsRepository.findAll().then(res => {
+    if (res.success && Array.isArray(res.data)) {
+      res.data.forEach(rec => {
+        if (rec.id.startsWith('sgq_5s_') || rec.id.startsWith('fives_')) {
+          const key = rec.id.startsWith('fives_') ? `sgq_5s_${rec.id.replace('fives_', '')}` : rec.id;
+          const val = rec.items !== undefined ? rec.items : rec.data;
+          if (val !== undefined) {
+            inMemoryStore[key] = val;
+            notifyListeners(key, val);
+          }
+        }
+      });
+    }
+  }).catch(err => console.error('[FiveSStore] Initial load error:', err));
+
   SystemSettingsRepository.subscribe((records) => {
     records.forEach(rec => {
       if (rec.id.startsWith('sgq_5s_') || rec.id.startsWith('fives_')) {
         const key = rec.id.startsWith('fives_') ? `sgq_5s_${rec.id.replace('fives_', '')}` : rec.id;
-        if (rec.items !== undefined) {
-          inMemoryStore[key] = rec.items;
-        } else if (rec.data !== undefined) {
-          inMemoryStore[key] = rec.data;
+        const val = rec.items !== undefined ? rec.items : rec.data;
+        if (val !== undefined) {
+          inMemoryStore[key] = val;
+          notifyListeners(key, val);
         }
       }
     });
@@ -143,6 +194,7 @@ export const getStoreData = <T>(key: string, fallback: T): T => {
 
 export const setStoreData = <T>(key: string, data: T): void => {
   inMemoryStore[key] = data;
+  notifyListeners(key, data);
   const isArray = Array.isArray(data);
   const payload = isArray ? { id: key, items: data } : { id: key, data };
   SystemSettingsRepository.create(payload).catch(err => {

@@ -239,7 +239,8 @@ function AppContent() {
   };
 
   const handleClearAllData = () => {
-    const keysToRemove = [
+    // 1. Chaves operacionais para remover do localStorage (Parâmetros de configuração e tabelas do sistema são PRESERVADOS!)
+    const operationalKeysToRemove = [
       'sgq_vickytex_documents',
       'sgq_vickytex_equipamentos',
       'sgq_vickytex_colaboradores',
@@ -250,8 +251,9 @@ function AppContent() {
       'sgq_vickytex_riscos',
       'sgq_vickytex_auditorias5s',
       'sgq_vickytex_auditorias_5s',
-      'sgq_vickytex_users',
-      'sgq_vickytex_permissions',
+      'sgq_5s_itens',
+      'sgq_5s_fotos',
+      'sgq_5s_planos',
       'sgq_vickytex_registros',
       'sgq_vickytex_treinamentos',
       'sgq_vickytex_fornecedores',
@@ -260,17 +262,15 @@ function AppContent() {
       'sgq_vickytex_ceo_ideas',
       'sgq_vickytex_ceo_training_logs',
       'sgq_vickytex_ceo_gamification_adjustments',
-      'sgq_vickytex_ceo_scores_zeroed',
-      'sgq_vickytex_fornecedores_categorias',
-      'sgq_vickytex_calibracao_tipos',
-      'sgq_vickytex_auditorias_origens',
-      'sgq_vickytex_riscos_categorias',
-      'sgq_vickytex_metodologias_config',
-      'sgq_vickytex_setores',
-      'sgq_vickytex_tipos_documentos'
+      'sgq_vickytex_ceo_scores_zeroed'
     ];
-    keysToRemove.forEach(k => localStorage.removeItem(k));
+    operationalKeysToRemove.forEach(k => {
+      try {
+        localStorage.removeItem(k);
+      } catch (e) {}
+    });
 
+    // 2. Limpar estados operacionais da memória React
     setDocuments([]);
     setAudits([]);
     setNcs([]);
@@ -284,8 +284,9 @@ function AppContent() {
     setSuppliers([]);
     setLogs([]);
 
-    // Also attempt clearing remote Cloud Firestore collections
-    const collectionsToClear = [
+    // 3. Limpar coleções operacionais no Cloud Firestore
+    // NOTA: Coleções e documentos de parâmetros e configurações (como 'system_settings' para setores, tipos de documentos, categorias, metodologias, sensos 5S, personalização, 'role_permissions' e 'users') são PRESERVADOS intocados!
+    const operationalCollectionsToClear = [
       'documents',
       'audits',
       'ncs',
@@ -301,14 +302,23 @@ function AppContent() {
       'indicators',
       'ceo_projects',
       'ceo_ideas',
-      'audit_logs',
-      'system_settings'
+      'audit_logs'
     ];
-    for (const coll of collectionsToClear) {
+    for (const coll of operationalCollectionsToClear) {
       clearCollectionDocs(coll).catch(() => {});
     }
 
-    handleAddLog('ZERAR_BANCO', 'Banco de dados zerado. Todos os registros locais e remotos foram limpos.');
+    // 4. Limpar sub-registros operacionais do 5S em system_settings sem tocar nos parâmetros de configuração
+    const operationalSettingsDocsToClear = [
+      'sgq_5s_itens',
+      'sgq_5s_fotos',
+      'sgq_5s_planos'
+    ];
+    for (const docId of operationalSettingsDocsToClear) {
+      SystemSettingsRepository.create({ id: docId, items: [] }).catch(() => {});
+    }
+
+    handleAddLog('ZERAR_BANCO', 'Registros operacionais zerados. As tabelas de parâmetros e configurações foram integralmente preservadas.');
   };
 
   const handleAddDocument = async (doc: Documento) => {

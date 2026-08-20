@@ -20,6 +20,7 @@ import {
   RotateCcw,
   ShieldAlert
 } from 'lucide-react';
+import { ConfirmModal } from './common/ConfirmModal';
 import { Documento, ActivityLog, Auditoria, NaoConformidade, PlanoAcao, RiscoOportunidade, Auditoria5S, UserAccount, RolePermission } from '../types';
 import { INITIAL_FORNECEDORES } from '../utils/mockData';
 import { db } from '../firebase/firebase';
@@ -56,6 +57,8 @@ export const DatabaseViewer: React.FC<DatabaseViewerProps> = ({
   const [lastCheckTime, setLastCheckTime] = useState<string>(new Date().toLocaleTimeString('pt-BR'));
   const [pingLatency, setPingLatency] = useState<number>(4);
   const [customLogs, setCustomLogs] = useState<string[]>([]);
+  const [isClearModalOpen, setIsClearModalOpen] = useState(false);
+  const [clearSuccessNotice, setClearSuccessNotice] = useState(false);
 
   // Cloud Integration State
   const [pastedConfig, setPastedConfig] = useState<string>(`const firebaseConfig = {
@@ -461,27 +464,40 @@ export const DatabaseViewer: React.FC<DatabaseViewerProps> = ({
               </div>
             </div>
 
+            {clearSuccessNotice && (
+              <div className="p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-lg flex items-center justify-between text-xs text-emerald-300">
+                <span className="flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                  <strong>Registros operacionais zerados com sucesso!</strong> As tabelas e parâmetros de configurações foram integralmente preservadas.
+                </span>
+                <button 
+                  onClick={() => setClearSuccessNotice(false)}
+                  className="text-emerald-400 hover:text-emerald-200 text-xs px-2 py-0.5"
+                >
+                  ✕
+                </button>
+              </div>
+            )}
+
             <div className="pt-1">
               <div className="bg-slate-900/80 p-4 rounded-lg border border-rose-900/30 space-y-2 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                 <div>
                   <h5 className="text-xs font-bold text-rose-300 flex items-center gap-1.5">
                     <Trash2 className="w-4 h-4 text-rose-400" />
-                    Zerar Banco de Dados (Limpar Tudo)
+                    Zerar Banco de Dados Operacional (Limpar Registros)
                   </h5>
-                  <p className="text-[11px] text-slate-400 mt-1">
-                    Apaga permanentemente todos os registros do banco de dados (armazenamento local) para iniciar o sistema 100% limpo.
+                  <p className="text-[11px] text-slate-400 mt-1 leading-relaxed">
+                    Apaga permanentemente todos os registros operacionais (documentos, auditorias, NCs, planos de ação, treinamentos, calibrações e medições) para reiniciar as operações. 
+                    <strong className="text-emerald-400 ml-1">As tabelas de cadastro e parâmetros de configuração (Setores, Tipos Documentais, Categorias, Metodologias e Perfis) são preservadas.</strong>
                   </p>
                 </div>
                 <button
-                  onClick={() => {
-                    if (window.confirm('ATENÇÃO: Deseja apagar TODOS os registros do banco de dados e iniciar com o sistema 100% zerado? Esta ação limpa todos os dados salvos.')) {
-                      onClearAllData?.();
-                    }
-                  }}
-                  className="w-full sm:w-auto text-xs font-bold bg-rose-600/20 hover:bg-rose-600 text-rose-200 border border-rose-500/30 px-4 py-2.5 rounded-lg transition-colors flex items-center justify-center gap-2 cursor-pointer shrink-0"
+                  type="button"
+                  onClick={() => setIsClearModalOpen(true)}
+                  className="w-full sm:w-auto text-xs font-bold bg-rose-600/20 hover:bg-rose-600 text-rose-200 hover:text-white border border-rose-500/30 px-4 py-2.5 rounded-lg transition-colors flex items-center justify-center gap-2 cursor-pointer shrink-0"
                 >
                   <Trash2 className="w-4 h-4" />
-                  Zerar Todos os Dados
+                  Zerar Registros Operacionais
                 </button>
               </div>
             </div>
@@ -794,6 +810,20 @@ service cloud.firestore {
 
         </div>
       )}
+
+      <ConfirmModal
+        isOpen={isClearModalOpen}
+        title="Zerar Banco de Dados Operacional"
+        message="Tem certeza que deseja apagar todos os registros operacionais (documentos, auditorias, NCs, planos de ação, treinamentos, calibrações e medições)? Suas tabelas de cadastro e parâmetros de configuração (Setores, Tipos Documentais, Categorias, Metodologias e Perfis de Acesso) serão integralmente preservadas."
+        confirmLabel="Sim, Zerar Registros"
+        cancelLabel="Cancelar"
+        variant="danger"
+        onConfirm={async () => {
+          onClearAllData?.();
+          setClearSuccessNotice(true);
+        }}
+        onClose={() => setIsClearModalOpen(false)}
+      />
 
     </div>
   );
