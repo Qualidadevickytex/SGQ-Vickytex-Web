@@ -240,6 +240,9 @@ export const Configuracoes: React.FC<ConfiguracoesProps> = ({
   const saveSettingToFirestore = (id: string, items: any) => {
     try {
       localStorage.setItem(id, JSON.stringify(items));
+      if (id === 'sgq_vickytex_setores') {
+        window.dispatchEvent(new CustomEvent('sgq_setores_updated'));
+      }
     } catch (e) {
       console.warn(`[Configuracoes] localStorage save error for ${id}:`, e);
     }

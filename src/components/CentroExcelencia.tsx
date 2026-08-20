@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import { useCEO } from '../contexts/CEOContext';
 import { useAuth } from '../contexts/AuthContext';
+import { useSectors } from '../hooks/useSectors';
 import { getSectors } from '../utils/mockData';
 import { SectorType } from '../types/department';
 import { ProjetoCEO, SugestaoCEO } from '../types/ceo';
@@ -31,8 +32,6 @@ import { SugestoesCEO } from './ceo/SugestoesCEO';
 import { ProjetoFormCEO } from './ceo/ProjetoFormCEO';
 import { ProjetoViewCEO } from './ceo/ProjetoViewCEO';
 import { GamificacaoCEO } from './ceo/GamificacaoCEO';
-
-const getDynamicSectors = (): SectorType[] => (getSectors() as SectorType[]);
 
 interface CentroExcelenciaProps {
   personalizacao?: any;
@@ -48,6 +47,7 @@ export const CentroExcelencia: React.FC<CentroExcelenciaProps> = ({
   onNavigateToPlanos
 }) => {
   const { user } = useAuth();
+  const systemSectors = useSectors() as SectorType[];
   const { 
     projects, 
     suggestions, 
@@ -276,7 +276,7 @@ export const CentroExcelencia: React.FC<CentroExcelenciaProps> = ({
               return ok;
             }}
             onClose={() => setSelectedProjectId(null)}
-            sectors={getDynamicSectors()}
+            sectors={systemSectors}
           />
         ) : (
           <div>

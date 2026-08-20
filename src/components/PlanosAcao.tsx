@@ -31,6 +31,7 @@ import {
 } from 'lucide-react';
 import { Documento, Auditoria, NaoConformidade, SectorType, PlanoAcao } from '../types';
 import { useAuth } from '../contexts/AuthContext';
+import { useSectors } from '../hooks/useSectors';
 import { SECTORS, getSectors, PersonalizacaoGeral } from '../utils/mockData';
 
 interface PlanosAcaoProps {
@@ -57,7 +58,7 @@ export const PlanosAcaoComponent: React.FC<PlanosAcaoProps> = ({
   personalizacao
 }) => {
   const { user } = useAuth();
-  const [sectorsList] = useState<string[]>(() => getSectors());
+  const sectorsList = useSectors();
 
   // Filtros e busca
   const [searchTerm, setSearchTerm] = useState('');

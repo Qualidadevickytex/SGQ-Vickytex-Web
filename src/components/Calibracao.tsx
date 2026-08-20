@@ -26,6 +26,7 @@ import {
   Pencil
 } from 'lucide-react';
 import { Documento, Equipamento, Calibracao, SectorType } from '../types';
+import { useSectors } from '../hooks/useSectors';
 import { SECTORS, getSectors, PersonalizacaoGeral } from '../utils/mockData';
 import { useAuth } from '../contexts/AuthContext';
 import { SystemSettingsRepository } from '../services/database/repositories/systemSettings.repository';
@@ -155,7 +156,7 @@ export const CalibracaoComponent: React.FC<CalibracaoProps> = ({
   setEquipamentos
 }) => {
   const { user } = useAuth();
-  const [sectorsList] = useState<string[]>(() => getSectors());
+  const sectorsList = useSectors();
   const [activeTab, setActiveTab] = useState<'inventario' | 'certificados'>('inventario');
 
   const saveEquipamentos = (newEquips: Equipamento[]) => {

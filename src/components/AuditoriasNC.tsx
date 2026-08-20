@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import { Auditoria, NaoConformidade, SectorType, Documento, PlanoAcao } from '../types';
 import { useAuth } from '../contexts/AuthContext';
+import { useSectors } from '../hooks/useSectors';
 import { SECTORS, getSectors, PersonalizacaoGeral } from '../utils/mockData';
 import { SystemSettingsRepository } from '../services/database/repositories/systemSettings.repository';
 
@@ -61,7 +62,7 @@ export const AuditoriasNC: React.FC<AuditoriasNCProps> = ({
   personalizacao
 }) => {
   const { user } = useAuth();
-  const [sectorsList] = useState<string[]>(() => getSectors());
+  const sectorsList = useSectors();
   const [origens, setOrigens] = useState<string[]>([
     "Auditoria Interna",
     "Auditoria Externa ISO 9001",

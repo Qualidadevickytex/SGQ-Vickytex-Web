@@ -25,6 +25,7 @@ import {
   Pencil
 } from 'lucide-react';
 import { Documento, Treinamento, ColaboradorCompetencia, SectorType } from '../types';
+import { useSectors } from '../hooks/useSectors';
 import { SECTORS, getSectors, PersonalizacaoGeral } from '../utils/mockData';
 import { TrainingRepository } from '../services/database/repositories/training.repository';
 import { CollaboratorRepository } from '../services/database/repositories/collaborator.repository';
@@ -94,7 +95,7 @@ export const Treinamentos: React.FC<TreinamentosProps> = ({
   colaboradores,
   setColaboradores
 }) => {
-  const [sectorsList] = useState<string[]>(() => getSectors());
+  const sectorsList = useSectors();
   const [activeTab, setActiveTab] = useState<'matriz' | 'historico'>('matriz');
   
   // Persistência local simulada das competências e treinamentos

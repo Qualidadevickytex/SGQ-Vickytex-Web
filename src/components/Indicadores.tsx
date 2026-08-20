@@ -29,6 +29,7 @@ import {
   ArrowRight
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { useSectors } from '../hooks/useSectors';
 import { 
   AreaChart, 
   Area, 
@@ -367,6 +368,7 @@ export const Indicadores: React.FC<IndicadoresProps> = ({ onAddLog, personalizac
 
   const [selectedKpiId, setSelectedKpiId] = useState<string>('kpi-1');
   const [filterSector, setFilterSector] = useState<string>('Todos');
+  const systemSectors = useSectors();
   const [showAddKpiModal, setShowAddKpiModal] = useState(false);
   const [showAddMeasureModal, setShowAddMeasureModal] = useState(false);
   const [showAddCriticaModal, setShowAddCriticaModal] = useState(false);
@@ -381,7 +383,7 @@ export const Indicadores: React.FC<IndicadoresProps> = ({ onAddLog, personalizac
   // States para Formulários
   const [newKpi, setNewKpi] = useState<Partial<Indicador>>({
     nome: '',
-    setor: 'Tecelagem',
+    setor: systemSectors[0] || 'Administração',
     unidade: '%',
     meta: 0,
     direcaoMeta: 'maior',
@@ -391,6 +393,13 @@ export const Indicadores: React.FC<IndicadoresProps> = ({ onAddLog, personalizac
     formula: '',
     responsavel: ''
   });
+
+  // Atualiza o setor padrão quando os setores do sistema carregarem
+  useEffect(() => {
+    if (systemSectors.length > 0 && (!newKpi.setor || !systemSectors.includes(newKpi.setor))) {
+      setNewKpi(prev => ({ ...prev, setor: systemSectors[0] }));
+    }
+  }, [systemSectors]);
 
   const [newMeasure, setNewMeasure] = useState({
     mes: 'Ago',
@@ -1429,19 +1438,15 @@ export const Indicadores: React.FC<IndicadoresProps> = ({ onAddLog, personalizac
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1.5">
-                  <label className="text-[10px] font-extrabold text-slate-500">Setor Responsável</label>
+                  <label className="text-[10px] font-extrabold text-slate-500">Setor Responsável (Setores Produtivos)</label>
                   <select
                     value={newKpi.setor}
                     onChange={(e) => setNewKpi({ ...newKpi, setor: e.target.value })}
                     className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-2.5 text-slate-800 dark:text-slate-100 focus:outline-hidden"
                   >
-                    <option value="Tecelagem">Tecelagem</option>
-                    <option value="Costura">Costura</option>
-                    <option value="Qualidade">Qualidade</option>
-                    <option value="Corte">Corte</option>
-                    <option value="Tinturaria">Tinturaria</option>
-                    <option value="Geral">Geral</option>
-                    <option value="Suprimentos">Suprimentos</option>
+                    {systemSectors.map((sec) => (
+                      <option key={sec} value={sec}>{sec}</option>
+                    ))}
                   </select>
                 </div>
 

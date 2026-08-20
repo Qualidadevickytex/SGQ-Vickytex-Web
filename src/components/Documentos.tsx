@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { Documento, DocumentType, SectorType, DocumentStatus } from '../types';
 import { useAuth } from '../contexts/AuthContext';
+import { useSectors } from '../hooks/useSectors';
 import { SECTORS, getSectors, DOCUMENT_TYPES, getDocumentTypes, PersonalizacaoGeral } from '../utils/mockData';
 import { getSavedFlows } from './Documentos/FluxosParametrizados';
 import { DocumentoDashboard } from './Documentos/DocumentoDashboard';
@@ -43,13 +44,14 @@ export const Documentos: React.FC<DocumentosProps> = ({
   const [editingDoc, setEditingDoc] = useState<Documento | null>(null);
 
   // Lista dinâmica de setores e tipos documentais
-  const [sectorsList, setSectorsList] = useState<string[]>(() => getSectors());
+  const systemSectors = useSectors();
+  const [sectorsList, setSectorsList] = useState<string[]>(() => systemSectors);
   const [docTypesList, setDocTypesList] = useState<{ type: string; name: string; description: string }[]>(() => getDocumentTypes());
 
   useEffect(() => {
-    setSectorsList(getSectors());
+    setSectorsList(systemSectors);
     setDocTypesList(getDocumentTypes());
-  }, [isFormModalOpen, activeTab]);
+  }, [systemSectors, isFormModalOpen, activeTab]);
 
   // Modal QR Code
   const [qrModalDoc, setQrModalDoc] = useState<Documento | null>(null);

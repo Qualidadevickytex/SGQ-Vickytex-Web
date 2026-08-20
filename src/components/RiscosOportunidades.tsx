@@ -24,6 +24,7 @@ import {
   Award
 } from 'lucide-react';
 import { RiscoOportunidade, SectorType, PlanoAcao } from '../types';
+import { useSectors } from '../hooks/useSectors';
 import { SECTORS, getSectors, PersonalizacaoGeral } from '../utils/mockData';
 import { SystemSettingsRepository } from '../services/database/repositories/systemSettings.repository';
 import { useAuth } from '../contexts/AuthContext';
@@ -48,7 +49,7 @@ export const RiscosOportunidadesComponent: React.FC<RiscosOportunidadesProps> = 
   personalizacao
 }) => {
   const { user } = useAuth();
-  const [sectorsList] = useState<string[]>(() => getSectors());
+  const sectorsList = useSectors();
   const [riscosCategorias, setRiscosCategorias] = useState<string[]>([
     "Operacional",
     "Qualidade do Produto",

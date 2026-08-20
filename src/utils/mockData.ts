@@ -44,7 +44,20 @@ SystemSettingsRepository.subscribe((records) => {
 });
 
 export const getSectors = (): SectorType[] => {
-  return systemConfigCache['sgq_vickytex_setores'] || SECTORS;
+  if (systemConfigCache['sgq_vickytex_setores'] && Array.isArray(systemConfigCache['sgq_vickytex_setores']) && systemConfigCache['sgq_vickytex_setores'].length > 0) {
+    return systemConfigCache['sgq_vickytex_setores'];
+  }
+  try {
+    const saved = localStorage.getItem('sgq_vickytex_setores');
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        systemConfigCache['sgq_vickytex_setores'] = parsed;
+        return parsed;
+      }
+    }
+  } catch {}
+  return SECTORS;
 };
 
 export const getDocumentTypes = (): { type: DocumentType; name: string; description: string }[] => {

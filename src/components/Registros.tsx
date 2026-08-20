@@ -31,6 +31,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Documento, Registro, SectorType } from '../types';
+import { useSectors } from '../hooks/useSectors';
 import { getSectors } from '../utils/mockData';
 import { RecordRepository } from '../services/database/repositories/record.repository';
 
@@ -115,7 +116,7 @@ export const INITIAL_REGISTROS: Registro[] = [
 ];
 
 export const Registros: React.FC<RegistrosProps> = ({ documents, onAddLog, personalizacao, registros, setRegistros }) => {
-  const [sectorsList] = useState<string[]>(() => getSectors());
+  const sectorsList = useSectors();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedSector, setSelectedSector] = useState<string>('Todos');
   const [selectedStatus, setSelectedStatus] = useState<string>('Todos');

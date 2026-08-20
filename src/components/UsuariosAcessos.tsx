@@ -42,6 +42,7 @@ import {
   Award
 } from 'lucide-react';
 import { UserAccount, RolePermission, UserRole, SectorType } from '../types';
+import { useSectors } from '../hooks/useSectors';
 import { getSectors, PersonalizacaoGeral } from '../utils/mockData';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -100,7 +101,7 @@ export const UsuariosAcessos: React.FC<UsuariosAcessosProps> = ({
 }) => {
   const { user: currentLoggedUser, switchProfile, refreshUser } = useAuth();
   const [activeTab, setActiveTab] = useState<'perfil' | 'usuarios' | 'permissoes'>('perfil');
-  const [sectorsList] = useState<SectorType[]>(() => getSectors());
+  const sectorsList = useSectors();
 
   // Search & Filters for Users Tab
   const [userSearch, setUserSearch] = useState('');
