@@ -140,70 +140,6 @@ export const Configuracoes: React.FC<ConfiguracoesProps> = ({
   const [newRiscosCategoria, setNewRiscosCategoria] = useState('');
   const [editingRiscosCategoriaIdx, setEditingRiscosCategoriaIdx] = useState<number | null>(null);
   const [editingRiscosCategoriaVal, setEditingRiscosCategoriaVal] = useState('');
-  
-  // Metodologias Configurações
-  const DEFAULT_METODOLOGIAS = [
-    {
-      id: 'PDCA',
-      nome: 'PDCA (Plan, Do, Check, Act)',
-      etapas: 'Planejar, Executar, Verificar, Agir',
-      explicacao: 'Ciclo de melhoria contínua de quatro etapas para controle e aprendizado contínuo. Focado em solução de problemas de rotina e padronização rápida.',
-      ferramentas: 'Brainstorming, 5 Whys, Ishikawa, Plano de Ação, Gráfico de Pareto'
-    },
-    {
-      id: 'DMAIC',
-      nome: 'DMAIC (Define, Measure, Analyze, Improve, Control)',
-      etapas: 'Definir, Medir, Analisar, Melhorar, Controlar',
-      explicacao: 'Método rigoroso de cinco fases baseado em dados para redução de variabilidade, controle estatístico de processos e eliminação de defeitos (Seis Sigma).',
-      ferramentas: 'SIPOC, VOC, Matriz GUT, Pareto, 5 Porquês, Ishikawa, Fluxograma'
-    },
-    {
-      id: 'Kaizen',
-      nome: 'Kaizen (Melhoria Contínua Rápida)',
-      etapas: 'Identificar Desperdício, Desenhar Solução, Implementar, Validar',
-      explicacao: 'Foco em melhorias incrementais diárias e rápidas através da eliminação de desperdícios no local de trabalho (Gemba), engajando diretamente os operadores.',
-      ferramentas: '5S, PICK, Diagrama Ishikawa, Cronograma Rápido'
-    },
-    {
-      id: 'A3',
-      nome: 'A3 (Toyota Problem Solving)',
-      etapas: 'Contexto, Situação Atual, Objetivos, Análise de Causa, Contramedidas, Acompanhamento',
-      explicacao: 'Abordagem estruturada de resolução de problemas em uma única página, baseada no pensamento enxuto da Toyota, focando em causa raiz e contramedidas visuais.',
-      ferramentas: 'Fluxograma, Ishikawa, 5 Whys, Swot, Plano de Ação'
-    },
-    {
-      id: 'Projeto Lean',
-      nome: 'Projeto Lean Manufacturing',
-      etapas: 'Mapear Valor (VSM), Identificar Gargalos, Fluxo Contínuo, Puxar Produção, Perfeição',
-      explicacao: 'Focado no mapeamento do fluxo de valor (VSM) e eliminação sistemática dos 8 desperdícios clássicos para aumentar a velocidade, reduzir custos e simplificar operações.',
-      ferramentas: 'SIPOC, Kanban, Lead Time, VSM, 5S'
-    },
-    {
-      id: 'Projeto Estratégico',
-      nome: 'Projeto Estratégico Organizacional',
-      etapas: 'Diagnóstico, Formulação, Desdobramento, Execução, Avaliação',
-      explicacao: 'Alinhamento de diretrizes executivas de liderança com metas operacionais da fábrica, focado em alta competitividade utilizando Hoshin Kanri ou BSC.',
-      ferramentas: 'SWOT, Matriz GUT, Indicadores de Desempenho (KPIs)'
-    },
-    {
-      id: 'Projeto Personalizado',
-      nome: 'Projeto Personalizado',
-      etapas: 'Iniciação, Planejamento, Execução, Monitoramento, Encerramento',
-      explicacao: 'Fluxo de trabalho totalmente flexível para melhorias estruturadas que necessitam de fases, ferramentas e cronogramas customizados por setor.',
-      ferramentas: 'Customizável conforme necessidade do projeto'
-    }
-  ];
-
-  const [metodologias, setMetodologias] = useState(() => {
-    try {
-      const saved = localStorage.getItem('sgq_vickytex_metodologias_config');
-      if (saved) return JSON.parse(saved);
-    } catch {}
-    return DEFAULT_METODOLOGIAS;
-  });
-
-  const [editingMetodologiaId, setEditingMetodologiaId] = useState<string | null>(null);
-  const [editingMetodologiaVal, setEditingMetodologiaVal] = useState({ explicacao: '', ferramentas: '' });
 
   // Inscrever para atualizações em tempo real do Firestore via SystemSettingsRepository
   useEffect(() => {
@@ -221,9 +157,6 @@ export const Configuracoes: React.FC<ConfiguracoesProps> = ({
         } else if (rec.id === 'sgq_vickytex_riscos_categorias' && Array.isArray(rec.items)) {
           setRiscosCategorias(rec.items);
           try { localStorage.setItem('sgq_vickytex_riscos_categorias', JSON.stringify(rec.items)); } catch {}
-        } else if (rec.id === 'sgq_vickytex_metodologias_config' && Array.isArray(rec.items)) {
-          setMetodologias(rec.items);
-          try { localStorage.setItem('sgq_vickytex_metodologias_config', JSON.stringify(rec.items)); } catch {}
         } else if (rec.id === 'sgq_vickytex_setores' && Array.isArray(rec.items)) {
           setSectors(rec.items);
           try { localStorage.setItem('sgq_vickytex_setores', JSON.stringify(rec.items)); } catch {}
@@ -249,17 +182,6 @@ export const Configuracoes: React.FC<ConfiguracoesProps> = ({
     SystemSettingsRepository.create({ id, items }).catch(err => {
       console.error(`[Configuracoes] Error saving ${id} to Firestore:`, err);
     });
-  };
-
-  const handleSaveMetodologia = (id: string) => {
-    const updated = metodologias.map((m: any) => 
-      m.id === id ? { ...m, explicacao: editingMetodologiaVal.explicacao, ferramentas: editingMetodologiaVal.ferramentas } : m
-    );
-    setMetodologias(updated);
-    saveSettingToFirestore('sgq_vickytex_metodologias_config', updated);
-    setEditingMetodologiaId(null);
-    onAddLog('Configurações', `Editou os parâmetros auxiliares da metodologia "${id}".`);
-    setShowSyncNotice(true);
   };
 
   // Controle de alertas e avisos
@@ -686,18 +608,6 @@ export const Configuracoes: React.FC<ConfiguracoesProps> = ({
           </button>
 
           <button
-            onClick={() => setActiveSubTab('metodologias')}
-            className={`w-full flex items-center space-x-2.5 px-3 py-2 rounded-lg text-xs font-bold transition-colors ${
-              activeSubTab === 'metodologias' 
-                ? 'bg-[#0B3A63] text-white' 
-                : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/50'
-            }`}
-          >
-            <TrendingUp className="w-4 h-4" />
-            <span>Metodologias de Melhoria ({metodologias.length})</span>
-          </button>
-
-          <button
             onClick={() => setActiveSubTab('fornecedores_cats')}
             className={`w-full flex items-center space-x-2.5 px-3 py-2 rounded-lg text-xs font-bold transition-colors ${
               activeSubTab === 'fornecedores_cats' 
@@ -1082,99 +992,6 @@ export const Configuracoes: React.FC<ConfiguracoesProps> = ({
                     ))}
                   </tbody>
                 </table>
-              </div>
-
-            </div>
-          )}
-
-          {/* SECTION: METODOLOGIAS DE MELHORIA */}
-          {activeSubTab === 'metodologias' && (
-            <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-6 shadow-xs space-y-6">
-              
-              <div className="border-b border-slate-100 dark:border-slate-800 pb-3 flex items-center justify-between">
-                <div>
-                  <h3 className="text-sm font-extrabold text-slate-800 dark:text-slate-100">Parâmetros Auxiliares: Metodologias de Melhoria</h3>
-                  <p className="text-xs text-slate-400">Personalize as explicações e ferramentas sugeridas para cada ciclo de melhoria contínua (ISO 9001:2015 10.3).</p>
-                </div>
-                <span className="text-[10px] font-mono bg-blue-50 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400 px-2 py-0.5 rounded-full font-bold">
-                  {metodologias.length} Metodologias Ativas
-                </span>
-              </div>
-
-              {/* List of Methodologies */}
-              <div className="space-y-4">
-                {metodologias.map((m: any) => {
-                  const isEditing = editingMetodologiaId === m.id;
-                  return (
-                    <div key={m.id} className="border border-slate-100 dark:border-slate-800/80 rounded-xl p-4 space-y-3 bg-slate-50/50 dark:bg-slate-950/10">
-                      <div className="flex items-center justify-between">
-                        <div className="space-y-0.5">
-                          <h4 className="text-xs font-black text-slate-850 dark:text-slate-100 font-mono">{m.nome}</h4>
-                          <p className="text-[10px] text-blue-600 dark:text-blue-400 font-bold">Etapas: {m.etapas}</p>
-                        </div>
-                        {canModify && (
-                          isEditing ? (
-                            <div className="flex items-center space-x-2">
-                              <button
-                                onClick={() => handleSaveMetodologia(m.id)}
-                                className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md text-[10px] font-bold flex items-center space-x-1"
-                              >
-                                <Save className="w-3 h-3" />
-                                <span>Salvar</span>
-                              </button>
-                              <button
-                                onClick={() => setEditingMetodologiaId(null)}
-                                className="px-2.5 py-1 bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-md text-[10px] font-bold"
-                              >
-                                Cancelar
-                              </button>
-                            </div>
-                          ) : (
-                            <button
-                              onClick={() => {
-                                setEditingMetodologiaId(m.id);
-                                setEditingMetodologiaVal({ explicacao: m.explicacao, ferramentas: m.ferramentas });
-                              }}
-                              className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 dark:bg-blue-950 dark:hover:bg-blue-900 text-blue-600 dark:text-blue-400 rounded-md text-[10px] font-bold flex items-center space-x-1"
-                            >
-                              <Pencil className="w-3 h-3" />
-                              <span>Editar Explicação</span>
-                            </button>
-                          )
-                        )}
-                      </div>
-
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs pt-1 border-t border-slate-100 dark:border-slate-800/50">
-                        <div className="space-y-1">
-                          <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Explicação / Conceito Educativo</span>
-                          {isEditing ? (
-                            <textarea
-                              value={editingMetodologiaVal.explicacao}
-                              onChange={(e) => setEditingMetodologiaVal({ ...editingMetodologiaVal, explicacao: e.target.value })}
-                              rows={3}
-                              className="w-full bg-white dark:bg-slate-900 text-xs border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-slate-800 dark:text-slate-100 focus:outline-hidden"
-                            />
-                          ) : (
-                            <p className="text-slate-600 dark:text-slate-300 leading-relaxed font-medium">{m.explicacao}</p>
-                          )}
-                        </div>
-                        <div className="space-y-1">
-                          <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Ferramentas SGQ Recomendadas</span>
-                          {isEditing ? (
-                            <input
-                              type="text"
-                              value={editingMetodologiaVal.ferramentas}
-                              onChange={(e) => setEditingMetodologiaVal({ ...editingMetodologiaVal, ferramentas: e.target.value })}
-                              className="w-full bg-white dark:bg-slate-900 text-xs border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-slate-800 dark:text-slate-100 focus:outline-hidden"
-                            />
-                          ) : (
-                            <p className="text-slate-500 dark:text-slate-450 font-mono text-[11px] leading-relaxed">{m.ferramentas}</p>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
               </div>
 
             </div>

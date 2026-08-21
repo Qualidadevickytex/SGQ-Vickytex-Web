@@ -62,11 +62,25 @@ export const Documentos: React.FC<DocumentosProps> = ({
   const [formSetor, setFormSetor] = useState<SectorType>(() => (getSectors()[0] || 'Administração') as SectorType);
   const [formTipo, setFormTipo] = useState<DocumentType>('POP');
   const [formPeriodicidade, setFormPeriodicidade] = useState(12);
+  const [formDataEmissao, setFormDataEmissao] = useState('');
+  const [formProximaRevisao, setFormProximaRevisao] = useState('');
   const [formObjetivo, setFormObjetivo] = useState('');
   const [formDescricao, setFormDescricao] = useState('');
   const [formDriveLink, setFormDriveLink] = useState('');
   const [formRevisor, setFormRevisor] = useState('');
   const [formAprovador, setFormAprovador] = useState('');
+
+  // Helper para recalcular a data de próxima revisão baseada na emissão e periodicidade
+  const updateProximaRevisao = (emissao: string, months: number) => {
+    try {
+      if (!emissao) return;
+      const d = new Date(emissao + 'T00:00:00');
+      if (!isNaN(d.getTime())) {
+        d.setMonth(d.getMonth() + months);
+        setFormProximaRevisao(d.toISOString().split('T')[0]);
+      }
+    } catch {}
+  };
 
   // Sincronizar o Revisor e o Aprovador automaticamente apenas na criação de novo documento
   useEffect(() => {
@@ -107,6 +121,8 @@ export const Documentos: React.FC<DocumentosProps> = ({
     setFormSetor(doc.setor);
     setFormTipo(doc.tipo);
     setFormPeriodicidade(doc.periodicidade || 12);
+    setFormDataEmissao(doc.dataEmissao || new Date().toISOString().split('T')[0]);
+    setFormProximaRevisao(doc.proximaRevisao || '');
     setFormObjetivo(doc.objetivo || '');
     setFormDescricao(doc.descricao || '');
     setFormDriveLink(doc.googleDriveLink || '');
@@ -127,6 +143,11 @@ export const Documentos: React.FC<DocumentosProps> = ({
     setSectorsList(currentSecs);
     setFormSetor((currentSecs[0] || 'Administração') as SectorType);
     setFormPeriodicidade(12);
+    const today = new Date().toISOString().split('T')[0];
+    setFormDataEmissao(today);
+    const prox = new Date();
+    prox.setMonth(prox.getMonth() + 12);
+    setFormProximaRevisao(prox.toISOString().split('T')[0]);
     setFormObjetivo('');
     setFormDescricao('');
     setFormDriveLink('');
@@ -151,6 +172,8 @@ export const Documentos: React.FC<DocumentosProps> = ({
         setor: formSetor,
         tipo: formTipo,
         periodicidade: formPeriodicidade,
+        dataEmissao: formDataEmissao || editingDoc.dataEmissao,
+        proximaRevisao: formProximaRevisao || editingDoc.proximaRevisao,
         objetivo: formObjetivo.trim(),
         descricao: formDescricao.trim(),
         googleDriveLink: formDriveLink.trim(),
@@ -163,10 +186,10 @@ export const Documentos: React.FC<DocumentosProps> = ({
       onAddLog('Documento Editado', `Modificado metadados do documento ${formCodigo} na Lista Mestra.`, editingDoc.id);
     } else {
       // Criar novo documento
-      const proximaDataEmissao = new Date().toISOString().split('T')[0];
+      const proximaDataEmissao = formDataEmissao || new Date().toISOString().split('T')[0];
       const proxRevDate = new Date();
       proxRevDate.setMonth(proxRevDate.getMonth() + formPeriodicidade);
-      const proximaRevisaoDateString = proxRevDate.toISOString().split('T')[0];
+      const proximaRevisaoDateString = formProximaRevisao || proxRevDate.toISOString().split('T')[0];
 
       const novoDoc: Documento = {
         id: `doc-${Date.now()}`,
@@ -453,7 +476,37 @@ export const Documentos: React.FC<DocumentosProps> = ({
                     min="1"
                     className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-800 dark:text-slate-100 focus:outline-hidden"
                     value={formPeriodicidade}
-                    onChange={(e) => setFormPeriodicidade(Number(e.target.value))}
+                    onChange={(e) => {
+                      const p = Number(e.target.value) || 12;
+                      setFormPeriodicidade(p);
+                      updateProximaRevisao(formDataEmissao, p);
+                    }}
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase">Data de Emissão Inicial *</label>
+                  <input
+                    type="date"
+                    required
+                    className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-mono text-slate-800 dark:text-slate-100 focus:outline-hidden"
+                    value={formDataEmissao}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setFormDataEmissao(val);
+                      updateProximaRevisao(val, formPeriodicidade);
+                    }}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase">Data da Próxima Revisão</label>
+                  <input
+                    type="date"
+                    className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-mono text-slate-800 dark:text-slate-100 focus:outline-hidden"
+                    value={formProximaRevisao}
+                    onChange={(e) => setFormProximaRevisao(e.target.value)}
                   />
                 </div>
               </div>

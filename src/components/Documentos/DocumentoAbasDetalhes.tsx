@@ -3,7 +3,7 @@ import {
   FileText, Calendar, Clock, Award, CheckCircle2, RotateCcw, 
   Send, History, Shield, Trash2, ExternalLink, AlertTriangle, 
   UserCheck, Download, Layers, Eye, Smartphone, Monitor, Tablet, Globe,
-  KeyRound, XCircle, Check
+  KeyRound, XCircle, Check, Pencil, Save
 } from 'lucide-react';
 import { Documento, DocumentRevision, CopiaDistribuida, DocumentStatus, DocumentLog, DocumentReading } from '../../types';
 import { getSavedFlows } from './FluxosParametrizados';
@@ -53,6 +53,45 @@ export const DocumentoAbasDetalhes: React.FC<DocumentoAbasDetalhesProps> = ({
   // Nova Revisão
   const [isRevisionModalOpen, setIsRevisionModalOpen] = useState(false);
   const [revisionReason, setRevisionReason] = useState('');
+
+  // Edição rápida de Metadados / Datas (Emissão Inicial e Próxima Revisão)
+  const [isEditingDates, setIsEditingDates] = useState(false);
+  const [editDataEmissao, setEditDataEmissao] = useState(activeDoc.dataEmissao || '');
+  const [editProximaRevisao, setEditProximaRevisao] = useState(activeDoc.proximaRevisao || '');
+  const [editPeriodicidade, setEditPeriodicidade] = useState(activeDoc.periodicidade || 12);
+
+  useEffect(() => {
+    setEditDataEmissao(activeDoc.dataEmissao || '');
+    setEditProximaRevisao(activeDoc.proximaRevisao || '');
+    setEditPeriodicidade(activeDoc.periodicidade || 12);
+  }, [activeDoc]);
+
+  const handleRecalculateProximaRevisao = (newEmissao: string, months: number) => {
+    try {
+      if (!newEmissao) return;
+      const d = new Date(newEmissao + 'T00:00:00');
+      if (!isNaN(d.getTime())) {
+        d.setMonth(d.getMonth() + months);
+        setEditProximaRevisao(d.toISOString().split('T')[0]);
+      }
+    } catch {}
+  };
+
+  const handleSaveDates = () => {
+    if (!editDataEmissao) return;
+    const updatedDoc: Documento = {
+      ...activeDoc,
+      dataEmissao: editDataEmissao,
+      proximaRevisao: editProximaRevisao || activeDoc.proximaRevisao,
+      periodicidade: editPeriodicidade || activeDoc.periodicidade,
+      updatedAt: new Date().toISOString()
+    };
+    onUpdateDocument(updatedDoc);
+    onAddLog('Data de Emissão Alterada', `Data de emissão inicial do documento ${activeDoc.codigo} alterada para ${editDataEmissao}.`, activeDoc.id);
+    setIsEditingDates(false);
+    setActionSuccessMsg('Datas de emissão e validade atualizadas com sucesso!');
+    setTimeout(() => setActionSuccessMsg(''), 4000);
+  };
 
   const { accessToken } = useAuth();
 
@@ -774,23 +813,120 @@ export const DocumentoAbasDetalhes: React.FC<DocumentoAbasDetalhesProps> = ({
             </div>
 
             {/* Ciclo de Validade / Metadados de Emissão */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 bg-slate-50 dark:bg-slate-800/10 p-3.5 rounded-xl border border-slate-100 dark:border-slate-800 text-xs">
-              <div>
-                <span className="block text-[9px] font-bold text-slate-400 uppercase">Emissão Inicial</span>
-                <strong className="text-slate-700 dark:text-slate-200 font-mono">{activeDoc.dataEmissao}</strong>
+            <div className="bg-slate-50 dark:bg-slate-800/10 p-3.5 rounded-xl border border-slate-100 dark:border-slate-800 text-xs space-y-2.5">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">
+                  Ciclo de Validade & Emissão
+                </span>
+                {!isEditingDates ? (
+                  <button
+                    type="button"
+                    onClick={() => setIsEditingDates(true)}
+                    className="inline-flex items-center gap-1 text-[11px] font-bold text-blue-600 hover:text-blue-700 bg-blue-50 dark:bg-blue-900/30 hover:bg-blue-100 dark:hover:bg-blue-900/50 px-2 py-0.5 rounded-md transition-colors cursor-pointer"
+                    title="Editar data de emissão e ciclo de validade"
+                  >
+                    <Pencil className="w-3 h-3" />
+                    <span>Editar Data</span>
+                  </button>
+                ) : (
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={handleSaveDates}
+                      className="inline-flex items-center gap-1 text-[10px] font-bold text-white bg-emerald-600 hover:bg-emerald-700 px-2 py-0.5 rounded-md shadow-xs transition-colors cursor-pointer"
+                    >
+                      <Check className="w-3 h-3" />
+                      <span>Salvar</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditDataEmissao(activeDoc.dataEmissao || '');
+                        setEditProximaRevisao(activeDoc.proximaRevisao || '');
+                        setEditPeriodicidade(activeDoc.periodicidade || 12);
+                        setIsEditingDates(false);
+                      }}
+                      className="inline-flex items-center gap-1 text-[10px] font-bold text-slate-600 dark:text-slate-300 bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 px-2 py-0.5 rounded-md transition-colors cursor-pointer"
+                    >
+                      <XCircle className="w-3 h-3" />
+                      <span>Cancelar</span>
+                    </button>
+                  </div>
+                )}
               </div>
-              <div>
-                <span className="block text-[9px] font-bold text-slate-400 uppercase">Próxima Revisão</span>
-                <strong className="text-slate-700 dark:text-slate-200 font-mono">{activeDoc.proximaRevisao}</strong>
-              </div>
-              <div>
-                <span className="block text-[9px] font-bold text-slate-400 uppercase">Validade</span>
-                <strong className="text-slate-700 dark:text-slate-200">{activeDoc.periodicidade || 12} meses</strong>
-              </div>
-              <div>
-                <span className="block text-[9px] font-bold text-slate-400 uppercase">Setor / Área</span>
-                <strong className="text-slate-700 dark:text-slate-200">{activeDoc.setor}</strong>
-              </div>
+
+              {!isEditingDates ? (
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div 
+                    onClick={() => setIsEditingDates(true)}
+                    className="group cursor-pointer p-1.5 -m-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800/50 transition-colors"
+                    title="Clique para editar a data de emissão"
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="block text-[9px] font-bold text-slate-400 uppercase">Emissão Inicial</span>
+                      <Pencil className="w-2.5 h-2.5 text-slate-300 group-hover:text-blue-500 opacity-0 group-hover:opacity-100 transition-opacity" />
+                    </div>
+                    <strong className="text-slate-700 dark:text-slate-200 font-mono text-xs">{activeDoc.dataEmissao}</strong>
+                  </div>
+                  <div>
+                    <span className="block text-[9px] font-bold text-slate-400 uppercase">Próxima Revisão</span>
+                    <strong className="text-slate-700 dark:text-slate-200 font-mono text-xs">{activeDoc.proximaRevisao}</strong>
+                  </div>
+                  <div>
+                    <span className="block text-[9px] font-bold text-slate-400 uppercase">Validade</span>
+                    <strong className="text-slate-700 dark:text-slate-200">{activeDoc.periodicidade || 12} meses</strong>
+                  </div>
+                  <div>
+                    <span className="block text-[9px] font-bold text-slate-400 uppercase">Setor / Área</span>
+                    <strong className="text-slate-700 dark:text-slate-200">{activeDoc.setor}</strong>
+                  </div>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-1">
+                  <div>
+                    <label className="block text-[9px] font-bold text-blue-600 dark:text-blue-400 uppercase mb-1">
+                      Data de Emissão Inicial *
+                    </label>
+                    <input
+                      type="date"
+                      value={editDataEmissao}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setEditDataEmissao(val);
+                        handleRecalculateProximaRevisao(val, editPeriodicidade);
+                      }}
+                      className="w-full p-2 bg-white dark:bg-slate-900 border border-blue-300 dark:border-blue-700 rounded-lg text-xs font-mono text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[9px] font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">
+                      Periodicidade (Meses)
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      value={editPeriodicidade}
+                      onChange={(e) => {
+                        const val = Number(e.target.value) || 12;
+                        setEditPeriodicidade(val);
+                        handleRecalculateProximaRevisao(editDataEmissao, val);
+                      }}
+                      className="w-full p-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-xs text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[9px] font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">
+                      Data da Próxima Revisão
+                    </label>
+                    <input
+                      type="date"
+                      value={editProximaRevisao}
+                      onChange={(e) => setEditProximaRevisao(e.target.value)}
+                      className="w-full p-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-mono text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    />
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Ciclo de Assinaturas Digitais Ativas (Traceabilidade) */}

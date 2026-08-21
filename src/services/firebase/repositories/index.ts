@@ -13,6 +13,7 @@ export * from './criticalAnalysis.repository';
 export * from './document.repository';
 export * from './equipment.repository';
 export * from './fiveS.repository';
+export * from './fiveSPhotos.repository';
 export * from './indicator.repository';
 export * from './nc.repository';
 export * from './notification.repository';

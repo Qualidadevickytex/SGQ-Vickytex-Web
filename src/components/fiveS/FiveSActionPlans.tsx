@@ -24,6 +24,7 @@ import {
   Auditoria5S,
   Senso5S
 } from '../../types/fiveS';
+import { compressImage } from '../../utils/imageCompressor';
 
 interface FiveSActionPlansProps {
   planos: PlanoAcao5S[];
@@ -83,16 +84,18 @@ export const FiveSActionPlans: React.FC<FiveSActionPlansProps> = ({
     setNewComment('');
   };
 
-  const handleUploadCorrectionPhoto = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleUploadCorrectionPhoto = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const base64 = event.target?.result as string;
-      setCorrectionPhotos(prev => [...prev, base64]);
-    };
-    reader.readAsDataURL(file);
+    try {
+      const compressed = await compressImage(file, 1000, 1000, 0.7);
+      setCorrectionPhotos(prev => [...prev, compressed]);
+    } catch (err) {
+      console.error("Erro ao comprimir foto de correção:", err);
+    } finally {
+      e.target.value = '';
+    }
   };
 
   const handleRemoveCorrectionPhoto = (idx: number) => {

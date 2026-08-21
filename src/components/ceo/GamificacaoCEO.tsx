@@ -26,7 +26,15 @@ import {
   Save,
   ShieldCheck,
   RotateCcw,
-  Undo2
+  Undo2,
+  HelpCircle,
+  Lightbulb,
+  FileCheck,
+  ClipboardList,
+  GraduationCap,
+  Sliders,
+  ChevronDown,
+  Info
 } from 'lucide-react';
 import { ProjetoCEO, SugestaoCEO } from '../../types/ceo';
 import { Treinamento } from '../../types/training';
@@ -44,6 +52,29 @@ interface GamificacaoCEOProps {
   suggestions: SugestaoCEO[];
 }
 
+export interface ItemAuditoriaPontuacao {
+  id: string;
+  origem: 'Treinamento' | 'Ideia Submetida' | 'Ideia Aprovada' | 'Liderança de Projeto' | 'Projeto Concluído' | 'Etapa/Fase Concluída' | 'Membro de Equipe' | 'Tarefa do Cronograma' | 'Ajuste Manual / Bônus';
+  titulo: string;
+  detalhe?: string;
+  pontos: number;
+  data?: string;
+  categoria: 'treinamentos' | 'ideias' | 'projetos' | 'ajustes';
+}
+
+export interface DetalhamentoPontos {
+  treinamentos: number;
+  ideiasSubmetidas: number;
+  ideiasAprovadas: number;
+  projetosLideranca: number;
+  projetosConcluidos: number;
+  etapasConcluidas: number;
+  equipeProjetos: number;
+  tarefasCronograma: number;
+  ajusteManual: number;
+  itens: ItemAuditoriaPontuacao[];
+}
+
 interface ColaboradorRank {
   nome: string;
   email: string;
@@ -56,6 +87,7 @@ interface ColaboradorRank {
   horasTreinamento: number;
   belt: 'Yellow Belt' | 'Green Belt' | 'Black Belt' | 'Master Black Belt' | 'Lean Practitioner';
   medalhas: string[];
+  detalhamento: DetalhamentoPontos;
 }
 
 export const GamificacaoCEO: React.FC<GamificacaoCEOProps> = ({ projects, suggestions }) => {
@@ -72,6 +104,10 @@ export const GamificacaoCEO: React.FC<GamificacaoCEOProps> = ({ projects, sugges
     const saved = localStorage.getItem('sgq_vickytex_ceo_training_logs');
     return saved ? JSON.parse(saved) : [];
   });
+
+  // Estado para visualização do extrato / auditoria de pontuação detalhada
+  const [selectedUserForAudit, setSelectedUserForAudit] = useState<ColaboradorRank | null>(null);
+  const [auditFilterCategory, setAuditFilterCategory] = useState<'all' | 'treinamentos' | 'ideias' | 'projetos' | 'ajustes'>('all');
 
   // Manual adjustments state for Leaderboard Maintenance
   const [manualAdjustments, setManualAdjustments] = useState<Record<string, { pointsBonus: number; beltOverride?: string; customMedal?: string; reason?: string }>>(() => {
@@ -181,10 +217,24 @@ export const GamificacaoCEO: React.FC<GamificacaoCEOProps> = ({ projects, sugges
         horasTreinamento: number;
         pontos: number;
         medalhas: Set<string>;
+        detalhamento: DetalhamentoPontos;
       }>();
 
       const normalizeEmail = (em: string) => (em || '').trim().toLowerCase();
       const normalizeText = (txt: string) => (txt || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase();
+
+      const createEmptyDetalhamento = (): DetalhamentoPontos => ({
+        treinamentos: 0,
+        ideiasSubmetidas: 0,
+        ideiasAprovadas: 0,
+        projetosLideranca: 0,
+        projetosConcluidos: 0,
+        etapasConcluidas: 0,
+        equipeProjetos: 0,
+        tarefasCronograma: 0,
+        ajusteManual: 0,
+        itens: []
+      });
 
       // 1. Incluir os usuários cadastrados (dbUsers ou fallback INITIAL_USER_ACCOUNTS)
       const allRegisteredUsers = (dbUsers && dbUsers.length > 0) ? dbUsers : INITIAL_USER_ACCOUNTS;
@@ -202,7 +252,8 @@ export const GamificacaoCEO: React.FC<GamificacaoCEOProps> = ({ projects, sugges
               tarefasConcluidas: 0,
               horasTreinamento: 0,
               pontos: 0,
-              medalhas: new Set<string>()
+              medalhas: new Set<string>(),
+              detalhamento: createEmptyDetalhamento()
             });
           }
         }
@@ -222,7 +273,8 @@ export const GamificacaoCEO: React.FC<GamificacaoCEOProps> = ({ projects, sugges
             tarefasConcluidas: 0,
             horasTreinamento: 0,
             pontos: 0,
-            medalhas: new Set<string>()
+            medalhas: new Set<string>(),
+            detalhamento: createEmptyDetalhamento()
           });
         }
       }
@@ -308,13 +360,24 @@ export const GamificacaoCEO: React.FC<GamificacaoCEOProps> = ({ projects, sugges
 
           const hours = Number(tr.duracaoHoras || 1);
           if (tr.status === 'Realizado') {
+            const pts = hours * 5;
             // Instrutor
             if (tr.instrutor) {
               const u = findRegisteredUser(tr.instrutor);
               if (u) {
                 u.horasTreinamento += hours;
-                u.pontos += hours * 5;
+                u.pontos += pts;
                 u.medalhas.add('Instrutor Lean');
+                u.detalhamento.treinamentos += pts;
+                u.detalhamento.itens.push({
+                  id: `tr-inst-${tr.id}`,
+                  origem: 'Treinamento',
+                  titulo: tr.titulo || 'Treinamento Realizado',
+                  detalhe: `Instrutor • ${hours}h de capacitação (${hours} × 5 pts)`,
+                  pontos: pts,
+                  data: tr.dataTreinamento,
+                  categoria: 'treinamentos'
+                });
               }
             }
 
@@ -325,8 +388,18 @@ export const GamificacaoCEO: React.FC<GamificacaoCEOProps> = ({ projects, sugges
               const u = findRegisteredUser(part);
               if (u) {
                 u.horasTreinamento += hours;
-                u.pontos += hours * 5;
+                u.pontos += pts;
                 u.medalhas.add('Estudioso Lean');
+                u.detalhamento.treinamentos += pts;
+                u.detalhamento.itens.push({
+                  id: `tr-part-${tr.id}-${u.email}`,
+                  origem: 'Treinamento',
+                  titulo: tr.titulo || 'Treinamento Participado',
+                  detalhe: `Participante • ${hours}h de capacitação (${hours} × 5 pts)`,
+                  pontos: pts,
+                  data: tr.dataTreinamento,
+                  categoria: 'treinamentos'
+                });
               }
             });
           }
@@ -343,9 +416,20 @@ export const GamificacaoCEO: React.FC<GamificacaoCEOProps> = ({ projects, sugges
           const u = (log.email ? findRegisteredUser(log.email) : null) || (log.nome ? findRegisteredUser(log.nome) : null);
           if (u) {
             const h = Number(log.horas || 0);
+            const pts = h * 5; // 5 pts por hora de capacitação
             u.horasTreinamento += h;
-            u.pontos += h * 5; // 5 pts por hora de capacitação
+            u.pontos += pts;
             u.medalhas.add('Estudioso Lean');
+            u.detalhamento.treinamentos += pts;
+            u.detalhamento.itens.push({
+              id: log.id || `log-${Math.random()}`,
+              origem: 'Treinamento',
+              titulo: log.tema || 'Capacitação Lean Lançada',
+              detalhe: `Registro Direto • ${h}h de capacitação (${h} × 5 pts)`,
+              pontos: pts,
+              data: log.data,
+              categoria: 'treinamentos'
+            });
           }
         });
 
@@ -362,11 +446,31 @@ export const GamificacaoCEO: React.FC<GamificacaoCEOProps> = ({ projects, sugges
           if (u) {
             u.ideiasSubmetidas += 1;
             u.pontos += 15; // 15 pts per suggestion submitted
+            u.detalhamento.ideiasSubmetidas += 15;
+            u.detalhamento.itens.push({
+              id: `sug-sub-${sug.id}`,
+              origem: 'Ideia Submetida',
+              titulo: sug.titulo || 'Sugestão de Melhoria',
+              detalhe: `Submissão ao Banco de Ideias (${sug.setor || 'Geral'})`,
+              pontos: 15,
+              data: sug.dataSubmissao,
+              categoria: 'ideias'
+            });
 
             if (sug.status === 'Aprovada' || sug.status === 'Em Implantação' || sug.status === 'Concluída') {
               u.ideiasAprovadas += 1;
               u.pontos += 50; // 50 pts per approved idea
               u.medalhas.add('Mente Inovadora');
+              u.detalhamento.ideiasAprovadas += 50;
+              u.detalhamento.itens.push({
+                id: `sug-app-${sug.id}`,
+                origem: 'Ideia Aprovada',
+                titulo: sug.titulo || 'Sugestão Aprovada',
+                detalhe: `Status: ${sug.status} • Impacto/Viabilidade Validada (+50 pts)`,
+                pontos: 50,
+                data: sug.dataSubmissao,
+                categoria: 'ideias'
+              });
             }
           }
         });
@@ -387,34 +491,86 @@ export const GamificacaoCEO: React.FC<GamificacaoCEOProps> = ({ projects, sugges
                 u.projetosConcluidos += 1;
                 u.pontos += 200; // 200 pts per completed project
                 u.medalhas.add('Campeão Kaizen');
+                u.detalhamento.projetosConcluidos += 200;
+                u.detalhamento.itens.push({
+                  id: `proj-concl-${proj.id}`,
+                  origem: 'Projeto Concluído',
+                  titulo: proj.titulo || 'Projeto de Melhoria',
+                  detalhe: `Líder do Projeto • Metodologia ${proj.metodologia} finalizada (+200 pts)`,
+                  pontos: 200,
+                  data: proj.dataFimPrevista || proj.dataInicio,
+                  categoria: 'projetos'
+                });
               } else if (proj.status === 'Em Execução' || proj.status === 'Planejado') {
                 u.projetosAtivos += 1;
                 u.pontos += 50; // 50 pts for active leading
+                u.detalhamento.projetosLideranca += 50;
+                u.detalhamento.itens.push({
+                  id: `proj-lead-${proj.id}`,
+                  origem: 'Liderança de Projeto',
+                  titulo: proj.titulo || 'Projeto em Andamento',
+                  detalhe: `Líder Ativo • Metodologia ${proj.metodologia} (${proj.status}) (+50 pts)`,
+                  pontos: 50,
+                  data: proj.dataInicio,
+                  categoria: 'projetos'
+                });
               }
 
               // Stage completion counts
-              const completedStages = proj.ferramentas?.etapas?.filter(e => e.status === 'Concluido').length || 0;
-              u.pontos += completedStages * 30; // 30 pts per completed gate/stage
+              const completedStages = proj.ferramentas?.etapas?.filter(e => e.status === 'Concluido') || [];
+              completedStages.forEach((stage, sIdx) => {
+                u.pontos += 30; // 30 pts per completed gate/stage
+                u.detalhamento.etapasConcluidas += 30;
+                u.detalhamento.itens.push({
+                  id: `proj-stage-${proj.id}-${sIdx}`,
+                  origem: 'Etapa/Fase Concluída',
+                  titulo: `${proj.titulo}: Etapa "${stage.nome}"`,
+                  detalhe: `Tollgate/Fase concluída no projeto ${proj.metodologia} (+30 pts)`,
+                  pontos: 30,
+                  data: stage.dataFim || proj.dataInicio,
+                  categoria: 'projetos'
+                });
+              });
             }
           }
 
           // Project team members
-          proj.ferramentas?.equipe?.forEach(m => {
+          proj.ferramentas?.equipe?.forEach((m, mIdx) => {
             if (!m.email && !m.nome) return;
             const u = findRegisteredUser(m.email) || findRegisteredUser(m.nome);
             if (u) {
               u.pontos += 30; // 30 points for team collaboration
               u.medalhas.add('Trabalho em Equipe');
+              u.detalhamento.equipeProjetos += 30;
+              u.detalhamento.itens.push({
+                id: `proj-team-${proj.id}-${mIdx}-${u.email}`,
+                origem: 'Membro de Equipe',
+                titulo: proj.titulo || 'Equipe de Projeto',
+                detalhe: `Membro/Colaborador na equipe de ${proj.metodologia} • Função: ${m.funcao || 'Membro'} (+30 pts)`,
+                pontos: 30,
+                data: proj.dataInicio,
+                categoria: 'projetos'
+              });
             }
           });
 
           // Cronograma tasks
-          proj.ferramentas?.cronograma?.forEach(task => {
+          proj.ferramentas?.cronograma?.forEach((task, tIdx) => {
             if (task.status === 'Concluido' && task.responsavel) {
               const u = findRegisteredUser(task.responsavel);
               if (u) {
                 u.tarefasConcluidas += 1;
                 u.pontos += 15; // 15 pts per finished task
+                u.detalhamento.tarefasCronograma += 15;
+                u.detalhamento.itens.push({
+                  id: `proj-task-${proj.id}-${tIdx}`,
+                  origem: 'Tarefa do Cronograma',
+                  titulo: `${proj.titulo}: ${task.atividade || 'Atividade Concluída'}`,
+                  detalhe: `Entrega de atividade no cronograma do projeto (+15 pts)`,
+                  pontos: 15,
+                  data: task.dataFim || proj.dataInicio,
+                  categoria: 'projetos'
+                });
               }
             }
           });
@@ -428,7 +584,20 @@ export const GamificacaoCEO: React.FC<GamificacaoCEOProps> = ({ projects, sugges
         // Apply manual adjustments if any
         const norm = normalizeEmail(u.email);
         const adj = manualAdjustments[u.email] || manualAdjustments[norm];
-        const totalPts = Math.max(0, u.pontos + (adj?.pointsBonus || 0));
+        const bonus = adj?.pointsBonus || 0;
+        const totalPts = Math.max(0, u.pontos + bonus);
+
+        if (bonus !== 0) {
+          u.detalhamento.ajusteManual = bonus;
+          u.detalhamento.itens.push({
+            id: `adj-${u.email}`,
+            origem: 'Ajuste Manual / Bônus',
+            titulo: bonus > 0 ? `Bônus Manual (+${bonus} pts)` : `Ajuste Manual (${bonus} pts)`,
+            detalhe: adj?.reason || 'Ajuste de pontuação efetuado pelo administrador do sistema',
+            pontos: bonus,
+            categoria: 'ajustes'
+          });
+        }
 
         if (totalPts >= 600 || u.projetosConcluidos >= 2) {
           belt = 'Master Black Belt';
@@ -455,7 +624,8 @@ export const GamificacaoCEO: React.FC<GamificacaoCEOProps> = ({ projects, sugges
           ...u,
           pontos: totalPts,
           belt,
-          medalhas: Array.from(u.medalhas)
+          medalhas: Array.from(u.medalhas),
+          detalhamento: u.detalhamento
         };
       });
 
@@ -731,6 +901,7 @@ export const GamificacaoCEO: React.FC<GamificacaoCEOProps> = ({ projects, sugges
             <div className="space-y-2.5">
               {rankingList.map((rank, index) => {
                 const isCurrentUser = rank.email === user?.email;
+                const isSelectedForAudit = selectedUserForAudit?.email === rank.email;
                 const medalColors = [
                   'bg-yellow-500/10 text-yellow-600', // 1st
                   'bg-slate-300 text-slate-700', // 2nd
@@ -745,46 +916,147 @@ export const GamificacaoCEO: React.FC<GamificacaoCEOProps> = ({ projects, sugges
                   'Lean Practitioner': 'bg-blue-100 text-blue-800 border-blue-200 dark:bg-blue-950/20 dark:text-blue-400'
                 };
 
+                const det = rank.detalhamento || {
+                  treinamentos: 0,
+                  ideiasSubmetidas: 0,
+                  ideiasAprovadas: 0,
+                  projetosLideranca: 0,
+                  projetosConcluidos: 0,
+                  etapasConcluidas: 0,
+                  equipeProjetos: 0,
+                  tarefasCronograma: 0,
+                  ajusteManual: 0,
+                  itens: []
+                };
+
+                const totalIdeiasPts = (det.ideiasSubmetidas || 0) + (det.ideiasAprovadas || 0);
+                const totalProjetosPts = (det.projetosLideranca || 0) + (det.projetosConcluidos || 0) + (det.etapasConcluidas || 0) + (det.equipeProjetos || 0) + (det.tarefasCronograma || 0);
+
                 return (
                   <div 
                     key={rank.email} 
-                    className={`flex items-center justify-between p-3.5 border rounded-2xl transition-all ${
-                      isCurrentUser 
-                        ? 'border-indigo-500 bg-indigo-50/10 dark:bg-indigo-950/20 shadow-xs' 
-                        : 'border-slate-100 dark:border-slate-800/80 hover:bg-slate-50/50'
+                    className={`p-3.5 border rounded-2xl transition-all ${
+                      isSelectedForAudit
+                        ? 'border-indigo-500 bg-indigo-50/20 dark:bg-indigo-950/30 ring-2 ring-indigo-500/20 shadow-sm'
+                        : isCurrentUser 
+                          ? 'border-indigo-400/50 bg-indigo-50/10 dark:bg-indigo-950/20 shadow-xs' 
+                          : 'border-slate-100 dark:border-slate-800/80 hover:bg-slate-50/60 dark:hover:bg-slate-800/30'
                     }`}
                   >
-                    <div className="flex items-center space-x-3 min-w-0">
-                      {/* Trophy / Position */}
-                      <div className={`w-7 h-7 rounded-full flex items-center justify-center font-black font-mono text-xs shrink-0 ${
-                        index < 3 ? medalColors[index] : 'bg-slate-100 dark:bg-slate-800 text-slate-500'
-                      }`}>
-                        {index + 1}
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex items-center space-x-3 min-w-0">
+                        {/* Trophy / Position */}
+                        <div className={`w-7 h-7 rounded-full flex items-center justify-center font-black font-mono text-xs shrink-0 ${
+                          index < 3 ? medalColors[index] : 'bg-slate-100 dark:bg-slate-800 text-slate-500'
+                        }`}>
+                          {index + 1}
+                        </div>
+
+                        <div className="min-w-0">
+                          <div className="flex items-center space-x-2">
+                            <span className={`text-xs font-black truncate block ${isCurrentUser ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-800 dark:text-slate-200'}`}>
+                              {rank.nome}
+                            </span>
+                            {isCurrentUser && (
+                              <span className="px-1.5 py-0.5 rounded bg-indigo-500 text-white font-black text-[7px] uppercase">Você</span>
+                            )}
+                          </div>
+                          <span className="text-[10px] text-slate-400 truncate block">
+                            {rank.email} • {rank.projetosConcluidos} Proj. Concluídos • {rank.ideiasAprovadas} Ideias Aprovadas
+                          </span>
+                        </div>
                       </div>
 
-                      <div className="min-w-0">
-                        <div className="flex items-center space-x-2">
-                          <span className={`text-xs font-black truncate block ${isCurrentUser ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-800 dark:text-slate-200'}`}>
-                            {rank.nome}
-                          </span>
-                          {isCurrentUser && (
-                            <span className="px-1.5 py-0.5 rounded bg-indigo-500 text-white font-black text-[7px] uppercase">Você</span>
-                          )}
-                        </div>
-                        <span className="text-[10px] text-slate-400 truncate block">
-                          {rank.email} • {rank.projetosConcluidos} Proj. Concluídos • {rank.ideiasAprovadas} Ideias Aprovadas
+                      <div className="flex items-center space-x-3 shrink-0">
+                        <span className={`px-2 py-0.5 border rounded-lg text-[8px] font-bold uppercase tracking-wider ${beltColors[rank.belt]}`}>
+                          {rank.belt}
                         </span>
+
+                        <div className="text-right">
+                          <span className="text-xs font-black text-slate-850 dark:text-slate-100 block font-mono">{rank.pontos} Pts</span>
+                          <span className="text-[8px] text-slate-400 uppercase tracking-widest font-bold">Pontuação</span>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedUserForAudit(rank);
+                            setAuditFilterCategory('all');
+                          }}
+                          className={`px-2.5 py-1.5 rounded-xl text-[10px] font-extrabold flex items-center space-x-1.5 transition-all border ${
+                            isSelectedForAudit
+                              ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
+                              : 'bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-indigo-300 hover:text-indigo-600 dark:hover:text-indigo-400'
+                          }`}
+                          title="Auditar e conferir extrato detalhado de pontuação por origem"
+                        >
+                          <Info className="w-3.5 h-3.5" />
+                          <span>Auditar Origens</span>
+                        </button>
                       </div>
                     </div>
 
-                    <div className="flex items-center space-x-3 shrink-0">
-                      <span className={`px-2 py-0.5 border rounded-lg text-[8px] font-bold uppercase tracking-wider ${beltColors[rank.belt]}`}>
-                        {rank.belt}
-                      </span>
-                      <div className="text-right">
-                        <span className="text-xs font-black text-slate-850 dark:text-slate-100 block font-mono">{rank.pontos} Pts</span>
-                        <span className="text-[8px] text-slate-400 uppercase tracking-widest font-bold">Pontuação</span>
-                      </div>
+                    {/* Resumo Rápido de Origem de Pontos (Mini Breakdown Bar) */}
+                    <div className="mt-3 pt-2.5 border-t border-slate-100/80 dark:border-slate-800/60 flex flex-wrap items-center gap-1.5 text-[9px]">
+                      <span className="text-slate-400 font-bold uppercase tracking-wider text-[8px] mr-1">Origens:</span>
+                      
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedUserForAudit(rank);
+                          setAuditFilterCategory('treinamentos');
+                        }}
+                        className="px-2 py-0.5 rounded-lg bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 font-bold hover:bg-indigo-500/20 transition-colors flex items-center space-x-1"
+                        title="Ver pontos de Treinamentos e Capacitações"
+                      >
+                        <GraduationCap className="w-2.5 h-2.5" />
+                        <span>Treinamentos: {det.treinamentos} pts</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedUserForAudit(rank);
+                          setAuditFilterCategory('ideias');
+                        }}
+                        className="px-2 py-0.5 rounded-lg bg-amber-500/10 text-amber-700 dark:text-amber-300 font-bold hover:bg-amber-500/20 transition-colors flex items-center space-x-1"
+                        title="Ver pontos do Banco de Ideias (Submissões e Aprovações)"
+                      >
+                        <Lightbulb className="w-2.5 h-2.5" />
+                        <span>Ideias: {totalIdeiasPts} pts</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedUserForAudit(rank);
+                          setAuditFilterCategory('projetos');
+                        }}
+                        className="px-2 py-0.5 rounded-lg bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 font-bold hover:bg-emerald-500/20 transition-colors flex items-center space-x-1"
+                        title="Ver pontos de Projetos, Liderança, Etapas e Tarefas"
+                      >
+                        <FileCheck className="w-2.5 h-2.5" />
+                        <span>Projetos & Tarefas: {totalProjetosPts} pts</span>
+                      </button>
+
+                      {det.ajusteManual !== 0 && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedUserForAudit(rank);
+                            setAuditFilterCategory('ajustes');
+                          }}
+                          className={`px-2 py-0.5 rounded-lg font-bold transition-colors flex items-center space-x-1 ${
+                            det.ajusteManual > 0
+                              ? 'bg-purple-500/10 text-purple-700 dark:text-purple-300 hover:bg-purple-500/20'
+                              : 'bg-rose-500/10 text-rose-700 dark:text-rose-300 hover:bg-rose-500/20'
+                          }`}
+                          title="Ver Ajustes Manuais / Bônus do Administrador"
+                        >
+                          <Sliders className="w-2.5 h-2.5" />
+                          <span>Ajuste Manual: {det.ajusteManual > 0 ? `+${det.ajusteManual}` : det.ajusteManual} pts</span>
+                        </button>
+                      )}
                     </div>
                   </div>
                 );
@@ -837,8 +1109,12 @@ export const GamificacaoCEO: React.FC<GamificacaoCEOProps> = ({ projects, sugges
             </div>
 
             <div className="pt-3 border-t border-indigo-500/15 space-y-2">
-              <span className="text-[10px] font-black uppercase text-indigo-600 dark:text-indigo-400 block">Níveis de Certificação Belt</span>
+              <span className="text-[10px] font-black uppercase text-indigo-600 dark:text-indigo-400 block">Níveis de Certificação Belt & Trilha Lean</span>
               <div className="grid grid-cols-1 gap-2 text-[10px]">
+                <div className="flex items-start gap-2 bg-white/60 dark:bg-slate-900/60 p-2 rounded-xl border border-slate-200/60 dark:border-slate-800">
+                  <span className="px-2 py-0.5 rounded text-[8px] font-black uppercase bg-blue-100 text-blue-800 border border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 shrink-0">Lean Practitioner (0 - 59 pts)</span>
+                  <span className="text-slate-500 dark:text-slate-400 text-[9px] leading-tight">Nível inicial de entrada. Praticante em integração, participação em treinamentos e envio de sugestões.</span>
+                </div>
                 <div className="flex items-start gap-2 bg-white/60 dark:bg-slate-900/60 p-2 rounded-xl border border-slate-200/60 dark:border-slate-800">
                   <span className="px-2 py-0.5 rounded text-[8px] font-black uppercase bg-yellow-500 text-yellow-950 shrink-0">Yellow Belt (60+ pts)</span>
                   <span className="text-slate-500 dark:text-slate-400 text-[9px] leading-tight">Introdução ao Kaizen, preenchimento de GUT, Pareto e SWOT.</span>
@@ -1153,6 +1429,260 @@ export const GamificacaoCEO: React.FC<GamificacaoCEOProps> = ({ projects, sugges
         onConfirm={handleRestoreScores}
         onClose={() => setIsRestoreScoresModalOpen(false)}
       />
+
+      {/* AUDIT & DETAILED POINTS ORIGIN MODAL */}
+      {selectedUserForAudit && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-2xl w-full p-6 shadow-2xl space-y-5 animate-scale-up max-h-[90vh] flex flex-col">
+            
+            {/* Modal Header */}
+            <div className="flex items-start justify-between border-b border-slate-100 dark:border-slate-800 pb-4 shrink-0">
+              <div className="flex items-center space-x-3">
+                <div className="p-2.5 bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 rounded-2xl">
+                  <ShieldCheck className="w-6 h-6" />
+                </div>
+                <div>
+                  <div className="flex items-center space-x-2">
+                    <h3 className="text-base font-black text-slate-850 dark:text-slate-100">
+                      Auditoria & Extrato de Pontuação
+                    </h3>
+                    <span className="px-2 py-0.5 rounded-full text-[9px] font-black uppercase bg-indigo-500/10 text-indigo-600 border border-indigo-500/20">
+                      {selectedUserForAudit.belt}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-500 font-medium">
+                    {selectedUserForAudit.nome} • <span className="font-mono text-slate-400">{selectedUserForAudit.email}</span>
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setSelectedUserForAudit(null)}
+                className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Score Breakdown Cards */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 shrink-0">
+              <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-950/40 border border-slate-100 dark:border-slate-800/80">
+                <div className="flex items-center justify-between text-indigo-600 dark:text-indigo-400 mb-1">
+                  <span className="text-[10px] font-black uppercase tracking-wider">Treinamentos</span>
+                  <GraduationCap className="w-3.5 h-3.5" />
+                </div>
+                <span className="text-lg font-black text-slate-800 dark:text-slate-100 font-mono block">
+                  {selectedUserForAudit.detalhamento.treinamentos} <span className="text-[10px] font-bold text-slate-400">pts</span>
+                </span>
+                <span className="text-[9px] text-slate-400 block font-medium">
+                  {selectedUserForAudit.horasTreinamento}h registradas
+                </span>
+              </div>
+
+              <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-950/40 border border-slate-100 dark:border-slate-800/80">
+                <div className="flex items-center justify-between text-amber-600 dark:text-amber-400 mb-1">
+                  <span className="text-[10px] font-black uppercase tracking-wider">Banco Ideias</span>
+                  <Lightbulb className="w-3.5 h-3.5" />
+                </div>
+                <span className="text-lg font-black text-slate-800 dark:text-slate-100 font-mono block">
+                  {selectedUserForAudit.detalhamento.ideiasSubmetidas + selectedUserForAudit.detalhamento.ideiasAprovadas} <span className="text-[10px] font-bold text-slate-400">pts</span>
+                </span>
+                <span className="text-[9px] text-slate-400 block font-medium">
+                  {selectedUserForAudit.ideiasSubmetidas} submetidas ({selectedUserForAudit.ideiasAprovadas} aprov.)
+                </span>
+              </div>
+
+              <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-950/40 border border-slate-100 dark:border-slate-800/80">
+                <div className="flex items-center justify-between text-emerald-600 dark:text-emerald-400 mb-1">
+                  <span className="text-[10px] font-black uppercase tracking-wider">Projetos & A3</span>
+                  <FileCheck className="w-3.5 h-3.5" />
+                </div>
+                <span className="text-lg font-black text-slate-800 dark:text-slate-100 font-mono block">
+                  {selectedUserForAudit.detalhamento.projetosLideranca + selectedUserForAudit.detalhamento.projetosConcluidos + selectedUserForAudit.detalhamento.etapasConcluidas + selectedUserForAudit.detalhamento.equipeProjetos + selectedUserForAudit.detalhamento.tarefasCronograma} <span className="text-[10px] font-bold text-slate-400">pts</span>
+                </span>
+                <span className="text-[9px] text-slate-400 block font-medium">
+                  {selectedUserForAudit.projetosConcluidos} concluídos ({selectedUserForAudit.projetosAtivos} ativos)
+                </span>
+              </div>
+
+              <div className="p-3 rounded-2xl bg-indigo-600 text-white shadow-md">
+                <div className="flex items-center justify-between text-indigo-200 mb-1">
+                  <span className="text-[10px] font-black uppercase tracking-wider">Pontuação Total</span>
+                  <Trophy className="w-3.5 h-3.5 text-yellow-300" />
+                </div>
+                <span className="text-xl font-black font-mono block text-white">
+                  {selectedUserForAudit.pontos} <span className="text-[10px] font-bold text-indigo-200">pts</span>
+                </span>
+                <span className="text-[9px] text-indigo-100 block font-medium truncate">
+                  {selectedUserForAudit.medalhas.length} medalhas ativas
+                </span>
+              </div>
+            </div>
+
+            {/* Filter Tabs */}
+            <div className="flex items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800 pb-2 shrink-0 overflow-x-auto">
+              <div className="flex items-center space-x-1.5">
+                <button
+                  type="button"
+                  onClick={() => setAuditFilterCategory('all')}
+                  className={`px-3 py-1 rounded-xl text-xs font-black transition-all ${
+                    auditFilterCategory === 'all'
+                      ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900'
+                      : 'text-slate-500 hover:text-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800'
+                  }`}
+                >
+                  Todos os Lançamentos ({selectedUserForAudit.detalhamento.itens.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAuditFilterCategory('treinamentos')}
+                  className={`px-3 py-1 rounded-xl text-xs font-black transition-all flex items-center space-x-1 ${
+                    auditFilterCategory === 'treinamentos'
+                      ? 'bg-indigo-600 text-white'
+                      : 'text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-950/30'
+                  }`}
+                >
+                  <GraduationCap className="w-3 h-3" />
+                  <span>Treinamentos</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAuditFilterCategory('ideias')}
+                  className={`px-3 py-1 rounded-xl text-xs font-black transition-all flex items-center space-x-1 ${
+                    auditFilterCategory === 'ideias'
+                      ? 'bg-amber-600 text-white'
+                      : 'text-slate-500 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950/30'
+                  }`}
+                >
+                  <Lightbulb className="w-3 h-3" />
+                  <span>Ideias</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAuditFilterCategory('projetos')}
+                  className={`px-3 py-1 rounded-xl text-xs font-black transition-all flex items-center space-x-1 ${
+                    auditFilterCategory === 'projetos'
+                      ? 'bg-emerald-600 text-white'
+                      : 'text-slate-500 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/30'
+                  }`}
+                >
+                  <FileCheck className="w-3 h-3" />
+                  <span>Projetos</span>
+                </button>
+                {selectedUserForAudit.detalhamento.ajusteManual !== 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setAuditFilterCategory('ajustes')}
+                    className={`px-3 py-1 rounded-xl text-xs font-black transition-all flex items-center space-x-1 ${
+                      auditFilterCategory === 'ajustes'
+                        ? 'bg-purple-600 text-white'
+                        : 'text-slate-500 hover:text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-950/30'
+                    }`}
+                  >
+                    <Sliders className="w-3 h-3" />
+                    <span>Ajustes</span>
+                  </button>
+                )}
+              </div>
+
+              <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
+                Auditoria ISO 9001
+              </span>
+            </div>
+
+            {/* List of Individual Audited Items */}
+            <div className="overflow-y-auto flex-1 pr-1 space-y-2 max-h-72">
+              {(() => {
+                const filtered = selectedUserForAudit.detalhamento.itens.filter(item => {
+                  if (auditFilterCategory === 'all') return true;
+                  return item.categoria === auditFilterCategory;
+                });
+
+                if (filtered.length === 0) {
+                  return (
+                    <div className="py-8 text-center text-slate-400 text-xs font-medium bg-slate-50/50 dark:bg-slate-950/20 rounded-2xl border border-dashed border-slate-200 dark:border-slate-800">
+                      Nenhum lançamento encontrado nesta categoria de auditoria.
+                    </div>
+                  );
+                }
+
+                return filtered.map((item, idx) => {
+                  const getBadgeStyle = (origem: string) => {
+                    switch (origem) {
+                      case 'Treinamento':
+                        return 'bg-indigo-50 text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800';
+                      case 'Ideia Submetida':
+                      case 'Ideia Aprovada':
+                        return 'bg-amber-50 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300 border-amber-200 dark:border-amber-800';
+                      case 'Projeto Concluído':
+                      case 'Liderança de Projeto':
+                      case 'Etapa/Fase Concluída':
+                      case 'Membro de Equipe':
+                      case 'Tarefa do Cronograma':
+                        return 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800';
+                      default:
+                        return 'bg-purple-50 text-purple-700 dark:bg-purple-950/50 dark:text-purple-300 border-purple-200 dark:border-purple-800';
+                    }
+                  };
+
+                  return (
+                    <div
+                      key={item.id || idx}
+                      className="p-3 border border-slate-100 dark:border-slate-800/80 rounded-2xl bg-white dark:bg-slate-950/20 hover:bg-slate-50/70 transition-colors flex items-center justify-between gap-3"
+                    >
+                      <div className="min-w-0 space-y-0.5">
+                        <div className="flex items-center space-x-2">
+                          <span className={`px-2 py-0.5 rounded-md border text-[9px] font-black uppercase tracking-wider ${getBadgeStyle(item.origem)}`}>
+                            {item.origem}
+                          </span>
+                          <span className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate">
+                            {item.titulo}
+                          </span>
+                        </div>
+                        {item.detalhe && (
+                          <p className="text-[11px] text-slate-500 dark:text-slate-400 pl-0.5">
+                            {item.detalhe}
+                          </p>
+                        )}
+                        {item.data && (
+                          <span className="text-[9px] text-slate-400 block pl-0.5">
+                            Data do Registro: {item.data}
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="text-right shrink-0">
+                        <span className={`text-sm font-black font-mono block ${
+                          item.pontos >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'
+                        }`}>
+                          {item.pontos > 0 ? `+${item.pontos}` : item.pontos} Pts
+                        </span>
+                        <span className="text-[8px] text-slate-400 uppercase tracking-widest font-bold">Auditado</span>
+                      </div>
+                    </div>
+                  );
+                });
+              })()}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between shrink-0">
+              <span className="text-[10px] text-slate-400 font-medium">
+                Regras vigentes: Treinamento (+5/h), Ideia (+15), Ideia Aprovada (+50), Projeto (+200), Etapa (+30), Membro (+30), Tarefa (+15).
+              </span>
+              <button
+                type="button"
+                onClick={() => setSelectedUserForAudit(null)}
+                className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white dark:bg-slate-100 dark:hover:bg-slate-200 dark:text-slate-900 font-bold rounded-xl text-xs transition-colors"
+              >
+                Fechar Auditoria
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
 
     </div>
   );

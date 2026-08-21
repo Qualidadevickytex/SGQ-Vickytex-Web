@@ -37,6 +37,7 @@ import {
 import { calculateAuditScore, getClassificationForIndex, checkReincidencia } from '../../utils/fiveSStore';
 import { useAuth } from '../../contexts/AuthContext';
 import { googleDriveService, base64ToBlob } from '../../services/google/drive.service';
+import { compressImage } from '../../utils/imageCompressor';
 
 interface FiveSAuditsProps {
   auditorias: Auditoria5S[];
@@ -183,24 +184,28 @@ export const FiveSAudits: React.FC<FiveSAuditsProps> = ({
   };
 
   // Upload Photo handler (using client-side compression)
-  const handleUploadPhoto = (reqId: string, e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleUploadPhoto = async (reqId: string, e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const base64 = event.target?.result as string;
+    try {
+      // Comprime a foto no navegador/celular reduzindo de ~8MB para ~60-100KB com alta nitidez
+      const compressedBase64 = await compressImage(file, 1000, 1000, 0.7);
       const legend = prompt("Digite uma legenda rápida para esta foto:") || "Evidência fotográfica";
       
       setTempPhotos(prev => {
         const currentList = prev[reqId] || [];
         return {
           ...prev,
-          [reqId]: [...currentList, { file: base64, legend }]
+          [reqId]: [...currentList, { file: compressedBase64, legend }]
         };
       });
-    };
-    reader.readAsDataURL(file);
+    } catch (err) {
+      console.error("Erro ao comprimir e carregar imagem:", err);
+      showNotification("Não foi possível carregar a imagem. Tente novamente.", "error");
+    } finally {
+      e.target.value = '';
+    }
   };
 
   // Remove uploaded photo

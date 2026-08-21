@@ -97,6 +97,7 @@ export const INITIAL_CICLOS: CicloAuditoria[] = [
 ];
 
 import { SystemSettingsRepository } from '../services/database/repositories/systemSettings.repository';
+import { FiveSPhotosRepository } from '../services/firebase/repositories/fiveSPhotos.repository';
 
 // --- IN-MEMORY CACHE & FIRESTORE REALTIME SYNC ---
 
@@ -153,7 +154,7 @@ export const initFiveSStoreSync = () => {
   if (isSubscribed) return;
   isSubscribed = true;
 
-  // Carregar inicial do Firestore
+  // Carregar inicial do Firestore (Configurações e tabelas normalizadas)
   SystemSettingsRepository.findAll().then(res => {
     if (res.success && Array.isArray(res.data)) {
       res.data.forEach(rec => {
@@ -181,6 +182,21 @@ export const initFiveSStoreSync = () => {
       }
     });
   });
+
+  // Carregar e sincronizar Fotos do 5S em tempo real da coleção dedicada 'fives_photos' no Firestore
+  FiveSPhotosRepository.findAll().then(res => {
+    if (res.success && Array.isArray(res.data) && res.data.length > 0) {
+      inMemoryStore['sgq_5s_fotos'] = res.data;
+      notifyListeners('sgq_5s_fotos', res.data);
+    }
+  }).catch(err => console.error('[FiveSStore] Error loading 5S photos from Firestore:', err));
+
+  FiveSPhotosRepository.subscribe((photos) => {
+    if (Array.isArray(photos)) {
+      inMemoryStore['sgq_5s_fotos'] = photos;
+      notifyListeners('sgq_5s_fotos', photos);
+    }
+  });
 };
 
 initFiveSStoreSync();
@@ -195,6 +211,27 @@ export const getStoreData = <T>(key: string, fallback: T): T => {
 export const setStoreData = <T>(key: string, data: T): void => {
   inMemoryStore[key] = data;
   notifyListeners(key, data);
+
+  // Tratamento especial para fotografias do 5S: salvar cada foto individualmente na coleção Firestore 'fives_photos'
+  if (key === 'sgq_5s_fotos' && Array.isArray(data)) {
+    const photoList = data as Fotografia5S[];
+    const prevList = (inMemoryStore['sgq_5s_fotos'] || []) as Fotografia5S[];
+    const newIds = new Set(photoList.map(p => p.id));
+    prevList.forEach(p => {
+      if (p.id && !newIds.has(p.id)) {
+        FiveSPhotosRepository.delete(p.id).catch(() => {});
+      }
+    });
+    photoList.forEach(photo => {
+      if (photo.id) {
+        FiveSPhotosRepository.create(photo).catch(err => {
+          console.error(`[FiveSStore] Error persisting photo ${photo.id} to Firestore:`, err);
+        });
+      }
+    });
+    return;
+  }
+
   const isArray = Array.isArray(data);
   const payload = isArray ? { id: key, items: data } : { id: key, data };
   SystemSettingsRepository.create(payload).catch(err => {
