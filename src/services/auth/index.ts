@@ -38,14 +38,15 @@ export const authService = {
   async loginWithGoogle(): Promise<UserProfile | null> {
     try {
       const cred = await signInWithGoogle();
-      if (cred.user) {
+      const user = cred.userCredential.user;
+      if (user) {
         return {
-          id: cred.user.uid,
-          email: cred.user.email || '',
-          name: cred.user.displayName || 'Usuário Google',
+          id: user.uid,
+          email: user.email || '',
+          name: user.displayName || 'Usuário Google',
           role: 'Qualidade',
           sector: 'Qualidade',
-          photoURL: cred.user.photoURL || undefined
+          photoURL: user.photoURL || undefined
         };
       }
     } catch (e) {

@@ -10,13 +10,22 @@ import {
   signOut as firebaseSignOut,
   sendPasswordResetEmail as firebaseSendPasswordResetEmail,
   onAuthStateChanged,
+  GoogleAuthProvider,
   User,
   UserCredential
 } from 'firebase/auth';
 import { auth, googleProvider } from './firebase';
 
-export const signInWithGoogle = async (): Promise<UserCredential> => {
-  return await signInWithPopup(auth, googleProvider);
+export const signInWithGoogle = async (): Promise<{ userCredential: UserCredential; googleOAuthToken?: string }> => {
+  const result = await signInWithPopup(auth, googleProvider);
+  const credential = GoogleAuthProvider.credentialFromResult(result);
+  const googleOAuthToken = credential?.accessToken;
+  if (googleOAuthToken) {
+    try {
+      localStorage.setItem('sgq_vickytex_google_oauth_token', googleOAuthToken);
+    } catch {}
+  }
+  return { userCredential: result, googleOAuthToken };
 };
 
 export const loginWithEmail = async (email: string, passwordHash: string): Promise<UserCredential> => {

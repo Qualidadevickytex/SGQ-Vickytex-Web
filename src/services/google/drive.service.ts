@@ -300,6 +300,16 @@ export const DriveService = {
     return this.upload(blob, fileName, mimeType, parentFolderId, accessToken);
   },
 
+  isGoogleAccessToken(token?: string | null): boolean {
+    if (!token || typeof token !== 'string') return false;
+    const clean = token.trim();
+    if (clean.length < 10) return false;
+    if (clean.startsWith('mock_')) return false;
+    // Firebase Auth ID tokens are JWTs starting with eyJ...
+    if (clean.startsWith('eyJ')) return false;
+    return true;
+  },
+
   async getFileBlobUrl(fileId: string, accessToken: string): Promise<string> {
     return this.abrirPDF(fileId, accessToken);
   }

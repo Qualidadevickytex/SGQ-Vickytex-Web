@@ -81,7 +81,7 @@ export const FiveSAudits: React.FC<FiveSAuditsProps> = ({
   currentUserName = 'Mariana Silva'
 }) => {
   const [activeTab, setActiveTab] = useState<'nova' | 'andamento' | 'historico'>('historico');
-  const { accessToken } = useAuth();
+  const { accessToken, googleOAuthToken } = useAuth();
   const [isUploadingToDrive, setIsUploadingToDrive] = useState(false);
 
   // Search & Filter
@@ -273,17 +273,20 @@ export const FiveSAudits: React.FC<FiveSAuditsProps> = ({
       fotos: [] // backward compatibility
     };
 
-    // Google Drive Sync Flow
+    // Google Drive Sync Flow (Opcional - caso haja token OAuth do Google Drive ativo)
     let uploadedTempPhotos: Record<string, { file: string; legend: string }[]> = {};
-    if (accessToken && !accessToken.startsWith('mock_')) {
+    const driveToken = (googleOAuthToken && googleDriveService.isGoogleAccessToken(googleOAuthToken)) 
+      ? googleOAuthToken 
+      : (googleDriveService.isGoogleAccessToken(accessToken) ? accessToken : null);
+
+    if (driveToken) {
       setIsUploadingToDrive(true);
-      showNotification("Sincronizando fotos com a pasta segura no Google Drive...", "success");
       try {
         const rootFolderId = localStorage.getItem('sgq_vickytex_gdrive_folder_id') || '1Vick_Official_QMS_Drive_Folder';
         // 1. Encontrar ou criar a pasta 'Auditorias_5S'
-        const mainFolderId = await googleDriveService.findOrCreateFolder('Auditorias_5S', rootFolderId, accessToken);
+        const mainFolderId = await googleDriveService.findOrCreateFolder('Auditorias_5S', rootFolderId, driveToken);
         // 2. Encontrar ou criar a pasta desta auditoria específica
-        const auditFolderId = await googleDriveService.findOrCreateFolder(auditCode, mainFolderId, accessToken);
+        const auditFolderId = await googleDriveService.findOrCreateFolder(auditCode, mainFolderId, driveToken);
 
         // 3. Fazer upload de cada nova foto
         for (const [reqId, rawPhotoList] of Object.entries(tempPhotos)) {
@@ -294,7 +297,7 @@ export const FiveSAudits: React.FC<FiveSAuditsProps> = ({
             if (photo.file.startsWith('data:image/')) {
               const { blob, mimeType } = base64ToBlob(photo.file);
               const fileName = `foto_${reqId}_${pIdx + 1}.${mimeType.split('/')[1] || 'jpg'}`;
-              const driveFileId = await googleDriveService.uploadFile(blob, fileName, mimeType, auditFolderId, accessToken);
+              const driveFileId = await googleDriveService.uploadFile(blob, fileName, mimeType, auditFolderId, driveToken);
               uploadedTempPhotos[reqId].push({
                 file: `gdrive://${driveFileId}`,
                 legend: photo.legend
@@ -305,14 +308,14 @@ export const FiveSAudits: React.FC<FiveSAuditsProps> = ({
           }
         }
         showNotification("Fotos sincronizadas com sucesso no Google Drive!", "success");
-      } catch (err) {
-        console.error("Erro ao salvar fotos no Google Drive:", err);
-        showNotification("Não foi possível enviar as fotos para o Drive. Salvando localmente.", "error");
+      } catch (err: any) {
+        console.warn("Google Drive upload não disponível ou expirado, persistindo fotos com compressão no Firestore:", err);
         uploadedTempPhotos = tempPhotos;
       } finally {
         setIsUploadingToDrive(false);
       }
     } else {
+      // Salva direto no Firestore / LocalStorage com compressão de alta performance
       uploadedTempPhotos = tempPhotos;
     }
 
@@ -616,7 +619,7 @@ export const FiveSAudits: React.FC<FiveSAuditsProps> = ({
                       <div className="grid grid-cols-2 sm:grid-cols-5 gap-3.5 pt-1">
                         {reqPhotos.map(photo => (
                           <div key={photo.id} className="relative group cursor-pointer border border-slate-100 dark:border-slate-800 rounded-lg overflow-hidden" onClick={() => setLightboxImage(photo.url)}>
-                            <DriveImage url={photo.url} accessToken={accessToken} className="w-full h-24 object-cover group-hover:scale-105 transition-all" alt="Evidência" />
+                            <DriveImage url={photo.url} accessToken={accessToken} googleOAuthToken={googleOAuthToken} className="w-full h-24 object-cover group-hover:scale-105 transition-all" alt="Evidência" />
                             <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center">
                               <Eye className="w-5 h-5 text-white" />
                             </div>
@@ -783,7 +786,7 @@ export const FiveSAudits: React.FC<FiveSAuditsProps> = ({
                           <div className="flex flex-wrap gap-1.5 overflow-x-auto py-1">
                             {(tempPhotos[req.id] || []).map((pht, pIdx) => (
                               <div key={pIdx} className="relative w-8 h-8 rounded-sm overflow-hidden border border-slate-300">
-                                <DriveImage url={pht.file} accessToken={accessToken} className="w-full h-full object-cover" alt="Temp" />
+                                <DriveImage url={pht.file} accessToken={accessToken} googleOAuthToken={googleOAuthToken} className="w-full h-full object-cover" alt="Temp" />
                                 <button
                                   type="button"
                                   onClick={() => handleRemovePhoto(req.id, pIdx)}
@@ -983,7 +986,7 @@ export const FiveSAudits: React.FC<FiveSAuditsProps> = ({
       {lightboxImage && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-xs no-print" onClick={() => setLightboxImage(null)}>
           <div className="relative max-w-3xl w-full max-h-[85vh] overflow-hidden flex items-center justify-center">
-            <DriveImage url={lightboxImage} accessToken={accessToken} className="max-w-full max-h-full object-contain rounded-xl" alt="Evidence Large" />
+            <DriveImage url={lightboxImage} accessToken={accessToken} googleOAuthToken={googleOAuthToken} className="max-w-full max-h-full object-contain rounded-xl" alt="Evidence Large" />
             <button className="absolute top-4 right-4 bg-black/60 hover:bg-black/80 text-white rounded-full p-2" onClick={() => setLightboxImage(null)}>
               <X className="w-5 h-5" />
             </button>
@@ -1038,39 +1041,44 @@ export const FiveSAudits: React.FC<FiveSAuditsProps> = ({
 // Componente para exibir imagem com suporte a URLs gdrive://
 const DriveImage: React.FC<{ 
   url: string; 
-  accessToken: string | null; 
+  accessToken?: string | null; 
+  googleOAuthToken?: string | null;
   className?: string; 
   alt?: string; 
   onClick?: () => void;
-}> = ({ url, accessToken, className, alt, onClick }) => {
+}> = ({ url, accessToken, googleOAuthToken, className, alt, onClick }) => {
   const [src, setSrc] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<boolean>(false);
 
   useEffect(() => {
+    if (!url) return;
     if (url.startsWith('gdrive://')) {
       const fileId = url.replace('gdrive://', '');
-      if (!accessToken) {
-        // Sem token de acesso (modo offline ou demo)
+      const validToken = (googleOAuthToken && googleDriveService.isGoogleAccessToken(googleOAuthToken))
+        ? googleOAuthToken
+        : (googleDriveService.isGoogleAccessToken(accessToken) ? accessToken : null);
+
+      if (!validToken) {
         setError(true);
         return;
       }
       setLoading(true);
       setError(false);
-      googleDriveService.getFileBlobUrl(fileId, accessToken)
+      googleDriveService.getFileBlobUrl(fileId, validToken)
         .then(blobUrl => {
           setSrc(blobUrl);
           setLoading(false);
         })
         .catch(err => {
-          console.error('[DriveImage] Error loading image from Google Drive:', err);
+          console.warn('[DriveImage] Error loading image from Google Drive:', err);
           setError(true);
           setLoading(false);
         });
     } else {
       setSrc(url);
     }
-  }, [url, accessToken]);
+  }, [url, accessToken, googleOAuthToken]);
 
   if (loading) {
     return (

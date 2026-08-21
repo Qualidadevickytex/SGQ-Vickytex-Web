@@ -498,7 +498,7 @@ export const GamificacaoCEO: React.FC<GamificacaoCEOProps> = ({ projects, sugges
                   titulo: proj.titulo || 'Projeto de Melhoria',
                   detalhe: `Líder do Projeto • Metodologia ${proj.metodologia} finalizada (+200 pts)`,
                   pontos: 200,
-                  data: proj.dataFimPrevista || proj.dataInicio,
+                  data: proj.dataFimReal || proj.dataFimPlanejada || proj.dataInicio,
                   categoria: 'projetos'
                 });
               } else if (proj.status === 'Em Execução' || proj.status === 'Planejado') {
@@ -527,7 +527,7 @@ export const GamificacaoCEO: React.FC<GamificacaoCEOProps> = ({ projects, sugges
                   titulo: `${proj.titulo}: Etapa "${stage.nome}"`,
                   detalhe: `Tollgate/Fase concluída no projeto ${proj.metodologia} (+30 pts)`,
                   pontos: 30,
-                  data: stage.dataFim || proj.dataInicio,
+                  data: stage.dataConclusao || proj.dataInicio,
                   categoria: 'projetos'
                 });
               });
@@ -565,7 +565,7 @@ export const GamificacaoCEO: React.FC<GamificacaoCEOProps> = ({ projects, sugges
                 u.detalhamento.itens.push({
                   id: `proj-task-${proj.id}-${tIdx}`,
                   origem: 'Tarefa do Cronograma',
-                  titulo: `${proj.titulo}: ${task.atividade || 'Atividade Concluída'}`,
+                  titulo: `${proj.titulo}: ${task.tarefa || 'Atividade Concluída'}`,
                   detalhe: `Entrega de atividade no cronograma do projeto (+15 pts)`,
                   pontos: 15,
                   data: task.dataFim || proj.dataInicio,

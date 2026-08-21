@@ -108,4 +108,6 @@ export interface Registro {
   observacoes?: string;
   googleDriveId?: string;
   googleDriveLink?: string;
+  fotoEvidencia?: string; // Imagem Base64 ou URL de foto do registro
+  fotos?: string[]; // Lista de fotos/evidências do registro
 }

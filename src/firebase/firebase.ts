@@ -41,6 +41,7 @@ export const auth: Auth = getAuth(app);
 const dbId = customConfig?.firestoreDatabaseId || env.VITE_FIREBASE_FIRESTORE_DATABASE_ID || (firebaseConfigJson as any).firestoreDatabaseId;
 export const db: Firestore = (dbId && dbId !== '(default)') ? getFirestore(app, dbId) : getFirestore(app);
 export const googleProvider = new GoogleAuthProvider();
+googleProvider.addScope('https://www.googleapis.com/auth/drive.file');
 
 if (typeof window !== 'undefined') {
   console.log(`[Firebase Init] Conectado ao projeto: "${firebaseConfig.projectId}" | Firestore Database ID: "${dbId || '(default)'}"`);

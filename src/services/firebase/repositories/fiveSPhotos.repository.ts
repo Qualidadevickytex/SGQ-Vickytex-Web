@@ -10,10 +10,21 @@ class FiveSPhotosRepositoryClass extends BaseRepository<Fotografia5S> {
   protected collectionName = 'fives_photos';
 
   protected getLocalData(): Fotografia5S[] {
-    return [];
+    try {
+      const saved = localStorage.getItem('sgq_5s_fotos');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
   }
 
-  protected saveLocalData(_data: Fotografia5S[]): void {}
+  protected saveLocalData(data: Fotografia5S[]): void {
+    try {
+      localStorage.setItem('sgq_5s_fotos', JSON.stringify(data));
+    } catch (e) {
+      console.warn('[FiveSPhotosRepository] Error saving local backup:', e);
+    }
+  }
 
   protected mapRecord(rec: any): Fotografia5S {
     return {

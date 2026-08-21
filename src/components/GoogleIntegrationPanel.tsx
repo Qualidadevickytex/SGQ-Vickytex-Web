@@ -9,7 +9,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { SystemSettingsRepository } from '../services/database/repositories/systemSettings.repository';
 
 export const GoogleIntegrationPanel: React.FC = () => {
-  const { user, accessToken, loginWithGoogle } = useAuth();
+  const { user, accessToken, googleOAuthToken, loginWithGoogle } = useAuth();
   const [isTesting, setIsTesting] = useState(false);
   const [testLog, setTestLog] = useState<string[]>([]);
   const [gdriveFolderId, setGdriveFolderId] = useState(() => {

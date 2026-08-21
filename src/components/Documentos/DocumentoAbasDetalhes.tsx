@@ -93,7 +93,7 @@ export const DocumentoAbasDetalhes: React.FC<DocumentoAbasDetalhesProps> = ({
     setTimeout(() => setActionSuccessMsg(''), 4000);
   };
 
-  const { accessToken } = useAuth();
+  const { accessToken, googleOAuthToken } = useAuth();
 
   // Estados do Aceite de Leitura (ISO 9001)
   const [readChecked, setReadChecked] = useState(false);
@@ -604,8 +604,12 @@ export const DocumentoAbasDetalhes: React.FC<DocumentoAbasDetalhesProps> = ({
   };
 
   const handleRevFileUpload = async (file: File) => {
-    if (!accessToken) {
-      setRevUploadError('Você precisa estar integrado com o Google Workspace para fazer upload.');
+    const validDriveToken = (googleOAuthToken && googleDriveService.isGoogleAccessToken(googleOAuthToken))
+      ? googleOAuthToken
+      : (googleDriveService.isGoogleAccessToken(accessToken) ? accessToken : null);
+
+    if (!validDriveToken) {
+      setRevUploadError('Conecte sua conta do Google Workspace com acesso ao Google Drive para realizar uploads corporativos.');
       return;
     }
 
@@ -623,7 +627,7 @@ export const DocumentoAbasDetalhes: React.FC<DocumentoAbasDetalhesProps> = ({
       const folderId = await googleDriveService.findOrCreateFolder(
         'Vickytex - Gestão Documental',
         null,
-        accessToken
+        validDriveToken
       );
 
       setRevUploadProgress(70);
@@ -632,7 +636,7 @@ export const DocumentoAbasDetalhes: React.FC<DocumentoAbasDetalhesProps> = ({
         `${activeDoc.codigo}_Rev${activeDoc.revisao + 1}_${Date.now()}.pdf`,
         'application/pdf',
         folderId,
-        accessToken
+        validDriveToken
       );
 
       setRevUploadProgress(95);
@@ -646,7 +650,7 @@ export const DocumentoAbasDetalhes: React.FC<DocumentoAbasDetalhesProps> = ({
       onAddLog('Upload de Nova Revisão', `Carregado arquivo ${file.name} para a nova revisão do documento ${activeDoc.codigo}.`);
     } catch (err: any) {
       console.error(err);
-      setRevUploadError(err.message || 'Erro ao realizar upload do arquivo.');
+      setRevUploadError(err.message || 'Erro ao realizar upload do arquivo para o Google Drive.');
     } finally {
       setRevUploading(false);
     }

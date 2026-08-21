@@ -136,6 +136,15 @@ const notifyListeners = (key: string, data: any) => {
   });
 };
 
+const getInitialFotos = (): Fotografia5S[] => {
+  try {
+    const saved = localStorage.getItem('sgq_5s_fotos');
+    return saved ? JSON.parse(saved) : [];
+  } catch {
+    return [];
+  }
+};
+
 const inMemoryStore: Record<string, any> = {
   sgq_5s_setores: INITIAL_SETORES,
   sgq_5s_sensos: INITIAL_SENSOS,
@@ -144,7 +153,7 @@ const inMemoryStore: Record<string, any> = {
   sgq_5s_configuracao: INITIAL_CONFIG,
   sgq_5s_ciclos: INITIAL_CICLOS,
   sgq_5s_itens: [],
-  sgq_5s_fotos: [],
+  sgq_5s_fotos: getInitialFotos(),
   sgq_5s_planos: []
 };
 
@@ -187,6 +196,9 @@ export const initFiveSStoreSync = () => {
   FiveSPhotosRepository.findAll().then(res => {
     if (res.success && Array.isArray(res.data) && res.data.length > 0) {
       inMemoryStore['sgq_5s_fotos'] = res.data;
+      try {
+        localStorage.setItem('sgq_5s_fotos', JSON.stringify(res.data));
+      } catch {}
       notifyListeners('sgq_5s_fotos', res.data);
     }
   }).catch(err => console.error('[FiveSStore] Error loading 5S photos from Firestore:', err));
@@ -194,6 +206,9 @@ export const initFiveSStoreSync = () => {
   FiveSPhotosRepository.subscribe((photos) => {
     if (Array.isArray(photos)) {
       inMemoryStore['sgq_5s_fotos'] = photos;
+      try {
+        localStorage.setItem('sgq_5s_fotos', JSON.stringify(photos));
+      } catch {}
       notifyListeners('sgq_5s_fotos', photos);
     }
   });
@@ -212,9 +227,15 @@ export const setStoreData = <T>(key: string, data: T): void => {
   inMemoryStore[key] = data;
   notifyListeners(key, data);
 
-  // Tratamento especial para fotografias do 5S: salvar cada foto individualmente na coleção Firestore 'fives_photos'
+  // Tratamento especial para fotografias do 5S: salvar cada foto individualmente na coleção Firestore 'fives_photos' e backup local
   if (key === 'sgq_5s_fotos' && Array.isArray(data)) {
     const photoList = data as Fotografia5S[];
+    try {
+      localStorage.setItem('sgq_5s_fotos', JSON.stringify(photoList));
+    } catch (e) {
+      console.warn('[FiveSStore] LocalStorage error for 5S photos:', e);
+    }
+
     const prevList = (inMemoryStore['sgq_5s_fotos'] || []) as Fotografia5S[];
     const newIds = new Set(photoList.map(p => p.id));
     prevList.forEach(p => {

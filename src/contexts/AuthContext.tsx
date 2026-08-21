@@ -18,6 +18,7 @@ import {
 interface AuthContextType {
   user: UserProfile | null;
   accessToken: string | null;
+  googleOAuthToken: string | null;
   needsAuth: boolean;
   isLoggingIn: boolean;
   permissions: PermissionCode[];
@@ -86,6 +87,13 @@ const PRESET_USERS: Record<UserRole, UserProfile> = {
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [accessToken, setAccessToken] = useState<string | null>(null);
+  const [googleOAuthToken, setGoogleOAuthToken] = useState<string | null>(() => {
+    try {
+      return localStorage.getItem('sgq_vickytex_google_oauth_token');
+    } catch {
+      return null;
+    }
+  });
   const [needsAuth, setNeedsAuth] = useState(true);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [permissions, setPermissions] = useState<PermissionCode[]>([]);
@@ -96,6 +104,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (fbUser) {
         setAccessToken(await fbUser.getIdToken());
         setNeedsAuth(false);
+
+        // Check if we have a stored google oauth token
+        try {
+          const storedGToken = localStorage.getItem('sgq_vickytex_google_oauth_token');
+          if (storedGToken) {
+            setGoogleOAuthToken(storedGToken);
+          }
+        } catch {}
 
         // Fetch or create Firestore user record
         try {
@@ -182,19 +198,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setIsLoggingIn(true);
     try {
       const cred = await firebaseSignInWithGoogle();
-      if (cred.user) {
-        const token = await cred.user.getIdToken();
+      if (cred.userCredential.user) {
+        const token = await cred.userCredential.user.getIdToken();
         setAccessToken(token);
+        if (cred.googleOAuthToken) {
+          setGoogleOAuthToken(cred.googleOAuthToken);
+        }
         setNeedsAuth(false);
         await AuditService.login(
           {
-            id: cred.user.uid,
-            email: cred.user.email || '',
-            name: cred.user.displayName || 'Usuário Google',
+            id: cred.userCredential.user.uid,
+            email: cred.userCredential.user.email || '',
+            name: cred.userCredential.user.displayName || 'Usuário Google',
             role: 'Qualidade',
             sector: 'Qualidade'
           },
-          `SSO Google realizado com sucesso (${cred.user.email})`
+          `SSO Google realizado com sucesso (${cred.userCredential.user.email})`
         );
       }
     } catch (err: any) {
@@ -310,9 +329,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (user) {
       await AuditService.logout(user, 'Sessão encerrada pelo usuário');
     }
+    try {
+      localStorage.removeItem('sgq_vickytex_google_oauth_token');
+    } catch {}
     await firebaseLogoutUser();
     setUser(null);
     setAccessToken(null);
+    setGoogleOAuthToken(null);
     setNeedsAuth(true);
   };
 
@@ -353,6 +376,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       value={{
         user,
         accessToken,
+        googleOAuthToken,
         needsAuth,
         isLoggingIn,
         permissions,

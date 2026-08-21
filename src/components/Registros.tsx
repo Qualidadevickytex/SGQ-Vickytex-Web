@@ -27,13 +27,20 @@ import {
   User,
   Info,
   ChevronDown,
-  Award
+  Award,
+  Camera,
+  Image as ImageIcon,
+  ZoomIn,
+  Eye,
+  X,
+  Loader2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Documento, Registro, SectorType } from '../types';
 import { useSectors } from '../hooks/useSectors';
 import { getSectors } from '../utils/mockData';
 import { RecordRepository } from '../services/database/repositories/record.repository';
+import { compressImage } from '../utils/imageCompressor';
 
 interface RegistrosProps {
   documents: Documento[];
@@ -129,6 +136,8 @@ export const Registros: React.FC<RegistrosProps> = ({ documents, onAddLog, perso
   const [selectedForVerify, setSelectedForVerify] = useState<Registro | null>(null);
   const [verificationNotes, setVerificationNotes] = useState('');
   const [registroToDelete, setRegistroToDelete] = useState<{ id: string; code: string } | null>(null);
+  const [lightboxImage, setLightboxImage] = useState<string | null>(null);
+  const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
   
   // Novo / Edição Form State
   const [codigo, setCodigo] = useState('');
@@ -145,10 +154,40 @@ export const Registros: React.FC<RegistrosProps> = ({ documents, onAddLog, perso
   const [statusControle, setStatusControle] = useState<'Ativo' | 'Arquivado' | 'Descartado'>('Ativo');
   const [googleDriveLink, setGoogleDriveLink] = useState('');
   const [observacoes, setObservacoes] = useState('');
+  const [fotos, setFotos] = useState<string[]>([]);
 
   // Save helper
   const saveRegistros = (newRegs: Registro[]) => {
     setRegistros(newRegs);
+  };
+
+  // Processar upload de fotos/scans
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    
+    setIsUploadingPhoto(true);
+    try {
+      const newPhotoList: string[] = [...fotos];
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        if (file.type.startsWith('image/')) {
+          const compressed = await compressImage(file, 1200, 1200, 0.75);
+          newPhotoList.push(compressed);
+        }
+      }
+      setFotos(newPhotoList);
+    } catch (err) {
+      console.error('Erro ao processar foto:', err);
+      alert('Não foi possível processar a imagem selecionada.');
+    } finally {
+      setIsUploadingPhoto(false);
+      e.target.value = '';
+    }
+  };
+
+  const handleRemovePhoto = (index: number) => {
+    setFotos(prev => prev.filter((_, idx) => idx !== index));
   };
 
   // Preencher formulário para novo registro
@@ -168,6 +207,7 @@ export const Registros: React.FC<RegistrosProps> = ({ documents, onAddLog, perso
     setStatusControle('Ativo');
     setGoogleDriveLink('');
     setObservacoes('');
+    setFotos([]);
     setIsFormOpen(true);
   };
 
@@ -188,6 +228,7 @@ export const Registros: React.FC<RegistrosProps> = ({ documents, onAddLog, perso
     setStatusControle(reg.statusControle);
     setGoogleDriveLink(reg.googleDriveLink || '');
     setObservacoes(reg.observacoes || '');
+    setFotos(reg.fotos || (reg.fotoEvidencia ? [reg.fotoEvidencia] : []));
     setIsFormOpen(true);
   };
 
@@ -220,6 +261,8 @@ export const Registros: React.FC<RegistrosProps> = ({ documents, onAddLog, perso
             googleDriveLink: googleDriveLink.trim() || undefined,
             googleDriveId: googleDriveLink.trim() ? `drive-${editingRegistro.id}` : undefined,
             observacoes: observacoes.trim() || undefined,
+            fotos: fotos.length > 0 ? fotos : undefined,
+            fotoEvidencia: fotos.length > 0 ? fotos[0] : undefined
           };
           return updatedRecord;
         }
@@ -248,7 +291,9 @@ export const Registros: React.FC<RegistrosProps> = ({ documents, onAddLog, perso
         googleDriveLink: googleDriveLink.trim() || undefined,
         googleDriveId: googleDriveLink.trim() ? `drive-new-${Date.now()}` : undefined,
         observacoes: observacoes.trim() || undefined,
-        dataUltimaVerificacao: new Date().toISOString().split('T')[0]
+        dataUltimaVerificacao: new Date().toISOString().split('T')[0],
+        fotos: fotos.length > 0 ? fotos : undefined,
+        fotoEvidencia: fotos.length > 0 ? fotos[0] : undefined
       };
       saveRegistros([newReg, ...registros]);
       RecordRepository.create(newReg).catch(err => console.error('Erro ao cadastrar registro no Firestore:', err));
@@ -752,6 +797,37 @@ export const Registros: React.FC<RegistrosProps> = ({ documents, onAddLog, perso
                   )}
                 </div>
 
+                {/* Evidências Fotográficas do Registro */}
+                {((reg.fotos && reg.fotos.length > 0) || reg.fotoEvidencia) && (
+                  <div className="pt-2">
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1">
+                        <ImageIcon className="w-3 h-3 text-blue-500" />
+                        Fotos & Evidências ({reg.fotos?.length || (reg.fotoEvidencia ? 1 : 0)})
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2 overflow-x-auto pb-1">
+                      {(reg.fotos || (reg.fotoEvidencia ? [reg.fotoEvidencia] : [])).map((imgUrl, pIdx) => (
+                        <div 
+                          key={pIdx} 
+                          onClick={() => setLightboxImage(imgUrl)}
+                          className="relative group w-14 h-14 shrink-0 rounded-lg overflow-hidden border border-slate-200 dark:border-slate-800 cursor-pointer shadow-xs hover:border-blue-400 transition-all"
+                        >
+                          <img 
+                            src={imgUrl} 
+                            alt={`Evidência ${pIdx + 1}`} 
+                            referrerPolicy="no-referrer"
+                            className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300" 
+                          />
+                          <div className="absolute inset-0 bg-slate-950/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                            <ZoomIn className="w-4 h-4 text-white drop-shadow-md" />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 {reg.observacoes && (
                   <div className="bg-slate-50 dark:bg-slate-950/80 p-2.5 rounded-xl border border-slate-200/50 dark:border-slate-800/50 text-[10px] text-slate-500 dark:text-slate-400 flex items-start gap-1.5 leading-relaxed">
                     <Info className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
@@ -762,16 +838,26 @@ export const Registros: React.FC<RegistrosProps> = ({ documents, onAddLog, perso
 
               {/* Bottom Actions Bar */}
               <div className="px-6 py-4 bg-slate-50 dark:bg-slate-900/60 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-4">
-                <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  {((reg.fotos && reg.fotos.length > 0) || reg.fotoEvidencia) && (
+                    <button
+                      onClick={() => setLightboxImage((reg.fotos && reg.fotos[0]) || reg.fotoEvidencia || null)}
+                      className="flex items-center space-x-1 px-3 py-1.5 rounded-lg text-[10px] font-bold bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/40 dark:hover:bg-blue-900/50 text-[#0B3A63] dark:text-blue-300 transition-all border border-blue-200/30 dark:border-blue-900/30 cursor-pointer"
+                    >
+                      <Eye className="w-3.5 h-3.5" />
+                      <span>Ver Fotos ({reg.fotos?.length || 1})</span>
+                    </button>
+                  )}
+
                   {reg.googleDriveLink ? (
                     <a 
                       href={reg.googleDriveLink}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="flex items-center space-x-1 px-3 py-1.5 rounded-lg text-[10px] font-bold bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/40 dark:hover:bg-blue-900/50 text-[#0B3A63] dark:text-blue-300 transition-all border border-blue-200/30 dark:border-blue-900/30"
+                      className="flex items-center space-x-1 px-3 py-1.5 rounded-lg text-[10px] font-bold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 transition-all border border-slate-200 dark:border-slate-700"
                     >
                       <ExternalLink className="w-3.5 h-3.5" />
-                      <span>Visualizar Scan</span>
+                      <span>Link Drive</span>
                     </a>
                   ) : (
                     <button 
@@ -786,7 +872,7 @@ export const Registros: React.FC<RegistrosProps> = ({ documents, onAddLog, perso
                       className="flex items-center space-x-1 px-3 py-1.5 rounded-lg text-[10px] font-bold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition-all border border-slate-200 dark:border-slate-700 cursor-pointer"
                     >
                       <UploadCloud className="w-3.5 h-3.5" />
-                      <span>Anexar Scan</span>
+                      <span>Link Drive</span>
                     </button>
                   )}
 
@@ -1069,6 +1155,76 @@ export const Registros: React.FC<RegistrosProps> = ({ documents, onAddLog, perso
                   </div>
                 </div>
 
+                {/* Evidências Fotográficas e Scans do Registro */}
+                <div className="space-y-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+                  <div className="flex items-center justify-between">
+                    <label className="text-[11px] font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                      <Camera className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+                      <span>Anexar Fotos / Scans do Registro ({fotos.length})</span>
+                    </label>
+                    <span className="text-[10px] text-slate-400">Otimização e compressão automática</span>
+                  </div>
+
+                  {/* Thumbnail gallery in form */}
+                  {fotos.length > 0 && (
+                    <div className="flex flex-wrap gap-2.5 p-2 bg-slate-50 dark:bg-slate-950/60 rounded-xl border border-slate-200/80 dark:border-slate-800">
+                      {fotos.map((imgUrl, idx) => (
+                        <div key={idx} className="relative group w-20 h-20 rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700 shadow-xs">
+                          <img 
+                            src={imgUrl} 
+                            alt={`Preview ${idx + 1}`} 
+                            referrerPolicy="no-referrer"
+                            className="w-full h-full object-cover" 
+                          />
+                          <button
+                            type="button"
+                            onClick={() => handleRemovePhoto(idx)}
+                            className="absolute top-1 right-1 w-5 h-5 bg-rose-600 hover:bg-rose-700 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-sm cursor-pointer"
+                            title="Remover foto"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Upload Dropzone / Button */}
+                  <label className={`border-2 border-dashed rounded-xl p-4 flex flex-col items-center justify-center cursor-pointer transition-all ${
+                    isUploadingPhoto 
+                      ? 'bg-blue-50/50 dark:bg-blue-950/20 border-blue-300 text-blue-500' 
+                      : 'border-slate-200 dark:border-slate-800 hover:border-blue-400 dark:hover:border-blue-500 bg-slate-50/50 dark:bg-slate-950/30'
+                  }`}>
+                    {isUploadingPhoto ? (
+                      <div className="flex items-center gap-2 text-xs font-bold text-blue-600 dark:text-blue-400">
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <span>Comprimindo e anexando fotos...</span>
+                      </div>
+                    ) : (
+                      <div className="flex flex-col items-center text-center space-y-1">
+                        <div className="flex items-center gap-2 text-blue-600 dark:text-blue-400">
+                          <UploadCloud className="w-5 h-5" />
+                          <Camera className="w-5 h-5" />
+                        </div>
+                        <span className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                          Tirar foto com a câmera ou selecionar imagens
+                        </span>
+                        <span className="text-[10px] text-slate-400">
+                          PNG, JPG, JPEG ou WebP (compressão inteligente direta)
+                        </span>
+                      </div>
+                    )}
+                    <input 
+                      type="file" 
+                      accept="image/*" 
+                      multiple 
+                      disabled={isUploadingPhoto}
+                      onChange={handlePhotoUpload} 
+                      className="hidden" 
+                    />
+                  </label>
+                </div>
+
                 {/* Google Drive Link */}
                 {(tipoMidia === 'Digital' || tipoMidia === 'Misto') && (
                   <div>
@@ -1236,6 +1392,52 @@ export const Registros: React.FC<RegistrosProps> = ({ documents, onAddLog, perso
                   Sim, Excluir Registro
                 </button>
               </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Lightbox Modal para visualização ampliada de fotos e evidências */}
+      <AnimatePresence>
+        {lightboxImage && (
+          <div 
+            className="fixed inset-0 z-60 bg-black/90 backdrop-blur-md flex items-center justify-center p-4"
+            onClick={() => setLightboxImage(null)}
+          >
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.9 }}
+              className="relative max-w-4xl max-h-[90vh] flex flex-col items-center"
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="absolute top-3 right-3 flex items-center gap-2 z-10">
+                <a 
+                  href={lightboxImage} 
+                  download="registro_evidencia.jpg"
+                  className="bg-slate-900/80 hover:bg-slate-900 text-white p-2 rounded-full backdrop-blur-xs transition-all cursor-pointer shadow-lg"
+                  title="Baixar Foto"
+                >
+                  <Download className="w-4 h-4" />
+                </a>
+                <button 
+                  onClick={() => setLightboxImage(null)}
+                  className="bg-slate-900/80 hover:bg-slate-900 text-white p-2 rounded-full backdrop-blur-xs transition-all cursor-pointer shadow-lg"
+                  title="Fechar"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <img 
+                src={lightboxImage} 
+                alt="Evidência do Registro" 
+                referrerPolicy="no-referrer"
+                className="max-w-full max-h-[80vh] object-contain rounded-xl shadow-2xl border border-white/10"
+              />
+              <span className="text-[11px] text-white/70 mt-3 font-medium">
+                Evidência digital anexada ao registro da qualidade
+              </span>
             </motion.div>
           </div>
         )}

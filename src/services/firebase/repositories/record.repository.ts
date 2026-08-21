@@ -10,10 +10,21 @@ class RecordRepositoryClass extends BaseRepository<Registro> {
   protected collectionName = 'records';
 
   protected getLocalData(): Registro[] {
-    return [];
+    try {
+      const saved = localStorage.getItem('sgq_vickytex_registros');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
   }
 
-  protected saveLocalData(_data: Registro[]): void {}
+  protected saveLocalData(data: Registro[]): void {
+    try {
+      localStorage.setItem('sgq_vickytex_registros', JSON.stringify(data));
+    } catch (e) {
+      console.warn('[RecordRepository] Error saving local storage backup:', e);
+    }
+  }
 
   protected mapRecord(rec: any): Registro {
     return {
@@ -33,7 +44,9 @@ class RecordRepositoryClass extends BaseRepository<Registro> {
       dataUltimaVerificacao: rec.dataUltimaVerificacao,
       observacoes: rec.observacoes,
       googleDriveId: rec.googleDriveId,
-      googleDriveLink: rec.googleDriveLink
+      googleDriveLink: rec.googleDriveLink,
+      fotoEvidencia: rec.fotoEvidencia || rec.foto_evidencia,
+      fotos: rec.fotos || (rec.fotoEvidencia ? [rec.fotoEvidencia] : [])
     };
   }
 
@@ -54,7 +67,9 @@ class RecordRepositoryClass extends BaseRepository<Registro> {
       dataUltimaVerificacao: data.dataUltimaVerificacao,
       observacoes: data.observacoes,
       googleDriveId: data.googleDriveId,
-      googleDriveLink: data.googleDriveLink
+      googleDriveLink: data.googleDriveLink,
+      fotoEvidencia: data.fotoEvidencia || (data.fotos && data.fotos.length > 0 ? data.fotos[0] : null),
+      fotos: data.fotos || (data.fotoEvidencia ? [data.fotoEvidencia] : [])
     };
   }
 
