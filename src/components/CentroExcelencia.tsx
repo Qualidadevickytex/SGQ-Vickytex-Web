@@ -316,7 +316,7 @@ export const CentroExcelencia: React.FC<CentroExcelenciaProps> = ({
                       className="px-3 py-2 border border-slate-200 dark:border-slate-800 rounded-xl text-xs bg-slate-50 dark:bg-slate-950 text-slate-600 dark:text-slate-400 font-bold focus:outline-hidden"
                     >
                       <option value="TODOS">Todos os Setores</option>
-                      {getDynamicSectors().map(sec => (
+                      {systemSectors.map(sec => (
                         <option key={sec} value={sec}>{sec}</option>
                       ))}
                     </select>
@@ -444,7 +444,7 @@ export const CentroExcelencia: React.FC<CentroExcelenciaProps> = ({
                 onAddSuggestion={submitSugestao} 
                 onUpdateSuggestion={handleUpdateSuggestion} 
                 onDeleteSuggestion={deleteSugestao}
-                sectors={getDynamicSectors()}
+                sectors={systemSectors}
                 planos={planos}
                 onAddPlano={onAddPlano}
                 onNavigateToPlanos={onNavigateToPlanos}
@@ -480,7 +480,7 @@ export const CentroExcelencia: React.FC<CentroExcelenciaProps> = ({
             setIsFormOpen(false);
             setEditingProject(undefined);
           }}
-          sectors={getDynamicSectors()}
+          sectors={systemSectors}
         />
       )}
 
