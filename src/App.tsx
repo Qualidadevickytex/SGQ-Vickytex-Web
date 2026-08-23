@@ -29,7 +29,7 @@ import { CentroExcelencia } from './components/CentroExcelencia';
 import { CEOProvider } from './contexts/CEOContext';
 
 import { Documento, ActivityLog, Auditoria, NaoConformidade, PlanoAcao, RiscoOportunidade, Auditoria5S, UserAccount, RolePermission, Equipamento, ColaboradorCompetencia, Registro, Fornecedor, Treinamento } from './types';
-import { INITIAL_DOCUMENTS, INITIAL_LOGS, INITIAL_AUDITORIAS, INITIAL_NAO_CONFORMIDADES, INITIAL_PLANOS_ACAO, INITIAL_RISCOS, INITIAL_5S_AUDITS, INITIAL_USER_ACCOUNTS, INITIAL_ROLE_PERMISSIONS, INITIAL_FORNECEDORES, getPersonalizacaoGeral, PersonalizacaoGeral } from './utils/mockData';
+import { INITIAL_DOCUMENTS, INITIAL_LOGS, INITIAL_AUDITORIAS, INITIAL_NAO_CONFORMIDADES, INITIAL_PLANOS_ACAO, INITIAL_RISCOS, INITIAL_5S_AUDITS, INITIAL_USER_ACCOUNTS, INITIAL_ROLE_PERMISSIONS, INITIAL_FORNECEDORES, getPersonalizacaoGeral, normalizePersonalizacao, PersonalizacaoGeral } from './utils/mockData';
 import { DocumentRepository } from './services/database/repositories/document.repository';
 import { AuditRepository } from './services/database/repositories/audit.repository';
 import { FiveSRepository } from './services/database/repositories/fiveS.repository';
@@ -160,7 +160,14 @@ function AppContent() {
     const unsubSettings = SystemSettingsRepository.subscribe((records) => {
       const pDoc = records.find(r => r.id === 'sgq_vickytex_personalizacao');
       if (pDoc && pDoc.data) {
-        setPersonalizacao((prev) => ({ ...prev, ...pDoc.data }));
+        const clean = normalizePersonalizacao(pDoc.data);
+        setPersonalizacao(clean);
+        if (JSON.stringify(clean) !== JSON.stringify(pDoc.data)) {
+          SystemSettingsRepository.create({ id: 'sgq_vickytex_personalizacao', data: clean }).catch(() => {});
+          try {
+            localStorage.setItem('sgq_vickytex_personalizacao', JSON.stringify(clean));
+          } catch (e) {}
+        }
       }
     });
 

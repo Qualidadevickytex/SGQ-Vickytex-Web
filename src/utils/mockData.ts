@@ -698,51 +698,119 @@ export const DEFAULT_PERSONALIZACAO: PersonalizacaoGeral = {
   loginFooterDireitoTexto: "SGQ WEB VICKYTEX • Netlify Production Build Ready"
 };
 
+export const normalizePersonalizacao = (raw: any): PersonalizacaoGeral => {
+  if (!raw || typeof raw !== 'object') {
+    return { ...DEFAULT_PERSONALIZACAO };
+  }
+
+  const parsed = { ...DEFAULT_PERSONALIZACAO, ...raw };
+
+  // 1. Sanitizar Badge Superior
+  if (
+    !parsed.loginBadge ||
+    parsed.loginBadge.includes("Baseado nos modelos") ||
+    parsed.loginBadge.includes("Implementação Ativa") ||
+    parsed.loginBadge.trim() === ""
+  ) {
+    parsed.loginBadge = DEFAULT_PERSONALIZACAO.loginBadge;
+  }
+
+  // 2. Sanitizar Título
+  if (
+    !parsed.loginTitulo ||
+    parsed.loginTitulo.includes("Substitua") ||
+    parsed.loginTitulo.trim() === ""
+  ) {
+    parsed.loginTitulo = DEFAULT_PERSONALIZACAO.loginTitulo;
+  }
+
+  // 3. Sanitizar Descrição
+  if (
+    !parsed.loginDescricao ||
+    parsed.loginDescricao.includes("Profissionais de Alta Qualidade") ||
+    parsed.loginDescricao.includes("Substitua de forma definitiva") ||
+    parsed.loginDescricao.trim() === ""
+  ) {
+    parsed.loginDescricao = DEFAULT_PERSONALIZACAO.loginDescricao;
+  }
+
+  // 4. Sanitizar Versões
+  if (parsed.versaoSistema === "SGQ WEB v0.3" || !parsed.versaoSistema) {
+    parsed.versaoSistema = "SGQ WEB v1.0.0";
+  }
+  if (
+    parsed.loginVersaoTexto === "SGQ WEB • V0.3" ||
+    parsed.loginVersaoTexto === "SGQ WEB • v0.3" ||
+    !parsed.loginVersaoTexto
+  ) {
+    parsed.loginVersaoTexto = "SGQ WEB • v1.0.0";
+  }
+
+  // 5. Sanitizar Checklist Vantagens
+  if (!parsed.loginVantagem1Titulo) parsed.loginVantagem1Titulo = DEFAULT_PERSONALIZACAO.loginVantagem1Titulo;
+  if (!parsed.loginVantagem1Desc) parsed.loginVantagem1Desc = DEFAULT_PERSONALIZACAO.loginVantagem1Desc;
+
+  if (!parsed.loginVantagem2Titulo) parsed.loginVantagem2Titulo = DEFAULT_PERSONALIZACAO.loginVantagem2Titulo;
+  if (!parsed.loginVantagem2Desc) parsed.loginVantagem2Desc = DEFAULT_PERSONALIZACAO.loginVantagem2Desc;
+
+  if (!parsed.loginVantagem3Titulo) parsed.loginVantagem3Titulo = DEFAULT_PERSONALIZACAO.loginVantagem3Titulo;
+  if (!parsed.loginVantagem3Desc) parsed.loginVantagem3Desc = DEFAULT_PERSONALIZACAO.loginVantagem3Desc;
+
+  if (!parsed.loginVantagem4Titulo) parsed.loginVantagem4Titulo = DEFAULT_PERSONALIZACAO.loginVantagem4Titulo;
+  if (
+    !parsed.loginVantagem4Desc ||
+    parsed.loginVantagem4Desc.includes("Postos de costura e corte")
+  ) {
+    parsed.loginVantagem4Desc = DEFAULT_PERSONALIZACAO.loginVantagem4Desc;
+  }
+
+  // 6. Sanitizar Rodapé Login
+  if (
+    !parsed.loginFooterEsquerdoLinha1 ||
+    parsed.loginFooterEsquerdoLinha1.includes("Vickytex S.A.") ||
+    parsed.loginFooterEsquerdoLinha1.includes("Profissionais") ||
+    parsed.loginFooterEsquerdoLinha1.includes("Alta Qualidade")
+  ) {
+    parsed.loginFooterEsquerdoLinha1 = DEFAULT_PERSONALIZACAO.loginFooterEsquerdoLinha1;
+  }
+
+  if (
+    !parsed.loginFooterEsquerdoLinha2 ||
+    parsed.loginFooterEsquerdoLinha2.includes("Auditoria Têxtil") && !parsed.loginFooterEsquerdoLinha2.includes("estruturais")
+  ) {
+    parsed.loginFooterEsquerdoLinha2 = DEFAULT_PERSONALIZACAO.loginFooterEsquerdoLinha2;
+  }
+
+  return parsed;
+};
+
 export const getPersonalizacaoGeral = (): PersonalizacaoGeral => {
   if (systemConfigCache['sgq_vickytex_personalizacao']) {
-    return { ...DEFAULT_PERSONALIZACAO, ...systemConfigCache['sgq_vickytex_personalizacao'] };
+    return normalizePersonalizacao(systemConfigCache['sgq_vickytex_personalizacao']);
   }
   if (typeof window !== 'undefined') {
     const saved = localStorage.getItem('sgq_vickytex_personalizacao');
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        if (parsed.versaoSistema === "SGQ WEB v0.3" || !parsed.versaoSistema) {
-          parsed.versaoSistema = "SGQ WEB v1.0.0";
-        }
-        if (parsed.loginVersaoTexto === "SGQ WEB • V0.3" || parsed.loginVersaoTexto === "SGQ WEB • v0.3" || !parsed.loginVersaoTexto) {
-          parsed.loginVersaoTexto = "SGQ WEB • v1.0.0";
-        }
-        if (parsed.loginBadge === "Certificação ISO 9001:2015 em Implementação Ativa" || !parsed.loginBadge) {
-          parsed.loginBadge = DEFAULT_PERSONALIZACAO.loginBadge;
-        }
-        if (parsed.loginDescricao?.includes("Substitua de forma definitiva as planilhas") || !parsed.loginDescricao) {
-          parsed.loginDescricao = DEFAULT_PERSONALIZACAO.loginDescricao;
-        }
-        if (parsed.loginVantagem4Desc?.includes("Postos de costura e corte") || !parsed.loginVantagem4Desc) {
-          parsed.loginVantagem4Desc = DEFAULT_PERSONALIZACAO.loginVantagem4Desc;
-        }
-        if (parsed.loginFooterEsquerdoLinha1?.includes("Vickytex S.A.") || !parsed.loginFooterEsquerdoLinha1) {
-          parsed.loginFooterEsquerdoLinha1 = DEFAULT_PERSONALIZACAO.loginFooterEsquerdoLinha1;
-        }
-        if (parsed.loginFooterEsquerdoLinha2?.includes("Auditoria Têxtil") || !parsed.loginFooterEsquerdoLinha2) {
-          parsed.loginFooterEsquerdoLinha2 = DEFAULT_PERSONALIZACAO.loginFooterEsquerdoLinha2;
-        }
-        return { ...DEFAULT_PERSONALIZACAO, ...parsed };
+        const normalized = normalizePersonalizacao(parsed);
+        localStorage.setItem('sgq_vickytex_personalizacao', JSON.stringify(normalized));
+        return normalized;
       } catch (e) {
         // ignore
       }
     }
   }
-  return DEFAULT_PERSONALIZACAO;
+  return { ...DEFAULT_PERSONALIZACAO };
 };
 
 export const savePersonalizacaoGeral = (config: PersonalizacaoGeral): void => {
-  systemConfigCache['sgq_vickytex_personalizacao'] = config;
+  const normalized = normalizePersonalizacao(config);
+  systemConfigCache['sgq_vickytex_personalizacao'] = normalized;
   if (typeof window !== 'undefined') {
-    localStorage.setItem('sgq_vickytex_personalizacao', JSON.stringify(config));
+    localStorage.setItem('sgq_vickytex_personalizacao', JSON.stringify(normalized));
   }
-  SystemSettingsRepository.create({ id: 'sgq_vickytex_personalizacao', data: config }).catch((err) => {
+  SystemSettingsRepository.create({ id: 'sgq_vickytex_personalizacao', data: normalized }).catch((err) => {
     console.error('Erro ao salvar personalização no Firestore:', err);
   });
 };

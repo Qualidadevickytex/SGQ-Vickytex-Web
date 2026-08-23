@@ -25,7 +25,7 @@ import {
   ArrowUp,
   ArrowDown
 } from 'lucide-react';
-import { getSectors, getDocumentTypes, PersonalizacaoGeral, savePersonalizacaoGeral } from '../utils/mockData';
+import { getSectors, getDocumentTypes, PersonalizacaoGeral, savePersonalizacaoGeral, normalizePersonalizacao } from '../utils/mockData';
 import { SystemSettingsRepository } from '../services/database/repositories/systemSettings.repository';
 import { useAuth } from '../contexts/AuthContext';
 import { DocumentType } from '../types';
@@ -44,10 +44,12 @@ export const Configuracoes: React.FC<ConfiguracoesProps> = ({
   const { user } = useAuth();
 
   // Estados de Personalização Geral do Sistema
-  const [configGeral, setConfigGeral] = useState<PersonalizacaoGeral>(() => personalizacao);
+  const [configGeral, setConfigGeral] = useState<PersonalizacaoGeral>(() => normalizePersonalizacao(personalizacao));
 
   React.useEffect(() => {
-    setConfigGeral(personalizacao);
+    if (personalizacao) {
+      setConfigGeral(normalizePersonalizacao(personalizacao));
+    }
   }, [personalizacao]);
 
   // Estados dos setores
