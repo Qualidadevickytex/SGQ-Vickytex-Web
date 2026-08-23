@@ -249,30 +249,6 @@ export const FiveSAudits: React.FC<FiveSAuditsProps> = ({
 
     const classification = getClassificationForIndex(scores.indiceConformidade, classificacoes);
 
-    const newAudit: Auditoria5S = {
-      id: auditId,
-      codigo: auditCode,
-      setor: sectorMatched.nome as any,
-      setorId: selectedSectorId,
-      cicloId: selectedCycleId,
-      auditor: auditorName,
-      dataAuditoria: auditDate,
-      seiri: scores.seiri,
-      seiton: scores.seiton,
-      seiso: scores.seiso,
-      seiketsu: scores.seiketsu,
-      shitsuke: scores.shitsuke,
-      mediaGeral: scores.indiceConformidade,
-      observacoes: generalObs.trim(),
-      status: status,
-      pontuacaoMaxima: scores.pontuacaoMaxima,
-      pontuacaoObtida: scores.pontuacaoObtida,
-      totalPenalidades: scores.totalPenalidades,
-      indiceConformidade: scores.indiceConformidade,
-      classificacaoId: classification.id,
-      fotos: [] // backward compatibility
-    };
-
     // Google Drive Sync Flow (Opcional - caso haja token OAuth do Google Drive ativo)
     let uploadedTempPhotos: Record<string, { file: string; legend: string }[]> = {};
     const driveToken = (googleOAuthToken && googleDriveService.isGoogleAccessToken(googleOAuthToken)) 
@@ -318,6 +294,39 @@ export const FiveSAudits: React.FC<FiveSAuditsProps> = ({
       // Salva direto no Firestore / LocalStorage com compressão de alta performance
       uploadedTempPhotos = tempPhotos;
     }
+
+    // Coleta todas as fotos anexadas nesta auditoria
+    const allAuditPhotoUrls: string[] = [];
+    Object.values(uploadedTempPhotos).forEach((rawList) => {
+      const pList = rawList as { file: string; legend: string }[];
+      pList.forEach(p => {
+        if (p && p.file) allAuditPhotoUrls.push(p.file);
+      });
+    });
+
+    const newAudit: Auditoria5S = {
+      id: auditId,
+      codigo: auditCode,
+      setor: sectorMatched.nome as any,
+      setorId: selectedSectorId,
+      cicloId: selectedCycleId,
+      auditor: auditorName,
+      dataAuditoria: auditDate,
+      seiri: scores.seiri,
+      seiton: scores.seiton,
+      seiso: scores.seiso,
+      seiketsu: scores.seiketsu,
+      shitsuke: scores.shitsuke,
+      mediaGeral: scores.indiceConformidade,
+      observacoes: generalObs.trim(),
+      status: status,
+      pontuacaoMaxima: scores.pontuacaoMaxima,
+      pontuacaoObtida: scores.pontuacaoObtida,
+      totalPenalidades: scores.totalPenalidades,
+      indiceConformidade: scores.indiceConformidade,
+      classificacaoId: classification.id,
+      fotos: allAuditPhotoUrls
+    };
 
     // Save evaluated items
     let updatedItens = [...itens].filter(it => it.auditoriaId !== auditId);
@@ -573,6 +582,51 @@ export const FiveSAudits: React.FC<FiveSAuditsProps> = ({
               </div>
             ))}
           </div>
+
+          {/* Galeria de Fotos Geral da Auditoria */}
+          {(() => {
+            const allAuditPhotos = [
+              ...fotos.filter(f => f.auditoriaId === viewingAudit.id),
+              ...(viewingAudit.fotos || []).filter(url => !fotos.some(f => f.auditoriaId === viewingAudit.id && f.url === url)).map((url, idx) => ({
+                id: `audit-photo-${idx}`,
+                auditoriaId: viewingAudit.id,
+                requisitoId: '',
+                url,
+                legenda: `Evidência Fotográfica ${idx + 1}`
+              }))
+            ];
+
+            if (allAuditPhotos.length === 0) return null;
+
+            return (
+              <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-xl border border-slate-200 dark:border-slate-800 space-y-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xs font-black text-slate-800 dark:text-slate-200 uppercase tracking-wider flex items-center gap-1.5">
+                    <Camera className="w-4 h-4 text-amber-500" />
+                    <span>Galeria Geral de Evidências Fotográficas ({allAuditPhotos.length})</span>
+                  </h3>
+                  <span className="text-[10px] text-slate-400 font-bold">Clique para ampliar</span>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-3">
+                  {allAuditPhotos.map((photo, pIdx) => (
+                    <div 
+                      key={photo.id || pIdx} 
+                      className="relative group cursor-pointer border border-slate-200 dark:border-slate-800 rounded-lg overflow-hidden bg-white dark:bg-slate-900 shadow-xs hover:border-amber-500 transition-all" 
+                      onClick={() => setLightboxImage(photo.url)}
+                    >
+                      <DriveImage url={photo.url} accessToken={accessToken} googleOAuthToken={googleOAuthToken} className="w-full h-24 object-cover group-hover:scale-105 transition-all" alt={photo.legenda || "Evidência"} />
+                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center">
+                        <Eye className="w-5 h-5 text-white" />
+                      </div>
+                      <div className="absolute bottom-0 left-0 right-0 bg-slate-950/80 text-[9px] text-white p-1 truncate text-center font-medium">
+                        {photo.legenda || `Foto ${pIdx + 1}`}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
 
           <div className="space-y-3">
             <h3 className="text-xs font-black text-slate-800 dark:text-slate-200 uppercase tracking-wider">Anotações do Item Auditado:</h3>
@@ -923,58 +977,79 @@ export const FiveSAudits: React.FC<FiveSAuditsProps> = ({
                     </td>
                   </tr>
                 ) : (
-                  filteredAudits.map((item) => (
-                    <tr key={item.id} className="hover:bg-slate-50/40 dark:hover:bg-slate-800/10">
-                      <td className="p-3 font-mono font-bold text-slate-500">
-                        {item.codigo}
-                      </td>
-                      <td className="p-3 space-y-0.5">
-                        <p className="font-extrabold text-slate-800 dark:text-slate-200">
-                          {setores.find(s => s.id === item.setorId)?.nome || item.setor}
-                        </p>
-                        <p className="text-[10px] text-slate-400">
-                          {item.dataAuditoria} — <span className="font-semibold">{item.auditor}</span>
-                        </p>
-                      </td>
-                      <td className="p-3 text-center font-mono font-bold text-blue-500">{item.seiri}%</td>
-                      <td className="p-3 text-center font-mono font-bold text-indigo-500">{item.seiton}%</td>
-                      <td className="p-3 text-center font-mono font-bold text-emerald-500">{item.seiso}%</td>
-                      <td className="p-3 text-center font-mono font-bold text-pink-500">{item.seiketsu}%</td>
-                      <td className="p-3 text-center font-mono font-bold text-amber-500">{item.shitsuke}%</td>
-                      <td className="p-3 text-center">
-                        <span className={`px-2.5 py-0.5 rounded-full text-xs font-black border font-mono ${getScoreColorClass(item.indiceConformidade)}`}>
-                          {item.indiceConformidade}%
-                        </span>
-                      </td>
-                      <td className="p-3 text-right space-x-1.5 no-print">
-                        <button 
-                          onClick={() => setViewingAudit(item)}
-                          className="p-1 text-slate-400 hover:text-[#0B3A63] dark:hover:text-sky-400 inline-flex items-center justify-center"
-                          title="Ver Relatório Detalhado"
-                        >
-                          <FileText className="w-3.5 h-3.5" />
-                        </button>
-                        {canModify && (
-                          <button 
-                            onClick={() => handleStartNewAudit(item)}
-                            className="p-1 text-slate-400 hover:text-blue-500 inline-flex items-center justify-center"
-                            title={item.status === 'Rascunho' ? "Continuar Rascunho" : "Editar Auditoria"}
-                          >
-                            <Edit2 className="w-3.5 h-3.5" />
-                          </button>
-                        )}
-                        {canModify && (
-                          <button 
-                            onClick={() => handleDeleteAudit(item.id, item.codigo)}
-                            className="p-1 text-slate-400 hover:text-rose-500 inline-flex items-center justify-center"
-                            title="Remover"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  ))
+                    filteredAudits.map((item) => {
+                      const auditPhotosList = [
+                        ...fotos.filter(f => f.auditoriaId === item.id),
+                        ...(item.fotos || []).map((u, idx) => ({ id: `p-${idx}`, url: u, legenda: 'Foto' }))
+                      ];
+                      const photoCount = auditPhotosList.length;
+
+                      return (
+                        <tr key={item.id} className="hover:bg-slate-50/40 dark:hover:bg-slate-800/10">
+                          <td className="p-3 font-mono font-bold text-slate-500">
+                            {item.codigo}
+                          </td>
+                          <td className="p-3 space-y-0.5">
+                            <div className="flex items-center gap-2">
+                              <p className="font-extrabold text-slate-800 dark:text-slate-200">
+                                {setores.find(s => s.id === item.setorId)?.nome || item.setor}
+                              </p>
+                              {photoCount > 0 && (
+                                <button
+                                  type="button"
+                                  onClick={() => setViewingAudit(item)}
+                                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 border border-amber-200/50 hover:bg-amber-100 transition-colors"
+                                  title="Ver fotos da auditoria"
+                                >
+                                  <Camera className="w-2.5 h-2.5" />
+                                  <span>{photoCount} {photoCount === 1 ? 'foto' : 'fotos'}</span>
+                                </button>
+                              )}
+                            </div>
+                            <p className="text-[10px] text-slate-400">
+                              {item.dataAuditoria} — <span className="font-semibold">{item.auditor}</span>
+                            </p>
+                          </td>
+                          <td className="p-3 text-center font-mono font-bold text-blue-500">{item.seiri}%</td>
+                          <td className="p-3 text-center font-mono font-bold text-indigo-500">{item.seiton}%</td>
+                          <td className="p-3 text-center font-mono font-bold text-emerald-500">{item.seiso}%</td>
+                          <td className="p-3 text-center font-mono font-bold text-pink-500">{item.seiketsu}%</td>
+                          <td className="p-3 text-center font-mono font-bold text-amber-500">{item.shitsuke}%</td>
+                          <td className="p-3 text-center">
+                            <span className={`px-2.5 py-0.5 rounded-full text-xs font-black border font-mono ${getScoreColorClass(item.indiceConformidade)}`}>
+                              {item.indiceConformidade}%
+                            </span>
+                          </td>
+                          <td className="p-3 text-right space-x-1.5 no-print">
+                            <button 
+                              onClick={() => setViewingAudit(item)}
+                              className="p-1 text-slate-400 hover:text-[#0B3A63] dark:hover:text-sky-400 inline-flex items-center justify-center"
+                              title="Ver Relatório Detalhado"
+                            >
+                              <FileText className="w-3.5 h-3.5" />
+                            </button>
+                            {canModify && (
+                              <button 
+                                onClick={() => handleStartNewAudit(item)}
+                                className="p-1 text-slate-400 hover:text-blue-500 inline-flex items-center justify-center"
+                                title={item.status === 'Rascunho' ? "Continuar Rascunho" : "Editar Auditoria"}
+                              >
+                                <Edit2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                            {canModify && (
+                              <button 
+                                onClick={() => handleDeleteAudit(item.id, item.codigo)}
+                                className="p-1 text-slate-400 hover:text-rose-500 inline-flex items-center justify-center"
+                                title="Remover"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })
                 )}
               </tbody>
             </table>
@@ -1038,7 +1113,7 @@ export const FiveSAudits: React.FC<FiveSAuditsProps> = ({
   );
 };
 
-// Componente para exibir imagem com suporte a URLs gdrive://
+// Componente para exibir imagem com suporte a URLs gdrive:// e Base64
 const DriveImage: React.FC<{ 
   url: string; 
   accessToken?: string | null; 
@@ -1047,12 +1122,15 @@ const DriveImage: React.FC<{
   alt?: string; 
   onClick?: () => void;
 }> = ({ url, accessToken, googleOAuthToken, className, alt, onClick }) => {
-  const [src, setSrc] = useState<string>('');
+  const [src, setSrc] = useState<string>(url || '');
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<boolean>(false);
 
   useEffect(() => {
-    if (!url) return;
+    if (!url) {
+      setSrc('');
+      return;
+    }
     if (url.startsWith('gdrive://')) {
       const fileId = url.replace('gdrive://', '');
       const validToken = (googleOAuthToken && googleDriveService.isGoogleAccessToken(googleOAuthToken))
@@ -1077,29 +1155,31 @@ const DriveImage: React.FC<{
         });
     } else {
       setSrc(url);
+      setLoading(false);
+      setError(false);
     }
   }, [url, accessToken, googleOAuthToken]);
 
   if (loading) {
     return (
       <div className={`flex flex-col items-center justify-center bg-slate-100 dark:bg-slate-800/50 animate-pulse text-slate-400 p-2 ${className}`}>
-        <span className="text-[9px] font-bold">Carregando do Drive...</span>
+        <span className="text-[9px] font-bold">Carregando foto...</span>
       </div>
     );
   }
 
-  if (error) {
+  if (error || !src) {
     return (
-      <div className={`flex flex-col items-center justify-center bg-rose-50 dark:bg-rose-950/20 text-rose-500 text-[9px] p-2 text-center border border-rose-100 dark:border-rose-950 ${className}`}>
-        <span>Drive offline / s/ permissão</span>
+      <div className={`flex flex-col items-center justify-center bg-slate-100 dark:bg-slate-800/60 text-slate-400 text-[9px] p-2 text-center border border-slate-200 dark:border-slate-750 ${className}`}>
+        <span>Evidência</span>
       </div>
     );
   }
 
   return (
     <img 
-      src={src || 'https://images.unsplash.com/photo-1590247813693-5541f1c609fd?w=200&auto=format&fit=crop&q=60'} 
-      alt={alt} 
+      src={src} 
+      alt={alt || "Evidência"} 
       className={className} 
       onClick={onClick} 
       referrerPolicy="no-referrer"

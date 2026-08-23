@@ -27,6 +27,10 @@ class RecordRepositoryClass extends BaseRepository<Registro> {
   }
 
   protected mapRecord(rec: any): Registro {
+    const rawFotos = Array.isArray(rec.fotos) ? rec.fotos : [];
+    const fotoEvidencia = rec.fotoEvidencia || rec.foto_evidencia || (rawFotos.length > 0 ? rawFotos[0] : undefined);
+    const fotos = rawFotos.length > 0 ? rawFotos : (fotoEvidencia ? [fotoEvidencia] : []);
+
     return {
       id: rec.id,
       codigo: rec.codigo || `REG-${rec.id}`,
@@ -45,31 +49,35 @@ class RecordRepositoryClass extends BaseRepository<Registro> {
       observacoes: rec.observacoes,
       googleDriveId: rec.googleDriveId,
       googleDriveLink: rec.googleDriveLink,
-      fotoEvidencia: rec.fotoEvidencia || rec.foto_evidencia,
-      fotos: rec.fotos || (rec.fotoEvidencia ? [rec.fotoEvidencia] : [])
+      fotoEvidencia: fotoEvidencia,
+      fotos: fotos
     };
   }
 
   protected mapToPayload(data: Partial<Registro>): any {
+    const rawFotos = Array.isArray(data.fotos) ? data.fotos : [];
+    const fotoEvidencia = data.fotoEvidencia || (rawFotos.length > 0 ? rawFotos[0] : null);
+    const fotos = rawFotos.length > 0 ? rawFotos : (fotoEvidencia ? [fotoEvidencia] : []);
+
     return {
-      codigo: data.codigo,
-      titulo: data.titulo,
-      documentoOrigemId: data.documentoOrigemId,
-      setor: data.setor,
-      tipoMidia: data.tipoMidia,
-      localArmazenamento: data.localArmazenamento,
-      tempoRetencaoAnos: data.tempoRetencaoAnos,
-      disposicaoFinal: data.disposicaoFinal,
-      responsavelPreenchimento: data.responsavelPreenchimento,
-      responsavelGuarda: data.responsavelGuarda,
-      indexacaoMetodo: data.indexacaoMetodo,
-      statusControle: data.statusControle,
-      dataUltimaVerificacao: data.dataUltimaVerificacao,
-      observacoes: data.observacoes,
-      googleDriveId: data.googleDriveId,
-      googleDriveLink: data.googleDriveLink,
-      fotoEvidencia: data.fotoEvidencia || (data.fotos && data.fotos.length > 0 ? data.fotos[0] : null),
-      fotos: data.fotos || (data.fotoEvidencia ? [data.fotoEvidencia] : [])
+      codigo: data.codigo || '',
+      titulo: data.titulo || '',
+      documentoOrigemId: data.documentoOrigemId || null,
+      setor: data.setor || 'Geral',
+      tipoMidia: data.tipoMidia || 'Digital',
+      localArmazenamento: data.localArmazenamento || '',
+      tempoRetencaoAnos: data.tempoRetencaoAnos ?? 5,
+      disposicaoFinal: data.disposicaoFinal || 'Digitalização e Descarte',
+      responsavelPreenchimento: data.responsavelPreenchimento || '',
+      responsavelGuarda: data.responsavelGuarda || '',
+      indexacaoMetodo: data.indexacaoMetodo || '',
+      statusControle: data.statusControle || 'Ativo',
+      dataUltimaVerificacao: data.dataUltimaVerificacao || new Date().toISOString().split('T')[0],
+      observacoes: data.observacoes || '',
+      googleDriveId: data.googleDriveId || '',
+      googleDriveLink: data.googleDriveLink || '',
+      fotoEvidencia: fotoEvidencia,
+      fotos: fotos
     };
   }
 

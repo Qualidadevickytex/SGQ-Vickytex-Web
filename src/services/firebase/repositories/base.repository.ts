@@ -68,16 +68,21 @@ export abstract class BaseRepository<T extends { id: string }> implements BaseSe
     const id = data.id || `${this.collectionName}-${Date.now()}`;
     const rawPayload = this.mapToPayload({ ...data, id });
     const payload = JSON.parse(JSON.stringify(rawPayload));
+    const mapped = this.mapRecord({ id, ...payload, ...data });
+
+    try {
+      const currentLocal = this.getLocalData();
+      const updatedLocal = [mapped, ...currentLocal.filter((item: any) => item && item.id !== id)];
+      this.saveLocalData(updatedLocal);
+    } catch {}
 
     try {
       await createDocWithId(this.collectionName, id, payload);
-      const mapped = this.mapRecord({ id, ...payload });
       cacheService.invalidate(`${this.collectionName}:all`);
       return { success: true, data: mapped, timestamp };
     } catch (dbErr: any) {
       console.error(`[BaseRepository] Firestore create failed for ${this.collectionName}:`, dbErr);
-      const fallbackItem = { ...data, id } as T;
-      return { success: false, data: fallbackItem, error: ErrorHandler.handle(dbErr), timestamp };
+      return { success: false, data: mapped, error: ErrorHandler.handle(dbErr), timestamp };
     }
   }
 
@@ -85,22 +90,33 @@ export abstract class BaseRepository<T extends { id: string }> implements BaseSe
     const timestamp = new Date().toISOString();
     const rawPayload = this.mapToPayload(data);
     const payload = JSON.parse(JSON.stringify(rawPayload));
+    const mapped = this.mapRecord({ ...data, id });
+
+    try {
+      const currentLocal = this.getLocalData();
+      const updatedLocal = currentLocal.map((item: any) => item && item.id === id ? { ...item, ...mapped } : item);
+      this.saveLocalData(updatedLocal);
+    } catch {}
 
     try {
       await updateDocData(this.collectionName, id, payload);
       cacheService.invalidate(`${this.collectionName}:all`);
       cacheService.invalidate(`${this.collectionName}:${id}`);
-      const mapped = this.mapRecord({ ...data, id });
       return { success: true, data: mapped, timestamp };
     } catch (dbErr: any) {
       console.error(`[BaseRepository] Firestore update failed for ${this.collectionName}/${id}:`, dbErr);
-      const fallbackItem = { ...data, id } as T;
-      return { success: false, data: fallbackItem, error: ErrorHandler.handle(dbErr), timestamp };
+      return { success: false, data: mapped, error: ErrorHandler.handle(dbErr), timestamp };
     }
   }
 
   async delete(id: string): Promise<ApiResponse<boolean>> {
     const timestamp = new Date().toISOString();
+    try {
+      const currentLocal = this.getLocalData();
+      const updatedLocal = currentLocal.filter((item: any) => item && item.id !== id);
+      this.saveLocalData(updatedLocal);
+    } catch {}
+
     try {
       await deleteDocById(this.collectionName, id);
       cacheService.invalidate(`${this.collectionName}:all`);
@@ -124,6 +140,11 @@ export abstract class BaseRepository<T extends { id: string }> implements BaseSe
           seen.add(a.id);
           return true;
         });
+        if (unique.length > 0) {
+          try {
+            this.saveLocalData(unique);
+          } catch {}
+        }
         callback(unique);
       },
       (err) => {

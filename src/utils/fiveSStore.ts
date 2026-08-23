@@ -195,21 +195,32 @@ export const initFiveSStoreSync = () => {
   // Carregar e sincronizar Fotos do 5S em tempo real da coleção dedicada 'fives_photos' no Firestore
   FiveSPhotosRepository.findAll().then(res => {
     if (res.success && Array.isArray(res.data) && res.data.length > 0) {
-      inMemoryStore['sgq_5s_fotos'] = res.data;
+      const current = (inMemoryStore['sgq_5s_fotos'] || []) as Fotografia5S[];
+      const map = new Map<string, Fotografia5S>();
+      res.data.forEach(p => { if (p && p.id) map.set(p.id, p); });
+      current.forEach(p => { if (p && p.id && !map.has(p.id)) map.set(p.id, p); });
+      const merged = Array.from(map.values());
+      inMemoryStore['sgq_5s_fotos'] = merged;
       try {
-        localStorage.setItem('sgq_5s_fotos', JSON.stringify(res.data));
+        localStorage.setItem('sgq_5s_fotos', JSON.stringify(merged));
       } catch {}
-      notifyListeners('sgq_5s_fotos', res.data);
+      notifyListeners('sgq_5s_fotos', merged);
     }
   }).catch(err => console.error('[FiveSStore] Error loading 5S photos from Firestore:', err));
 
   FiveSPhotosRepository.subscribe((photos) => {
     if (Array.isArray(photos)) {
-      inMemoryStore['sgq_5s_fotos'] = photos;
+      const current = (inMemoryStore['sgq_5s_fotos'] || []) as Fotografia5S[];
+      const map = new Map<string, Fotografia5S>();
+      photos.forEach(p => { if (p && p.id) map.set(p.id, p); });
+      // Keep any local photos that might still be syncing
+      current.forEach(p => { if (p && p.id && !map.has(p.id)) map.set(p.id, p); });
+      const merged = Array.from(map.values());
+      inMemoryStore['sgq_5s_fotos'] = merged;
       try {
-        localStorage.setItem('sgq_5s_fotos', JSON.stringify(photos));
+        localStorage.setItem('sgq_5s_fotos', JSON.stringify(merged));
       } catch {}
-      notifyListeners('sgq_5s_fotos', photos);
+      notifyListeners('sgq_5s_fotos', merged);
     }
   });
 };
@@ -224,6 +235,7 @@ export const getStoreData = <T>(key: string, fallback: T): T => {
 };
 
 export const setStoreData = <T>(key: string, data: T): void => {
+  const prevData = inMemoryStore[key];
   inMemoryStore[key] = data;
   notifyListeners(key, data);
 
@@ -236,7 +248,7 @@ export const setStoreData = <T>(key: string, data: T): void => {
       console.warn('[FiveSStore] LocalStorage error for 5S photos:', e);
     }
 
-    const prevList = (inMemoryStore['sgq_5s_fotos'] || []) as Fotografia5S[];
+    const prevList = (Array.isArray(prevData) ? prevData : []) as Fotografia5S[];
     const newIds = new Set(photoList.map(p => p.id));
     prevList.forEach(p => {
       if (p.id && !newIds.has(p.id)) {
