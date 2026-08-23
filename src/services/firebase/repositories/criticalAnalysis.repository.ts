@@ -20,10 +20,20 @@ class CriticalAnalysesRepositoryClass extends BaseRepository<CriticalAnalysisDoc
   protected collectionName = 'critical_analyses';
 
   protected getLocalData(): CriticalAnalysisDocument[] {
+    try {
+      const saved = localStorage.getItem('sgq_vickytex_critical_analyses');
+      if (saved) {
+        return JSON.parse(saved);
+      }
+    } catch (e) {}
     return [];
   }
 
-  protected saveLocalData(_data: CriticalAnalysisDocument[]): void {}
+  protected saveLocalData(data: CriticalAnalysisDocument[]): void {
+    try {
+      localStorage.setItem('sgq_vickytex_critical_analyses', JSON.stringify(data));
+    } catch (e) {}
+  }
 
   protected mapRecord(rec: any): CriticalAnalysisDocument {
     return {

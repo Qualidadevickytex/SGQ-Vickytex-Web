@@ -188,7 +188,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ personalizacao: propPe
         {/* Brand Header */}
         <div className="relative flex items-center space-x-3">
           <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center text-[#0B3A63] font-black text-lg shadow-lg">
-            {personalizacao?.nomeEmpresa ? personalizacao.nomeEmpresa.substring(0, 2).toUpperCase() : 'VT'}
+            {personalizacao?.nomeEmpresa ? personalizacao.nomeEmpresa.substring(0, 2).toUpperCase() : 'VI'}
           </div>
           <div>
             <h1 className="text-base font-extrabold tracking-widest">{personalizacao?.nomeEmpresa || 'VICKYTEX'}</h1>

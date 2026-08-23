@@ -47,6 +47,8 @@ import { TrainingRepository } from './services/database/repositories/training.re
 import { AuditLogsRepository } from './services/firebase/repositories/auditLog.repository';
 import { AuditService } from './services/audit.service';
 import { clearCollectionDocs } from './firebase/firestore';
+import { clearFiveSMemoryStore } from './utils/fiveSStore';
+import { cacheService } from './services/cache.service';
 
 function AppContent() {
   const { user, needsAuth } = useAuth();
@@ -256,8 +258,11 @@ function AppContent() {
       'sgq_5s_planos',
       'sgq_vickytex_registros',
       'sgq_vickytex_treinamentos',
+      'sgq_vickytex_trainings',
       'sgq_vickytex_fornecedores',
       'sgq_vickytex_indicators',
+      'sgq_vickytex_critical_analyses',
+      'sgq_vickytex_notifications',
       'sgq_vickytex_ceo_projects',
       'sgq_vickytex_ceo_ideas',
       'sgq_vickytex_ceo_training_logs',
@@ -269,6 +274,10 @@ function AppContent() {
         localStorage.removeItem(k);
       } catch (e) {}
     });
+
+    // Limpar cache em memória e store do 5S
+    clearFiveSMemoryStore();
+    cacheService.clear();
 
     // 2. Limpar estados operacionais da memória React
     setDocuments([]);
@@ -294,12 +303,15 @@ function AppContent() {
       'risks',
       'fives_audits',
       'audits_5s',
+      'fives_photos',
       'equipments',
       'collaborators',
       'trainings',
       'records',
       'suppliers',
       'indicators',
+      'critical_analyses',
+      'notifications',
       'ceo_projects',
       'ceo_ideas',
       'audit_logs'

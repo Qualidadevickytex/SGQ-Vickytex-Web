@@ -321,7 +321,7 @@ export const Indicadores: React.FC<IndicadoresProps> = ({ onAddLog, personalizac
 
         if (!isMounted) return;
 
-        if (indRes.success && indRes.data && indRes.data.length > 0) {
+        if (indRes.success && Array.isArray(indRes.data)) {
           const mapped = indRes.data.map(mapFromRepo);
           setIndicadores(mapped);
           setSelectedKpiId(prev => {
@@ -330,7 +330,7 @@ export const Indicadores: React.FC<IndicadoresProps> = ({ onAddLog, personalizac
           });
         }
 
-        if (critRes.success && critRes.data && critRes.data.length > 0) {
+        if (critRes.success && Array.isArray(critRes.data)) {
           setAnalises(critRes.data as AnaliseCritica[]);
         }
       } catch (err) {
@@ -342,7 +342,7 @@ export const Indicadores: React.FC<IndicadoresProps> = ({ onAddLog, personalizac
     // Assinaturas em tempo real via Firestore
     const unsubInd = IndicatorRepository.subscribe((items) => {
       if (!isMounted) return;
-      if (items && items.length > 0) {
+      if (Array.isArray(items)) {
         const mapped = items.map(mapFromRepo);
         setIndicadores(mapped);
         setSelectedKpiId(prev => {
@@ -354,7 +354,7 @@ export const Indicadores: React.FC<IndicadoresProps> = ({ onAddLog, personalizac
 
     const unsubCrit = CriticalAnalysesRepository.subscribe((items) => {
       if (!isMounted) return;
-      if (items && items.length > 0) {
+      if (Array.isArray(items)) {
         setAnalises(items as AnaliseCritica[]);
       }
     });

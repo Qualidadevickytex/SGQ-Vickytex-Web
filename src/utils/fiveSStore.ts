@@ -227,6 +227,15 @@ export const initFiveSStoreSync = () => {
 
 initFiveSStoreSync();
 
+export const clearFiveSMemoryStore = (): void => {
+  inMemoryStore['sgq_5s_itens'] = [];
+  inMemoryStore['sgq_5s_fotos'] = [];
+  inMemoryStore['sgq_5s_planos'] = [];
+  notifyListeners('sgq_5s_itens', []);
+  notifyListeners('sgq_5s_fotos', []);
+  notifyListeners('sgq_5s_planos', []);
+};
+
 export const getStoreData = <T>(key: string, fallback: T): T => {
   if (inMemoryStore[key] !== undefined) {
     return inMemoryStore[key] as T;

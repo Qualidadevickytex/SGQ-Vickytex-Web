@@ -123,7 +123,7 @@ export const MainLayout: React.FC<MainLayoutProps> = ({
           {/* Logo Brand */}
           <div id="sidebar-logo" className="px-6 py-5 border-b border-white/10 flex items-center space-x-2.5">
             <div className="w-8 h-8 rounded-lg bg-white flex items-center justify-center text-[#0B3A63] font-black">
-              {personalizacao?.nomeEmpresa ? personalizacao.nomeEmpresa.substring(0, 2).toUpperCase() : 'VT'}
+              {personalizacao?.nomeEmpresa ? personalizacao.nomeEmpresa.substring(0, 2).toUpperCase() : 'VI'}
             </div>
             <div>
               <h1 className="text-sm font-extrabold tracking-wider leading-none uppercase">{personalizacao?.nomeEmpresa || 'VICKYTEX'}</h1>
@@ -266,7 +266,7 @@ export const MainLayout: React.FC<MainLayoutProps> = ({
               <div className="flex items-center justify-between border-b border-white/10 pb-4 mb-4">
                 <div className="flex items-center space-x-2">
                   <div className="w-8 h-8 rounded-lg bg-white flex items-center justify-center text-[#0B3A63] font-black">
-                    {personalizacao?.nomeEmpresa ? personalizacao.nomeEmpresa.substring(0, 2).toUpperCase() : 'VT'}
+                    {personalizacao?.nomeEmpresa ? personalizacao.nomeEmpresa.substring(0, 2).toUpperCase() : 'VI'}
                   </div>
                   <span className="font-extrabold text-sm tracking-wider uppercase">{personalizacao?.nomeEmpresa || 'VICKYTEX'}</span>
                 </div>
