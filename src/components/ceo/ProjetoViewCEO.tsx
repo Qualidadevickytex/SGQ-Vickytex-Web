@@ -559,11 +559,26 @@ export const ProjetoViewCEO: React.FC<ProjetoViewCEOProps> = ({
   // ----------------------------------------------------
   // SUB-TAB 3: SIPOC & VOC
   // ----------------------------------------------------
-  const [sipocForn, setSipocForn] = useState(tools.sipoc.fornecedores || '');
-  const [sipocEnt, setSipocEnt] = useState(tools.sipoc.entradas || '');
-  const [sipocPassos, setSipocPassos] = useState(tools.sipoc.processo?.join('\n') || '');
-  const [sipocSaid, setSipocSaid] = useState(tools.sipoc.saidas || '');
-  const [sipocCli, setSipocCli] = useState(tools.sipoc.clientes || '');
+  const [sipocForn, setSipocForn] = useState(tools.sipoc?.fornecedores || '');
+  const [sipocEnt, setSipocEnt] = useState(tools.sipoc?.entradas || '');
+  const [sipocPassos, setSipocPassos] = useState(tools.sipoc?.processo?.join('\n') || '');
+  const [sipocSaid, setSipocSaid] = useState(tools.sipoc?.saidas || '');
+  const [sipocCli, setSipocCli] = useState(tools.sipoc?.clientes || '');
+
+  // Sincronização em tempo real do SIPOC a partir de atualizações do Firestore
+  useEffect(() => {
+    setSipocForn(tools.sipoc?.fornecedores || '');
+    setSipocEnt(tools.sipoc?.entradas || '');
+    setSipocPassos(tools.sipoc?.processo?.join('\n') || '');
+    setSipocSaid(tools.sipoc?.saidas || '');
+    setSipocCli(tools.sipoc?.clientes || '');
+  }, [
+    tools.sipoc?.fornecedores,
+    tools.sipoc?.entradas,
+    tools.sipoc?.processo,
+    tools.sipoc?.saidas,
+    tools.sipoc?.clientes
+  ]);
 
   const saveSipoc = () => {
     const updated: SipocData = {
@@ -749,16 +764,36 @@ export const ProjetoViewCEO: React.FC<ProjetoViewCEOProps> = ({
   // ----------------------------------------------------
   // SUB-TAB 7: CAUSA RAIZ (5 PORQUÊS & ISHIKAWA FISHBONE)
   // ----------------------------------------------------
-  const [fiveWhysProb, setFiveWhysProb] = useState(tools.fiveWhys[0]?.problema || '');
+  const [fiveWhysProb, setFiveWhysProb] = useState(tools.fiveWhys?.[0]?.problema || '');
   const [whys, setWhys] = useState<string[]>([
-    tools.fiveWhys[0]?.porques?.[0] || '',
-    tools.fiveWhys[0]?.porques?.[1] || '',
-    tools.fiveWhys[0]?.porques?.[2] || '',
-    tools.fiveWhys[0]?.porques?.[3] || '',
-    tools.fiveWhys[0]?.porques?.[4] || ''
+    tools.fiveWhys?.[0]?.porques?.[0] || '',
+    tools.fiveWhys?.[0]?.porques?.[1] || '',
+    tools.fiveWhys?.[0]?.porques?.[2] || '',
+    tools.fiveWhys?.[0]?.porques?.[3] || '',
+    tools.fiveWhys?.[0]?.porques?.[4] || ''
   ]);
-  const [fiveWhysRoot, setFiveWhysRoot] = useState(tools.fiveWhys[0]?.causaRaiz || '');
-  const [fiveWhysAct, setFiveWhysAct] = useState(tools.fiveWhys[0]?.acaoProposta || '');
+  const [fiveWhysRoot, setFiveWhysRoot] = useState(tools.fiveWhys?.[0]?.causaRaiz || '');
+  const [fiveWhysAct, setFiveWhysAct] = useState(tools.fiveWhys?.[0]?.acaoProposta || '');
+
+  // Sincronização em tempo real dos 5 Porquês a partir do Firestore
+  useEffect(() => {
+    const firstFw = tools.fiveWhys?.[0];
+    setFiveWhysProb(firstFw?.problema || '');
+    setWhys([
+      firstFw?.porques?.[0] || '',
+      firstFw?.porques?.[1] || '',
+      firstFw?.porques?.[2] || '',
+      firstFw?.porques?.[3] || '',
+      firstFw?.porques?.[4] || ''
+    ]);
+    setFiveWhysRoot(firstFw?.causaRaiz || '');
+    setFiveWhysAct(firstFw?.acaoProposta || '');
+  }, [
+    tools.fiveWhys?.[0]?.problema,
+    tools.fiveWhys?.[0]?.porques,
+    tools.fiveWhys?.[0]?.causaRaiz,
+    tools.fiveWhys?.[0]?.acaoProposta
+  ]);
 
   const saveFiveWhys = () => {
     const newItem: FiveWhysItem = {
@@ -779,6 +814,25 @@ export const ProjetoViewCEO: React.FC<ProjetoViewCEOProps> = ({
   const [ishikawaM4, setIshikawaM4] = useState(tools.ishikawa?.maquina?.join(', ') || '');
   const [ishikawaM5, setIshikawaM5] = useState(tools.ishikawa?.medicao?.join(', ') || '');
   const [ishikawaM6, setIshikawaM6] = useState(tools.ishikawa?.meioAmbiente?.join(', ') || '');
+
+  // Sincronização em tempo real do Diagrama de Ishikawa / Fishbone
+  useEffect(() => {
+    setIshikawaEfeito(tools.ishikawa?.efeito || '');
+    setIshikawaM1(tools.ishikawa?.metodo?.join(', ') || '');
+    setIshikawaM2(tools.ishikawa?.materiaPrima?.join(', ') || '');
+    setIshikawaM3(tools.ishikawa?.maoDeObra?.join(', ') || '');
+    setIshikawaM4(tools.ishikawa?.maquina?.join(', ') || '');
+    setIshikawaM5(tools.ishikawa?.medicao?.join(', ') || '');
+    setIshikawaM6(tools.ishikawa?.meioAmbiente?.join(', ') || '');
+  }, [
+    tools.ishikawa?.efeito,
+    tools.ishikawa?.metodo,
+    tools.ishikawa?.materiaPrima,
+    tools.ishikawa?.maoDeObra,
+    tools.ishikawa?.maquina,
+    tools.ishikawa?.medicao,
+    tools.ishikawa?.meioAmbiente
+  ]);
 
   const saveIshikawa = () => {
     const updated: IshikawaData = {

@@ -214,14 +214,31 @@ class CEOProjectsRepositoryClass extends BaseRepository<ProjetoCEO> {
 
   protected mapRecord(rec: any): ProjetoCEO {
     const met = rec.metodologia || 'Projeto Personalizado';
-    let ferramentasObj = getDefaultFerramentas(met);
+    const defaults = getDefaultFerramentas(met);
+    let parsedFerramentas: any = {};
     if (rec.ferramentas) {
       try {
-        ferramentasObj = typeof rec.ferramentas === 'string' ? JSON.parse(rec.ferramentas) : rec.ferramentas;
+        parsedFerramentas = typeof rec.ferramentas === 'string' ? JSON.parse(rec.ferramentas) : rec.ferramentas;
       } catch (e) {
         console.error('Error parsing ferramentas json', e);
       }
     }
+
+    const ferramentasObj: FerramentasCEO = {
+      ...defaults,
+      ...parsedFerramentas,
+      sipoc: { ...defaults.sipoc, ...(parsedFerramentas.sipoc || {}) },
+      ishikawa: { ...defaults.ishikawa, ...(parsedFerramentas.ishikawa || {}) },
+      swot: { ...defaults.swot, ...(parsedFerramentas.swot || {}) },
+      voc: Array.isArray(parsedFerramentas.voc) ? parsedFerramentas.voc : defaults.voc,
+      fiveWhys: Array.isArray(parsedFerramentas.fiveWhys) ? parsedFerramentas.fiveWhys : defaults.fiveWhys,
+      brainstorming: Array.isArray(parsedFerramentas.brainstorming) ? parsedFerramentas.brainstorming : defaults.brainstorming,
+      gut: Array.isArray(parsedFerramentas.gut) ? parsedFerramentas.gut : defaults.gut,
+      fluxograma: Array.isArray(parsedFerramentas.fluxograma) ? parsedFerramentas.fluxograma : defaults.fluxograma,
+      cronograma: Array.isArray(parsedFerramentas.cronograma) ? parsedFerramentas.cronograma : defaults.cronograma,
+      evidencias: Array.isArray(parsedFerramentas.evidencias) ? parsedFerramentas.evidencias : defaults.evidencias,
+      etapas: Array.isArray(parsedFerramentas.etapas) && parsedFerramentas.etapas.length > 0 ? parsedFerramentas.etapas : defaults.etapas
+    };
 
     return {
       id: rec.id,
