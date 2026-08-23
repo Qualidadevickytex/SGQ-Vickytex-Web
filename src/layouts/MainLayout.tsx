@@ -248,7 +248,7 @@ export const MainLayout: React.FC<MainLayoutProps> = ({
 
         {/* Footer */}
         <footer id="brand-footer" className="py-4 border-t border-slate-200 dark:border-slate-800 text-center text-[10px] text-slate-400 font-medium px-4">
-          <p>{personalizacao?.textoRodape || '© 2026 Vickytex S.A. — Sistema de Gestão da Qualidade (SGQ) Web Integrado.'}</p>
+          <p>{personalizacao?.textoRodape || '© 2026 Vickytex — Sistema de Gestão da Qualidade (SGQ) Web Integrado.'}</p>
           <p className="mt-0.5">{personalizacao?.diretrizesRodape || 'Sistemas e diretrizes em conformidade com as normas internacionais de auditoria.'}</p>
         </footer>
 

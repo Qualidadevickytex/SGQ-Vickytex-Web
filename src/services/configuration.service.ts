@@ -20,7 +20,7 @@ export interface SystemConfiguration {
 }
 
 const DEFAULT_CONFIG: SystemConfiguration = {
-  companyName: 'Vickytex S.A. Indústria Têxtil',
+  companyName: 'Vickytex Indústria Têxtil',
   logoUrl: 'https://images.unsplash.com/photo-1557683316-973673baf926?auto=format&fit=crop&w=120&q=80',
   isoStandard: 'ISO 9001:2015',
   smtpHost: 'smtp.vickytex.com.br',

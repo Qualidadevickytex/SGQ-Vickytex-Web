@@ -1827,7 +1827,7 @@ export const Configuracoes: React.FC<ConfiguracoesProps> = ({
                       <div className="bg-slate-50/50 dark:bg-slate-800/10 p-3 rounded-lg border border-slate-100 dark:border-slate-800 space-y-2">
                         <span className="text-[10px] font-bold text-blue-600 dark:text-blue-400 font-mono">Rodapé do Painel Esquerdo (Marca)</span>
                         <div className="space-y-1">
-                          <label className="text-[9px] font-bold text-slate-500">Linha 1 (Copyright / S.A.)</label>
+                          <label className="text-[9px] font-bold text-slate-500">Linha 1 (Copyright / Marca)</label>
                           <input
                             type="text"
                             required

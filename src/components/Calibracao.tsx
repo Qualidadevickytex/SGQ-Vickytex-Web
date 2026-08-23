@@ -405,9 +405,9 @@ export const CalibracaoComponent: React.FC<CalibracaoProps> = ({
       <div class="print-wrapper">
         <div class="header-container">
           <div class="logo-title">
-            <div class="logo">VT</div>
+            <div class="logo">VI</div>
             <div>
-              <h4 class="company-name">VICKYTEX S.A.</h4>
+              <h4 class="company-name">VICKYTEX</h4>
               <p class="company-sub">Controle Metrológico de Qualidade</p>
             </div>
           </div>
@@ -1438,9 +1438,9 @@ export const CalibracaoComponent: React.FC<CalibracaoProps> = ({
               {/* Header */}
               <div className="border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-4 rounded-lg flex items-center justify-between">
                 <div className="flex items-center space-x-3">
-                  <div className="w-10 h-10 bg-blue-600 rounded-md text-white font-black flex items-center justify-center text-sm">VT</div>
+                  <div className="w-10 h-10 bg-blue-600 rounded-md text-white font-black flex items-center justify-center text-sm">VI</div>
                   <div>
-                    <h4 className="text-xs font-extrabold text-slate-800 dark:text-slate-100">VICKYTEX S.A.</h4>
+                    <h4 className="text-xs font-extrabold text-slate-800 dark:text-slate-100">VICKYTEX</h4>
                     <p className="text-[10px] text-slate-500">Controle Metrológico de Qualidade</p>
                   </div>
                 </div>

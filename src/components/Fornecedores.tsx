@@ -879,7 +879,7 @@ export const Fornecedores: React.FC<FornecedoresProps> = ({ onAddLog, personaliz
                     <input
                       type="text"
                       required
-                      placeholder="Ex: Fiação e Tecelagem Vickytex S.A."
+                      placeholder="Ex: Fiação e Tecelagem Vickytex"
                       value={razaoSocial}
                       onChange={(e) => setRazaoSocial(e.target.value)}
                       className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"

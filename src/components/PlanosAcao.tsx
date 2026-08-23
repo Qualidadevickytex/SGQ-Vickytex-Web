@@ -273,9 +273,9 @@ export const PlanosAcaoComponent: React.FC<PlanosAcaoProps> = ({
       <div class="print-wrapper">
         <div class="header-container">
           <div class="logo-title">
-            <div class="logo">VT</div>
+            <div class="logo">VI</div>
             <div>
-              <h1 class="company-name">VICKYTEX S.A.</h1>
+              <h1 class="company-name">VICKYTEX</h1>
               <p class="company-sub">SISTEMA DE GESTÃO DA QUALIDADE (SGQ)</p>
             </div>
           </div>
@@ -1270,10 +1270,10 @@ export const PlanosAcaoComponent: React.FC<PlanosAcaoProps> = ({
               <div className="border-2 border-slate-900 p-4 flex items-center justify-between">
                 <div className="flex items-center space-x-3">
                   <div className="w-10 h-10 rounded bg-[#0B3A63] flex items-center justify-center text-white font-black text-lg">
-                    VT
+                    VI
                   </div>
                   <div>
-                    <h1 className="text-base font-extrabold tracking-tight">VICKYTEX S.A.</h1>
+                    <h1 className="text-base font-extrabold tracking-tight">VICKYTEX</h1>
                     <p className="text-[10px] font-bold text-slate-500 font-mono">SISTEMA DE GESTÃO DA QUALIDADE (SGQ)</p>
                   </div>
                 </div>

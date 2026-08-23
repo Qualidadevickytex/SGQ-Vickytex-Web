@@ -633,7 +633,7 @@ export const DEFAULT_PERSONALIZACAO: PersonalizacaoGeral = {
   normaISO: "Conformidade ISO 9001:2015",
   sloganHome: "Painel Geral do Sistema de Gestão da Qualidade",
   descricaoHome: "Acompanhe os principais indicadores de conformidade e as atividades em tempo real.",
-  textoRodape: "© 2026 Vickytex S.A. — Sistema de Gestão da Qualidade (SGQ) Web Integrado.",
+  textoRodape: "© 2026 Vickytex — Sistema de Gestão da Qualidade (SGQ) Web Integrado.",
   diretrizesRodape: "Sistemas e diretrizes em conformidade com as normas internacionais de auditoria.",
   documentosTitulo: "Lista Mestra de Documentos",
   documentosSubtitulo: "Controle de documentos vigentes, revisões e acervo corporativo da qualidade.",
@@ -705,6 +705,15 @@ export const normalizePersonalizacao = (raw: any): PersonalizacaoGeral => {
 
   const parsed = { ...DEFAULT_PERSONALIZACAO, ...raw };
 
+  // 0. Sanitizar Nome da Empresa
+  if (
+    !parsed.nomeEmpresa ||
+    parsed.nomeEmpresa.includes("S.A.") ||
+    parsed.nomeEmpresa.includes("S/A")
+  ) {
+    parsed.nomeEmpresa = "VICKYTEX";
+  }
+
   // 1. Sanitizar Badge Superior
   if (
     !parsed.loginBadge ||
@@ -764,12 +773,21 @@ export const normalizePersonalizacao = (raw: any): PersonalizacaoGeral => {
     parsed.loginVantagem4Desc = DEFAULT_PERSONALIZACAO.loginVantagem4Desc;
   }
 
-  // 6. Sanitizar Rodapé Login
+  // 6. Sanitizar Rodapé Login e Rodapé Principal
+  if (
+    !parsed.textoRodape ||
+    parsed.textoRodape.includes("Vickytex S.A.") ||
+    parsed.textoRodape.includes("S.A.")
+  ) {
+    parsed.textoRodape = DEFAULT_PERSONALIZACAO.textoRodape;
+  }
+
   if (
     !parsed.loginFooterEsquerdoLinha1 ||
     parsed.loginFooterEsquerdoLinha1.includes("Vickytex S.A.") ||
     parsed.loginFooterEsquerdoLinha1.includes("Profissionais") ||
-    parsed.loginFooterEsquerdoLinha1.includes("Alta Qualidade")
+    parsed.loginFooterEsquerdoLinha1.includes("Alta Qualidade") ||
+    parsed.loginFooterEsquerdoLinha1.includes("S.A.")
   ) {
     parsed.loginFooterEsquerdoLinha1 = DEFAULT_PERSONALIZACAO.loginFooterEsquerdoLinha1;
   }
