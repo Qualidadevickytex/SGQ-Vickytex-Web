@@ -127,28 +127,36 @@ export const FiveSDashboard: React.FC<FiveSDashboardProps> = ({
 
   // --- 3. SECTOR RANKING ---
   // Get latest finalized audit for each sector
-  const sectorRanking = setores
-    .filter(s => s.ativo)
-    .map(sector => {
-      const sectorAudits = finalizedAudits.filter(a => a.setorId === sector.id);
-      let score = 0;
-      let date = 'N/A';
-      
-      if (sectorAudits.length > 0) {
-        // Find newest
-        const sorted = [...sectorAudits].sort((a,b) => b.dataAuditoria.localeCompare(a.dataAuditoria));
-        score = sorted[0].mediaGeral;
-        date = sorted[0].dataAuditoria;
-      }
+  const sectorRanking = useMemo(() => {
+    return setores
+      .filter(s => s.ativo)
+      .map(sector => {
+        const sectorAudits = finalizedAudits.filter(a => a.setorId === sector.id);
+        const hasAudit = sectorAudits.length > 0;
+        let score = 0;
+        let date = 'N/A';
+        
+        if (hasAudit) {
+          // Find newest
+          const sorted = [...sectorAudits].sort((a,b) => b.dataAuditoria.localeCompare(a.dataAuditoria));
+          score = sorted[0].mediaGeral;
+          date = sorted[0].dataAuditoria;
+        }
 
-      return {
-        id: sector.id,
-        nome: sector.nome,
-        score,
-        date
-      };
-    })
-    .sort((a, b) => b.score - a.score);
+        return {
+          id: sector.id,
+          nome: sector.nome,
+          hasAudit,
+          score,
+          date
+        };
+      })
+      .sort((a, b) => {
+        if (a.hasAudit && !b.hasAudit) return -1;
+        if (!a.hasAudit && b.hasAudit) return 1;
+        return b.score - a.score;
+      });
+  }, [setores, finalizedAudits]);
 
   // --- 4. EVOLUTION OVER TIME & SECTOR FILTERING ---
   const [evolutionMode, setEvolutionMode] = useState<'geral' | 'setor' | 'comparativo'>('geral');
@@ -313,14 +321,67 @@ export const FiveSDashboard: React.FC<FiveSDashboardProps> = ({
     });
   }, [setores, finalizedAudits, selectedHeatmapMonth]);
 
-  // Get color for heatmap score
+  const sortedClassificacoes = useMemo(() => {
+    if (!classificacoes || classificacoes.length === 0) return [];
+    return [...classificacoes].sort((a, b) => b.min - a.min);
+  }, [classificacoes]);
+
+  const getClassificationColorStyle = (cor?: string) => {
+    switch (cor?.toLowerCase()) {
+      case 'emerald':
+      case 'green':
+        return {
+          cellBg: 'bg-emerald-500 text-white',
+          dotBg: 'bg-emerald-500',
+          badgeBg: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400'
+        };
+      case 'blue':
+        return {
+          cellBg: 'bg-blue-500 text-white',
+          dotBg: 'bg-blue-500',
+          badgeBg: 'bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-400'
+        };
+      case 'indigo':
+        return {
+          cellBg: 'bg-indigo-500 text-white',
+          dotBg: 'bg-indigo-500',
+          badgeBg: 'bg-indigo-50 text-indigo-600 dark:bg-indigo-950/40 dark:text-indigo-400'
+        };
+      case 'amber':
+      case 'yellow':
+        return {
+          cellBg: 'bg-amber-400 text-slate-950',
+          dotBg: 'bg-amber-400',
+          badgeBg: 'bg-amber-50 text-amber-600 dark:bg-amber-950/40 dark:text-amber-400'
+        };
+      case 'rose':
+      case 'red':
+        return {
+          cellBg: 'bg-rose-500 text-white animate-pulse',
+          dotBg: 'bg-rose-500',
+          badgeBg: 'bg-rose-50 text-rose-600 dark:bg-rose-950/40 dark:text-rose-400'
+        };
+      default:
+        return {
+          cellBg: 'bg-slate-500 text-white',
+          dotBg: 'bg-slate-500',
+          badgeBg: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300'
+        };
+    }
+  };
+
+  // Get color for heatmap score based on dynamic 5S classifications
   const getHeatmapColor = (score: number) => {
     if (score === 0) return 'bg-slate-100 text-slate-400 dark:bg-slate-800';
-    if (score >= 90) return 'bg-emerald-500 text-white';
-    if (score >= 80) return 'bg-emerald-400 text-slate-900';
-    if (score >= 70) return 'bg-amber-400 text-slate-900';
-    if (score >= 60) return 'bg-amber-500 text-white';
-    return 'bg-rose-500 text-white animate-pulse';
+    if (!classificacoes || classificacoes.length === 0) {
+      if (score >= 90) return 'bg-emerald-500 text-white';
+      if (score >= 80) return 'bg-blue-500 text-white';
+      if (score >= 70) return 'bg-indigo-500 text-white';
+      if (score >= 60) return 'bg-amber-400 text-slate-950';
+      return 'bg-rose-500 text-white animate-pulse';
+    }
+    const classification = getClassificationForIndex(score, classificacoes);
+    return getClassificationColorStyle(classification?.cor).cellBg;
   };
 
   return (
@@ -384,20 +445,20 @@ export const FiveSDashboard: React.FC<FiveSDashboardProps> = ({
               <p className="text-[10px] text-slate-400">Última avaliação de cada setor elegível.</p>
             </div>
             <span className="text-[10px] font-mono bg-amber-500/10 text-amber-600 px-2.5 py-0.5 rounded-full font-bold">
-              Prêmio: {config.trofeuNomePremio}
+              Prêmio: {config.trofeuNomePremio || 'Troféu 5S'}
             </span>
           </div>
 
           <div className="divide-y divide-slate-100 dark:divide-slate-800 border border-slate-100 dark:border-slate-800 rounded-xl overflow-hidden text-xs">
             {sectorRanking.map((item, idx) => {
-              const classification = getClassificationForIndex(item.score, classificacoes);
+              const classification = item.hasAudit ? getClassificationForIndex(item.score, classificacoes) : null;
               return (
                 <div key={item.id} className="p-3 bg-white dark:bg-slate-900 hover:bg-slate-50/20 transition-all flex items-center justify-between">
                   <div className="flex items-center space-x-3">
                     <span className={`w-6 h-6 rounded-full flex items-center justify-center font-black text-xs ${
-                      idx === 0 ? 'bg-amber-500 text-slate-950 shadow-sm' :
-                      idx === 1 ? 'bg-slate-300 text-slate-900' :
-                      idx === 2 ? 'bg-amber-700 text-white' :
+                      item.hasAudit && idx === 0 ? 'bg-amber-500 text-slate-950 shadow-sm' :
+                      item.hasAudit && idx === 1 ? 'bg-slate-300 text-slate-900' :
+                      item.hasAudit && idx === 2 ? 'bg-amber-700 text-white' :
                       'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'
                     }`}>
                       {idx + 1}
@@ -409,22 +470,54 @@ export const FiveSDashboard: React.FC<FiveSDashboardProps> = ({
                   </div>
 
                   <div className="flex items-center space-x-3">
-                    <span className={`px-2 py-0.5 rounded-sm text-[10px] font-bold ${
-                      classification.cor === 'emerald' ? 'bg-emerald-50 text-emerald-600' :
-                      classification.cor === 'blue' ? 'bg-blue-50 text-blue-600' :
-                      classification.cor === 'indigo' ? 'bg-indigo-50 text-indigo-600' :
-                      classification.cor === 'amber' ? 'bg-amber-50 text-amber-600' :
-                      'bg-rose-50 text-rose-600'
-                    }`}>
-                      {classification.nome}
-                    </span>
-                    <span className="text-sm font-black font-mono text-slate-800 dark:text-slate-200">
-                      {item.score}%
-                    </span>
+                    {item.hasAudit && classification ? (
+                      <>
+                        <span className={`px-2 py-0.5 rounded-sm text-[10px] font-bold ${
+                          getClassificationColorStyle(classification?.cor).badgeBg
+                        }`}>
+                          {classification.nome}
+                        </span>
+                        <span className="text-sm font-black font-mono text-slate-800 dark:text-slate-200">
+                          {item.score}%
+                        </span>
+                      </>
+                    ) : (
+                      <>
+                        <span className="px-2 py-0.5 rounded-sm text-[10px] font-bold bg-slate-100 text-slate-400 dark:bg-slate-800 dark:text-slate-500">
+                          Pendente
+                        </span>
+                        <span className="text-xs font-bold font-mono text-slate-400 dark:text-slate-600">
+                          --%
+                        </span>
+                      </>
+                    )}
                   </div>
                 </div>
               );
             })}
+          </div>
+
+          {/* Legenda Dinâmica de Classificações 5S */}
+          <div className="flex flex-wrap items-center justify-between gap-1.5 text-[9px] font-bold text-slate-500 dark:text-slate-400 px-1 pt-1 border-t border-slate-100 dark:border-slate-800">
+            {sortedClassificacoes.length > 0 ? (
+              sortedClassificacoes.map((c) => {
+                const style = getClassificationColorStyle(c.cor);
+                let rangeLabel = '';
+                if (c.max >= 100) {
+                  rangeLabel = `≥${c.min}%`;
+                } else if (c.min <= 0) {
+                  rangeLabel = `<${Math.round(c.max + 0.1)}%`;
+                } else {
+                  rangeLabel = `${c.min}-${Math.floor(c.max)}%`;
+                }
+                return (
+                  <div key={c.id} className="flex items-center space-x-1">
+                    <span className={`inline-block w-2 h-2 ${style.dotBg} rounded-full shrink-0`} />
+                    <span className="whitespace-nowrap">{rangeLabel} {c.nome}</span>
+                  </div>
+                );
+              })
+            ) : null}
           </div>
         </div>
 
@@ -622,19 +715,50 @@ export const FiveSDashboard: React.FC<FiveSDashboardProps> = ({
             </table>
           </div>
 
-          <div className="flex justify-between items-center text-[9px] font-bold text-slate-400 px-1 pt-1">
-            <div className="flex items-center space-x-1">
-              <span className="inline-block w-2.5 h-2.5 bg-emerald-500 rounded-xs" />
-              <span>&ge;90% Excelência</span>
-            </div>
-            <div className="flex items-center space-x-1">
-              <span className="inline-block w-2.5 h-2.5 bg-amber-400 rounded-xs" />
-              <span>70-89% Moderado</span>
-            </div>
-            <div className="flex items-center space-x-1">
-              <span className="inline-block w-2.5 h-2.5 bg-rose-500 rounded-xs" />
-              <span>&lt;70% Crítico</span>
-            </div>
+          {/* LEGENDA DINÂMICA DAS FAIXAS DE CLASSIFICAÇÃO 5S */}
+          <div className="flex flex-wrap items-center justify-between gap-1.5 text-[9px] font-bold text-slate-500 dark:text-slate-400 px-1 pt-1.5 border-t border-slate-100 dark:border-slate-800">
+            {sortedClassificacoes.length > 0 ? (
+              sortedClassificacoes.map((c) => {
+                const style = getClassificationColorStyle(c.cor);
+                let rangeLabel = '';
+                if (c.max >= 100) {
+                  rangeLabel = `≥${c.min}%`;
+                } else if (c.min <= 0) {
+                  rangeLabel = `<${Math.round(c.max + 0.1)}%`;
+                } else {
+                  rangeLabel = `${c.min}-${Math.floor(c.max)}%`;
+                }
+                return (
+                  <div key={c.id} className="flex items-center space-x-1">
+                    <span className={`inline-block w-2.5 h-2.5 ${style.dotBg} rounded-xs shrink-0`} />
+                    <span className="whitespace-nowrap">{rangeLabel} {c.nome}</span>
+                  </div>
+                );
+              })
+            ) : (
+              <>
+                <div className="flex items-center space-x-1">
+                  <span className="inline-block w-2.5 h-2.5 bg-emerald-500 rounded-xs" />
+                  <span>&ge;90% Excelência</span>
+                </div>
+                <div className="flex items-center space-x-1">
+                  <span className="inline-block w-2.5 h-2.5 bg-blue-500 rounded-xs" />
+                  <span>80-89% Muito Bom</span>
+                </div>
+                <div className="flex items-center space-x-1">
+                  <span className="inline-block w-2.5 h-2.5 bg-indigo-500 rounded-xs" />
+                  <span>70-79% Aceitável</span>
+                </div>
+                <div className="flex items-center space-x-1">
+                  <span className="inline-block w-2.5 h-2.5 bg-amber-400 rounded-xs" />
+                  <span>60-69% Atenção</span>
+                </div>
+                <div className="flex items-center space-x-1">
+                  <span className="inline-block w-2.5 h-2.5 bg-rose-500 rounded-xs" />
+                  <span>&lt;60% Crítico</span>
+                </div>
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -648,7 +772,7 @@ export const FiveSDashboard: React.FC<FiveSDashboardProps> = ({
             <h4 className="font-extrabold text-sm">{personalizacao?.auditorias5sMetaTitulo || 'Meta de Conformidade 5S'}</h4>
           </div>
           <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
-            {personalizacao?.auditorias5sMetaSubtitulo || 'Nossa meta é manter todos os setores com conformidade igual ou superior a 75%. Setores abaixo desse patamar entram em modo crítico e devem abrir Planos de Ação imediatos.'}
+            {personalizacao?.auditorias5sMetaSubtitulo || 'A Vickytex estabelece que todo setor que obtiver uma nota média geral abaixo de 75% deve abrir obrigatoriamente um Plano de Ação Corretiva 5W2H focado nos sensos deficientes, visando reorganizar, realizar mutirões de limpeza ou reorientar a equipe em reuniões diárias.'}
           </p>
           <div className="flex items-center space-x-2">
             <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Objetivo Geral:</span>

@@ -674,7 +674,7 @@ export const DEFAULT_PERSONALIZACAO: PersonalizacaoGeral = {
   riscosAjudaTitulo: "Abordagem de Riscos e Oportunidades (Requisito ISO 6.1)",
   riscosAjudaSubtitulo: "O pensamento baseado em risco permite à organização determinar os fatores que poderiam causar desvios em seus processos e no SGQ, colocando em prática controles preventivos para minimizar efeitos negativos e maximizar as oportunidades que surgirem.",
   auditorias5sMetaTitulo: "Meta de Qualidade 5S Vickytex",
-  auditorias5sMetaSubtitulo: "A Vickytex estabelece que toda célula ou setor que obtiver uma nota média geral abaixo de 3.5 deve abrir obrigatoriamente um Plano de Ação Corretiva 5W2H focado nos sensos deficientes, visando reestruturar a disposição física das máquinas, realizar mutirões de limpeza assistida ou reorientar a equipe em reuniões diárias (DDS).",
+  auditorias5sMetaSubtitulo: "A Vickytex estabelece que todo setor que obtiver uma nota média geral abaixo de 75% deve abrir obrigatoriamente um Plano de Ação Corretiva 5W2H focado nos sensos deficientes, visando reorganizar, realizar mutirões de limpeza ou reorientar a equipe em reuniões diárias.",
   auditorias5sMetaGrafico: 75,
   loginBadge: "Em conformidade com a ISO 9001:2015",
   loginTitulo: "A evolução do SGQ Vickytex começa aqui.",
@@ -797,6 +797,17 @@ export const normalizePersonalizacao = (raw: any): PersonalizacaoGeral => {
     parsed.loginFooterEsquerdoLinha2.includes("Auditoria Têxtil") && !parsed.loginFooterEsquerdoLinha2.includes("estruturais")
   ) {
     parsed.loginFooterEsquerdoLinha2 = DEFAULT_PERSONALIZACAO.loginFooterEsquerdoLinha2;
+  }
+
+  // 7. Sanitizar Meta 5S
+  if (
+    !parsed.auditorias5sMetaSubtitulo ||
+    parsed.auditorias5sMetaSubtitulo.includes("3.5") ||
+    parsed.auditorias5sMetaSubtitulo.includes("disposição física das máquinas") ||
+    parsed.auditorias5sMetaSubtitulo.includes("(DDS)") ||
+    parsed.auditorias5sMetaSubtitulo.includes("toda célula ou setor")
+  ) {
+    parsed.auditorias5sMetaSubtitulo = DEFAULT_PERSONALIZACAO.auditorias5sMetaSubtitulo;
   }
 
   return parsed;

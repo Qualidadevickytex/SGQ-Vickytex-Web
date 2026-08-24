@@ -87,7 +87,7 @@ export const INITIAL_CONFIG: Configuracao5S = {
   trofeuCriterios: ["Maior Índice", "Menor quantidade de Não Atende", "Menor quantidade de reincidências", "Maior evolução"],
   trofeuCriteriosDesempate: ["Menor quantidade de Não Atende", "Maior evolução"],
   trofeuPeriodicidade: "Mensal",
-  trofeuNomePremio: "Troféu Ouro 5S",
+  trofeuNomePremio: "Troféu 5S",
   trofeuImagemUrl: "https://images.unsplash.com/photo-1578269174936-2709b5a19376?w=400&auto=format&fit=crop&q=60",
   trofeuTextoCertificado: "Certificado concedido ao setor pela excelência na manutenção dos padrões do Programa 5S, promovendo a produtividade, segurança e organização."
 };
@@ -169,8 +169,14 @@ export const initFiveSStoreSync = () => {
       res.data.forEach(rec => {
         if (rec.id.startsWith('sgq_5s_') || rec.id.startsWith('fives_')) {
           const key = rec.id.startsWith('fives_') ? `sgq_5s_${rec.id.replace('fives_', '')}` : rec.id;
-          const val = rec.items !== undefined ? rec.items : rec.data;
+          let val = rec.items !== undefined ? rec.items : rec.data;
           if (val !== undefined) {
+            if ((key === 'sgq_5s_configuracao' || key === 'fives_configuracao') && val && typeof val === 'object') {
+              if (val.trofeuNomePremio === 'Troféu Ouro 5S' || (typeof val.trofeuNomePremio === 'string' && val.trofeuNomePremio.includes('Troféu Ouro'))) {
+                val = { ...val, trofeuNomePremio: 'Troféu 5S' };
+                SystemSettingsRepository.create({ id: key, data: val }).catch(() => {});
+              }
+            }
             inMemoryStore[key] = val;
             notifyListeners(key, val);
           }

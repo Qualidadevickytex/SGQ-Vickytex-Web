@@ -25,6 +25,7 @@ import {
   Senso5S
 } from '../../types/fiveS';
 import { compressImage } from '../../utils/imageCompressor';
+import { FiveSCameraModal } from './FiveSCameraModal';
 
 interface FiveSActionPlansProps {
   planos: PlanoAcao5S[];
@@ -66,6 +67,7 @@ export const FiveSActionPlans: React.FC<FiveSActionPlansProps> = ({
   const [planConclusionDate, setPlanConclusionDate] = useState('');
   const [newComment, setNewComment] = useState('');
   const [correctionPhotos, setCorrectionPhotos] = useState<string[]>([]);
+  const [isLiveCameraOpen, setIsLiveCameraOpen] = useState(false);
 
   // Access control based on sector mapping
   const auditOfEditingPlan = editingPlan ? auditorias.find(a => a.id === editingPlan.auditoriaId) : null;
@@ -113,6 +115,17 @@ export const FiveSActionPlans: React.FC<FiveSActionPlansProps> = ({
 
     if (!hasAccessToFill) {
       alert(`Acesso negado. O preenchimento deste plano de ação é restrito a usuários do setor correspondente (${audit?.setor || 'Nenhum'}).`);
+      return;
+    }
+
+    if (!planResp.trim()) {
+      alert("Por favor, preencha o campo obrigatório 'E-mail do Responsável'.");
+      return;
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(planResp.trim())) {
+      alert("Por favor, informe um endereço de e-mail válido para o responsável.");
       return;
     }
 
@@ -307,7 +320,11 @@ export const FiveSActionPlans: React.FC<FiveSActionPlansProps> = ({
 
                     <div className="text-[11px] text-slate-400 space-y-1 font-sans">
                       <p>Setor: <span className="font-semibold text-slate-600 dark:text-slate-300">{audit?.setor}</span></p>
-                      <p>Responsável: <span className="font-semibold text-slate-600 dark:text-slate-300">{plan.responsavel}</span></p>
+                      <p>Responsável: {plan.responsavel ? (
+                        <span className="font-semibold text-slate-600 dark:text-slate-300">{plan.responsavel}</span>
+                      ) : (
+                        <span className="text-amber-500 font-bold italic">Não definido (Obrigatório)</span>
+                      )}</p>
                       <p>Prazo Limite: <span className="font-semibold text-slate-600 dark:text-slate-300 font-mono">{plan.prazo}</span></p>
                     </div>
                   </div>
@@ -507,14 +524,17 @@ export const FiveSActionPlans: React.FC<FiveSActionPlansProps> = ({
 
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
-                  <label className="block text-[10px] font-black text-slate-400 uppercase">E-mail do Responsável</label>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase">
+                    E-mail do Responsável <span className="text-rose-500">*</span>
+                  </label>
                   <input
                     type="email"
                     required
+                    placeholder="responsavel@vickytex.com.br"
                     value={planResp}
                     onChange={(e) => setPlanResp(e.target.value)}
                     disabled={!hasAccessToFillEditingPlan}
-                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-2 font-semibold disabled:opacity-60"
+                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-2 font-semibold disabled:opacity-60 placeholder:text-slate-400 placeholder:font-normal"
                   />
                 </div>
 
@@ -565,28 +585,27 @@ export const FiveSActionPlans: React.FC<FiveSActionPlansProps> = ({
               {/* Correction Photos */}
               <div className="space-y-1.5 pt-1">
                 <label className="block text-[10px] font-black text-slate-400 uppercase">Evidências de Correção (Fotos)</label>
-                <div className="flex items-center space-x-2">
-                  <label className={`cursor-pointer bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-3 py-2 rounded-lg text-[10px] font-bold flex items-center space-x-1 border border-slate-200 dark:border-slate-700 ${!hasAccessToFillEditingPlan ? 'opacity-50 cursor-not-allowed' : 'hover:bg-slate-200'}`}>
+                <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsLiveCameraOpen(true)}
+                    disabled={!hasAccessToFillEditingPlan}
+                    className={`cursor-pointer bg-amber-500/10 hover:bg-amber-500/20 text-amber-600 dark:text-amber-400 px-3 py-2 rounded-lg text-[10px] font-black flex items-center justify-center space-x-1.5 border border-amber-500/30 transition-all shrink-0 ${!hasAccessToFillEditingPlan ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  >
                     <Camera className="w-3.5 h-3.5" />
-                    <span>Adicionar Evidência</span>
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={handleUploadCorrectionPhoto}
-                      disabled={!hasAccessToFillEditingPlan}
-                      className="hidden"
-                    />
-                  </label>
+                    <span>Câmera ao Vivo / Foto</span>
+                  </button>
 
-                  <div className="flex flex-wrap gap-1.5">
+                  <div className="flex flex-wrap gap-2">
                     {correctionPhotos.map((photo, pIdx) => (
-                      <div key={pIdx} className="relative w-8 h-8 rounded-sm overflow-hidden border border-slate-300">
+                      <div key={pIdx} className="relative group w-14 h-14 rounded-lg overflow-hidden border border-slate-300 dark:border-slate-700 bg-black shrink-0 shadow-xs">
                         <img src={photo} className="w-full h-full object-cover" alt="Correction" />
                         {hasAccessToFillEditingPlan && (
                           <button
                             type="button"
                             onClick={() => handleRemoveCorrectionPhoto(pIdx)}
-                            className="absolute top-0 right-0 bg-red-500 text-white rounded-full p-0.5 scale-75 hover:bg-red-600"
+                            className="absolute top-1 right-1 bg-rose-600 hover:bg-rose-700 text-white rounded-full p-1 shadow-md transition-all"
+                            title="Remover foto"
                           >
                             <X className="w-2.5 h-2.5" />
                           </button>
@@ -641,6 +660,17 @@ export const FiveSActionPlans: React.FC<FiveSActionPlansProps> = ({
           </form>
         </div>
       )}
+
+      {/* --- LIVE CAMERA MODAL FOR CORRECTION EVIDENCE --- */}
+      <FiveSCameraModal
+        isOpen={isLiveCameraOpen}
+        onClose={() => setIsLiveCameraOpen(false)}
+        onCapture={(base64) => {
+          setCorrectionPhotos(prev => [...prev, base64]);
+        }}
+        title="Evidência de Correção em Tempo Real"
+        defaultLegend="Evidência de correção do plano de ação"
+      />
     </div>
   );
 };
