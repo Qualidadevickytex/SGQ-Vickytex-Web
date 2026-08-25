@@ -1,0 +1,342 @@
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+import { UserRole, SystemModuleId, ModuleCrudPermission, SectorScope, CrudAction } from '../types';
+
+export interface ModuleDefinition {
+  id: SystemModuleId;
+  label: string;
+  category: 'Geral & Estratégico' | 'Qualidade & Documentação' | 'Operação & Processos' | 'Suporte & Sistema';
+  description: string;
+}
+
+export const SYSTEM_MODULES: ModuleDefinition[] = [
+  { 
+    id: 'dashboard', 
+    label: 'Painel Geral', 
+    category: 'Geral & Estratégico',
+    description: 'Visão consolidada de KPIs, alertas e atividades recentes'
+  },
+  { 
+    id: 'indicadores', 
+    label: 'Indicadores & KPIs (9.1)', 
+    category: 'Geral & Estratégico',
+    description: 'Monitoramento de metas, índices de refugo e produtividade'
+  },
+  { 
+    id: 'ceo', 
+    label: 'Melhoria Contínua & CEO', 
+    category: 'Geral & Estratégico',
+    description: 'Centro de excelência, diretrizes executivas e projetos estratégicos'
+  },
+  { 
+    id: 'documentos', 
+    label: 'Lista Mestra (ISO 7.5)', 
+    category: 'Qualidade & Documentação',
+    description: 'Procedimentos (POPs), Instruções (ITs), Manuais e Formulários'
+  },
+  { 
+    id: 'registros', 
+    label: 'Controle de Registros (7.5.3)', 
+    category: 'Qualidade & Documentação',
+    description: 'Rastreabilidade, retenção, arquivamento e descarte de evidências'
+  },
+  { 
+    id: 'auditorias', 
+    label: 'Auditorias Internas & NC (9.2/10.2)', 
+    category: 'Qualidade & Documentação',
+    description: 'Programação de auditorias ISO 9001 e tratativa de Não Conformidades'
+  },
+  { 
+    id: 'riscos', 
+    label: 'Riscos & Oportunidades (6.1)', 
+    category: 'Qualidade & Documentação',
+    description: 'Matriz de probabilidade x impacto, mitigação e planos preventivos'
+  },
+  { 
+    id: 'planos', 
+    label: 'Planos de Ação 5W2H (10.2)', 
+    category: 'Operação & Processos',
+    description: 'Planejamento de ações corretivas, prazos, custos e responsáveis'
+  },
+  { 
+    id: '5s', 
+    label: 'Programa 5S (Lean)', 
+    category: 'Operação & Processos',
+    description: 'Auditorias dos 5 sensos, fotos em tempo real e troféu 5S'
+  },
+  { 
+    id: 'fornecedores', 
+    label: 'Avaliação Fornecedores (8.4)', 
+    category: 'Operação & Processos',
+    description: 'Qualificação, homologação e controle de insumos têxteis críticos'
+  },
+  { 
+    id: 'treinamentos', 
+    label: 'Treinamentos & Matriz (7.2)', 
+    category: 'Operação & Processos',
+    description: 'Polivalência de operadores, listas de presença e eficácia'
+  },
+  { 
+    id: 'calibracao', 
+    label: 'Calibração & Metrologia (7.1.5)', 
+    category: 'Operação & Processos',
+    description: 'Instrumentos de medição, balanças, trenas e certificados RBC'
+  },
+  { 
+    id: 'usuarios', 
+    label: 'Matriz de Acessos & Usuários (5.3)', 
+    category: 'Suporte & Sistema',
+    description: 'Gestão de colaboradores, perfis técnicos e direitos de acesso'
+  },
+  { 
+    id: 'configuracoes', 
+    label: 'Configurações do Sistema', 
+    category: 'Suporte & Sistema',
+    description: 'Parâmetros corporativos, cabeçalhos, logotipo e personalização'
+  },
+  { 
+    id: 'integracao', 
+    label: 'Google Workspace & Drive', 
+    category: 'Suporte & Sistema',
+    description: 'Conexão em nuvem com pastas de documentos e relatórios'
+  },
+  { 
+    id: 'database', 
+    label: 'Database Live View', 
+    category: 'Suporte & Sistema',
+    description: 'Monitoramento em tempo real do banco de dados Firestore'
+  }
+];
+
+/**
+ * Permissões Padrão por Perfil Técnico (Role)
+ * Atua como a herança inicial caso o usuário não possua customizações específicas.
+ */
+export const DEFAULT_ROLE_CRUD_PERMISSIONS: Record<UserRole, Record<SystemModuleId, ModuleCrudPermission>> = {
+  Administrador: {
+    dashboard: { ver: true, criar: true, editar: true, excluir: true, escopoSetor: 'todos' },
+    documentos: { ver: true, criar: true, editar: true, excluir: true, escopoSetor: 'todos' },
+    indicadores: { ver: true, criar: true, editar: true, excluir: true, escopoSetor: 'todos' },
+    ceo: { ver: true, criar: true, editar: true, excluir: true, escopoSetor: 'todos' },
+    registros: { ver: true, criar: true, editar: true, excluir: true, escopoSetor: 'todos' },
+    fornecedores: { ver: true, criar: true, editar: true, excluir: true, escopoSetor: 'todos' },
+    auditorias: { ver: true, criar: true, editar: true, excluir: true, escopoSetor: 'todos' },
+    riscos: { ver: true, criar: true, editar: true, excluir: true, escopoSetor: 'todos' },
+    planos: { ver: true, criar: true, editar: true, excluir: true, escopoSetor: 'todos' },
+    '5s': { ver: true, criar: true, editar: true, excluir: true, escopoSetor: 'todos' },
+    treinamentos: { ver: true, criar: true, editar: true, excluir: true, escopoSetor: 'todos' },
+    calibracao: { ver: true, criar: true, editar: true, excluir: true, escopoSetor: 'todos' },
+    usuarios: { ver: true, criar: true, editar: true, excluir: true, escopoSetor: 'todos' },
+    configuracoes: { ver: true, criar: true, editar: true, excluir: true, escopoSetor: 'todos' },
+    integracao: { ver: true, criar: true, editar: true, excluir: true, escopoSetor: 'todos' },
+    database: { ver: true, criar: true, editar: true, excluir: true, escopoSetor: 'todos' }
+  },
+
+  Qualidade: {
+    dashboard: { ver: true, criar: true, editar: true, excluir: true, escopoSetor: 'todos' },
+    documentos: { ver: true, criar: true, editar: true, excluir: true, escopoSetor: 'todos' },
+    indicadores: { ver: true, criar: true, editar: true, excluir: true, escopoSetor: 'todos' },
+    ceo: { ver: true, criar: true, editar: true, excluir: true, escopoSetor: 'todos' },
+    registros: { ver: true, criar: true, editar: true, excluir: true, escopoSetor: 'todos' },
+    fornecedores: { ver: true, criar: true, editar: true, excluir: true, escopoSetor: 'todos' },
+    auditorias: { ver: true, criar: true, editar: true, excluir: true, escopoSetor: 'todos' },
+    riscos: { ver: true, criar: true, editar: true, excluir: true, escopoSetor: 'todos' },
+    planos: { ver: true, criar: true, editar: true, excluir: true, escopoSetor: 'todos' },
+    '5s': { ver: true, criar: true, editar: true, excluir: true, escopoSetor: 'todos' },
+    treinamentos: { ver: true, criar: true, editar: true, excluir: true, escopoSetor: 'todos' },
+    calibracao: { ver: true, criar: true, editar: true, excluir: true, escopoSetor: 'todos' },
+    usuarios: { ver: true, criar: true, editar: true, excluir: false, escopoSetor: 'todos' },
+    configuracoes: { ver: true, criar: true, editar: true, excluir: false, escopoSetor: 'todos' },
+    integracao: { ver: true, criar: true, editar: true, excluir: false, escopoSetor: 'todos' },
+    database: { ver: false, criar: false, editar: false, excluir: false, escopoSetor: 'todos' }
+  },
+
+  Gestor: {
+    dashboard: { ver: true, criar: false, editar: false, excluir: false, escopoSetor: 'todos' },
+    documentos: { ver: true, criar: true, editar: true, excluir: false, escopoSetor: 'todos' },
+    indicadores: { ver: true, criar: true, editar: true, excluir: false, escopoSetor: 'todos' },
+    ceo: { ver: true, criar: true, editar: true, excluir: false, escopoSetor: 'todos' },
+    registros: { ver: true, criar: true, editar: true, excluir: false, escopoSetor: 'todos' },
+    fornecedores: { ver: true, criar: true, editar: true, excluir: false, escopoSetor: 'todos' },
+    auditorias: { ver: true, criar: true, editar: true, excluir: false, escopoSetor: 'todos' },
+    riscos: { ver: true, criar: true, editar: true, excluir: false, escopoSetor: 'todos' },
+    planos: { ver: true, criar: true, editar: true, excluir: false, escopoSetor: 'todos' },
+    '5s': { ver: true, criar: true, editar: true, excluir: false, escopoSetor: 'todos' },
+    treinamentos: { ver: true, criar: true, editar: true, excluir: false, escopoSetor: 'todos' },
+    calibracao: { ver: true, criar: true, editar: true, excluir: false, escopoSetor: 'todos' },
+    usuarios: { ver: true, criar: false, editar: false, excluir: false, escopoSetor: 'todos' },
+    configuracoes: { ver: true, criar: false, editar: false, excluir: false, escopoSetor: 'todos' },
+    integracao: { ver: true, criar: false, editar: false, excluir: false, escopoSetor: 'todos' },
+    database: { ver: false, criar: false, editar: false, excluir: false, escopoSetor: 'todos' }
+  },
+
+  Supervisor: {
+    dashboard: { ver: true, criar: false, editar: false, excluir: false, escopoSetor: 'setor_proprio' },
+    documentos: { ver: true, criar: true, editar: true, excluir: false, escopoSetor: 'setor_proprio' },
+    indicadores: { ver: true, criar: false, editar: false, excluir: false, escopoSetor: 'setor_proprio' },
+    ceo: { ver: true, criar: false, editar: false, excluir: false, escopoSetor: 'setor_proprio' },
+    registros: { ver: true, criar: true, editar: true, excluir: false, escopoSetor: 'setor_proprio' },
+    fornecedores: { ver: true, criar: false, editar: false, excluir: false, escopoSetor: 'setor_proprio' },
+    auditorias: { ver: true, criar: false, editar: true, excluir: false, escopoSetor: 'setor_proprio' },
+    riscos: { ver: true, criar: true, editar: true, excluir: false, escopoSetor: 'setor_proprio' },
+    planos: { ver: true, criar: true, editar: true, excluir: false, escopoSetor: 'setor_proprio' },
+    '5s': { ver: true, criar: true, editar: true, excluir: false, escopoSetor: 'setor_proprio' },
+    treinamentos: { ver: true, criar: true, editar: true, excluir: false, escopoSetor: 'setor_proprio' },
+    calibracao: { ver: true, criar: false, editar: true, excluir: false, escopoSetor: 'setor_proprio' },
+    usuarios: { ver: false, criar: false, editar: false, excluir: false, escopoSetor: 'setor_proprio' },
+    configuracoes: { ver: false, criar: false, editar: false, excluir: false, escopoSetor: 'setor_proprio' },
+    integracao: { ver: false, criar: false, editar: false, excluir: false, escopoSetor: 'setor_proprio' },
+    database: { ver: false, criar: false, editar: false, excluir: false, escopoSetor: 'setor_proprio' }
+  },
+
+  Auditor: {
+    dashboard: { ver: true, criar: false, editar: false, excluir: false, escopoSetor: 'todos' },
+    documentos: { ver: true, criar: false, editar: false, excluir: false, escopoSetor: 'todos' },
+    indicadores: { ver: true, criar: false, editar: false, excluir: false, escopoSetor: 'todos' },
+    ceo: { ver: true, criar: false, editar: false, excluir: false, escopoSetor: 'todos' },
+    registros: { ver: true, criar: false, editar: false, excluir: false, escopoSetor: 'todos' },
+    fornecedores: { ver: true, criar: false, editar: false, excluir: false, escopoSetor: 'todos' },
+    auditorias: { ver: true, criar: true, editar: true, excluir: false, escopoSetor: 'todos' },
+    riscos: { ver: true, criar: true, editar: false, excluir: false, escopoSetor: 'todos' },
+    planos: { ver: true, criar: true, editar: false, excluir: false, escopoSetor: 'todos' },
+    '5s': { ver: true, criar: true, editar: true, excluir: false, escopoSetor: 'todos' },
+    treinamentos: { ver: true, criar: false, editar: false, excluir: false, escopoSetor: 'todos' },
+    calibracao: { ver: true, criar: false, editar: false, excluir: false, escopoSetor: 'todos' },
+    usuarios: { ver: false, criar: false, editar: false, excluir: false, escopoSetor: 'todos' },
+    configuracoes: { ver: false, criar: false, editar: false, excluir: false, escopoSetor: 'todos' },
+    integracao: { ver: false, criar: false, editar: false, excluir: false, escopoSetor: 'todos' },
+    database: { ver: false, criar: false, editar: false, excluir: false, escopoSetor: 'todos' }
+  },
+
+  Colaborador: {
+    dashboard: { ver: true, criar: false, editar: false, excluir: false, escopoSetor: 'setor_proprio' },
+    documentos: { ver: true, criar: false, editar: false, excluir: false, escopoSetor: 'setor_proprio' },
+    indicadores: { ver: true, criar: false, editar: false, excluir: false, escopoSetor: 'setor_proprio' },
+    ceo: { ver: true, criar: false, editar: false, excluir: false, escopoSetor: 'setor_proprio' },
+    registros: { ver: true, criar: false, editar: false, excluir: false, escopoSetor: 'setor_proprio' },
+    fornecedores: { ver: false, criar: false, editar: false, excluir: false, escopoSetor: 'setor_proprio' },
+    auditorias: { ver: false, criar: false, editar: false, excluir: false, escopoSetor: 'setor_proprio' },
+    riscos: { ver: false, criar: false, editar: false, excluir: false, escopoSetor: 'setor_proprio' },
+    planos: { ver: false, criar: false, editar: false, excluir: false, escopoSetor: 'setor_proprio' },
+    '5s': { ver: true, criar: false, editar: false, excluir: false, escopoSetor: 'setor_proprio' },
+    treinamentos: { ver: true, criar: false, editar: false, excluir: false, escopoSetor: 'setor_proprio' },
+    calibracao: { ver: false, criar: false, editar: false, excluir: false, escopoSetor: 'setor_proprio' },
+    usuarios: { ver: false, criar: false, editar: false, excluir: false, escopoSetor: 'setor_proprio' },
+    configuracoes: { ver: false, criar: false, editar: false, excluir: false, escopoSetor: 'setor_proprio' },
+    integracao: { ver: false, criar: false, editar: false, excluir: false, escopoSetor: 'setor_proprio' },
+    database: { ver: false, criar: false, editar: false, excluir: false, escopoSetor: 'setor_proprio' }
+  },
+
+  Visitante: {
+    dashboard: { ver: true, criar: false, editar: false, excluir: false, escopoSetor: 'todos' },
+    documentos: { ver: true, criar: false, editar: false, excluir: false, escopoSetor: 'todos' },
+    indicadores: { ver: true, criar: false, editar: false, excluir: false, escopoSetor: 'todos' },
+    ceo: { ver: true, criar: false, editar: false, excluir: false, escopoSetor: 'todos' },
+    registros: { ver: true, criar: false, editar: false, excluir: false, escopoSetor: 'todos' },
+    fornecedores: { ver: false, criar: false, editar: false, excluir: false, escopoSetor: 'todos' },
+    auditorias: { ver: false, criar: false, editar: false, excluir: false, escopoSetor: 'todos' },
+    riscos: { ver: false, criar: false, editar: false, excluir: false, escopoSetor: 'todos' },
+    planos: { ver: false, criar: false, editar: false, excluir: false, escopoSetor: 'todos' },
+    '5s': { ver: false, criar: false, editar: false, excluir: false, escopoSetor: 'todos' },
+    treinamentos: { ver: false, criar: false, editar: false, excluir: false, escopoSetor: 'todos' },
+    calibracao: { ver: false, criar: false, editar: false, excluir: false, escopoSetor: 'todos' },
+    usuarios: { ver: false, criar: false, editar: false, excluir: false, escopoSetor: 'todos' },
+    configuracoes: { ver: false, criar: false, editar: false, excluir: false, escopoSetor: 'todos' },
+    integracao: { ver: false, criar: false, editar: false, excluir: false, escopoSetor: 'todos' },
+    database: { ver: false, criar: false, editar: false, excluir: false, escopoSetor: 'todos' }
+  }
+};
+
+/**
+ * Obtém a permissão efetiva do usuário para determinado módulo, combinando herança do cargo com customizações do usuário.
+ */
+export function getEffectiveModulePermission(
+  role: UserRole = 'Colaborador',
+  moduleId: SystemModuleId | string,
+  customPermissions?: Record<string, ModuleCrudPermission>
+): ModuleCrudPermission {
+  const roleDefaults = DEFAULT_ROLE_CRUD_PERMISSIONS[role] || DEFAULT_ROLE_CRUD_PERMISSIONS['Colaborador'];
+  const basePerm = (roleDefaults as any)[moduleId] || {
+    ver: false,
+    criar: false,
+    editar: false,
+    excluir: false,
+    escopoSetor: 'setor_proprio' as SectorScope
+  };
+
+  if (customPermissions && customPermissions[moduleId]) {
+    return {
+      ...basePerm,
+      ...customPermissions[moduleId]
+    };
+  }
+
+  return basePerm;
+}
+
+/**
+ * Verifica se o usuário tem permissão para realizar uma ação (Ver, Criar, Editar, Excluir)
+ * levando em consideração o Perfil Técnico, as Customizações do Usuário e o Setor do Item.
+ */
+export function canUserPerform(
+  user: {
+    role?: UserRole;
+    sector?: string;
+    customPermissions?: Record<string, ModuleCrudPermission>;
+  } | null,
+  moduleId: SystemModuleId | string,
+  action: CrudAction,
+  itemSector?: string
+): boolean {
+  if (!user) return false;
+
+  const role = user.role || 'Colaborador';
+  
+  // Administrador tem superpoderes caso não haja bloqueio explícito
+  if (role === 'Administrador' && (!user.customPermissions || !user.customPermissions[moduleId])) {
+    return true;
+  }
+
+  const effective = getEffectiveModulePermission(role, moduleId, user.customPermissions);
+  const actionAllowed = effective[action];
+
+  if (!actionAllowed) {
+    return false;
+  }
+
+  // Se a ação é permitida e o escopo é 'todos', autorização total
+  if (effective.escopoSetor === 'todos') {
+    return true;
+  }
+
+  // Se o escopo é restrito ao setor próprio e foi passado um setor de item:
+  if (effective.escopoSetor === 'setor_proprio' && itemSector && user.sector) {
+    const cleanUserSector = user.sector.trim().toLowerCase();
+    const cleanItemSector = itemSector.trim().toLowerCase();
+    
+    // Setores universais ou idênticos
+    if (cleanItemSector === 'todos' || cleanItemSector === 'geral' || cleanItemSector === cleanUserSector) {
+      return true;
+    }
+
+    // Se a ação for criar e o escopo for setor_proprio, o usuário só cria no seu setor
+    if (action === 'criar') {
+      return cleanItemSector === cleanUserSector;
+    }
+
+    return false;
+  }
+
+  return true;
+}
+
+/**
+ * Clona todas as permissões padrão do perfil selecionado
+ */
+export function generateDefaultPermissionsForRole(role: UserRole): Record<string, ModuleCrudPermission> {
+  const defaults = DEFAULT_ROLE_CRUD_PERMISSIONS[role] || DEFAULT_ROLE_CRUD_PERMISSIONS['Colaborador'];
+  return JSON.parse(JSON.stringify(defaults));
+}

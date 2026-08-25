@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { UserRole } from './role';
+import { UserRole, ModuleCrudPermission } from './role';
 import { SectorType } from './department';
 
 export interface UserProfile {
@@ -13,6 +13,7 @@ export interface UserProfile {
   photoURL?: string;
   role: UserRole;
   sector?: SectorType;
+  customPermissions?: Record<string, ModuleCrudPermission>;
 }
 
 export interface UserAccount {
@@ -26,6 +27,7 @@ export interface UserAccount {
   passwordHash: string; // Senha em texto ou hash simulado
   lastLogin?: string;
   telefone?: string;
+  customPermissions?: Record<string, ModuleCrudPermission>;
 }
 
 // Alias solicitado para infraestrutura

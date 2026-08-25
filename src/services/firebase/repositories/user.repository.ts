@@ -27,12 +27,13 @@ class UserRepositoryClass extends BaseRepository<UserAccount> {
       status: rec.status || 'Ativo',
       passwordHash: rec.passwordHash || rec.password_hash || rec.password || 'vickytex123',
       lastLogin: rec.last_login || rec.lastLogin,
-      telefone: rec.telefone
+      telefone: rec.telefone,
+      customPermissions: rec.customPermissions || rec.custom_permissions || undefined
     };
   }
 
   protected mapToPayload(data: Partial<UserAccount>): any {
-    return {
+    const payload: any = {
       name: data.name,
       email: data.email,
       role: data.role,
@@ -43,6 +44,13 @@ class UserRepositoryClass extends BaseRepository<UserAccount> {
       photo_url: data.photoURL,
       telefone: data.telefone
     };
+
+    if (data.customPermissions !== undefined) {
+      payload.customPermissions = data.customPermissions;
+      payload.custom_permissions = data.customPermissions;
+    }
+
+    return payload;
   }
 
   protected getSearchFilter(query: string): string {

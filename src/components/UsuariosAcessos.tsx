@@ -39,12 +39,29 @@ import {
   FolderLock,
   Truck,
   Activity,
-  Award
+  Award,
+  Eye,
+  Check,
+  Copy,
+  Printer,
+  Building2,
+  Globe,
+  RefreshCw,
+  Zap,
+  LockKeyhole,
+  ChevronRight,
+  Filter
 } from 'lucide-react';
-import { UserAccount, RolePermission, UserRole, SectorType } from '../types';
+import { UserAccount, RolePermission, UserRole, SectorType, CrudAction, SectorScope, SystemModuleId, ModuleCrudPermission } from '../types';
 import { useSectors } from '../hooks/useSectors';
 import { getSectors, PersonalizacaoGeral } from '../utils/mockData';
 import { useAuth } from '../contexts/AuthContext';
+import { 
+  SYSTEM_MODULES, 
+  DEFAULT_ROLE_CRUD_PERMISSIONS, 
+  getEffectiveModulePermission, 
+  generateDefaultPermissionsForRole 
+} from '../utils/permissionManager';
 
 interface UsuariosAcessosProps {
   users: UserAccount[];
@@ -102,6 +119,23 @@ export const UsuariosAcessos: React.FC<UsuariosAcessosProps> = ({
   const { user: currentLoggedUser, switchProfile, refreshUser } = useAuth();
   const [activeTab, setActiveTab] = useState<'perfil' | 'usuarios' | 'permissoes'>('perfil');
   const sectorsList = useSectors();
+
+  // Sub-aba da Matriz de Acessos ('usuario' = granular V,C,E,X por colaborador | 'roles' = perfis técnicos clássicos)
+  const [matrizMode, setMatrizMode] = useState<'usuario' | 'roles'>('usuario');
+  const [selectedUserIdForMatrix, setSelectedUserIdForMatrix] = useState<string>(() => users[0]?.id || 'user-1');
+  const [matrixCategoryFilter, setMatrixCategoryFilter] = useState<string>('todos');
+  const [matrixSearchModule, setMatrixSearchModule] = useState<string>('');
+  
+  // Modais da Matriz
+  const [isCloneModalOpen, setIsCloneModalOpen] = useState(false);
+  const [cloneSourceUserId, setCloneSourceUserId] = useState<string>('');
+  const [isPrintOfficialModalOpen, setIsPrintOfficialModalOpen] = useState(false);
+  const [feedbackToast, setFeedbackToast] = useState<{ message: string; type: 'success' | 'info' | 'error' } | null>(null);
+
+  const showToast = (message: string, type: 'success' | 'info' | 'error' = 'success') => {
+    setFeedbackToast({ message, type });
+    setTimeout(() => setFeedbackToast(null), 4000);
+  };
 
   // Search & Filters for Users Tab
   const [userSearch, setUserSearch] = useState('');
@@ -353,6 +387,308 @@ export const UsuariosAcessos: React.FC<UsuariosAcessosProps> = ({
 
     onUpdatePermissions(updatedPermissions);
     onAddLog('Matriz de Permissão Alterada', `Alterada matriz de permissão de acesso para o perfil de ${role}. Módulo: ${sectionId}`);
+  };
+
+  // Usuário selecionado na Matriz de Acessos
+  const selectedUserForMatrix = users.find(u => u.id === selectedUserIdForMatrix) || users[0];
+
+  // Helper para verificar se o usuário logado pode editar permissões
+  const canManageAccessMatrix = !currentLoggedUser || currentLoggedUser?.role === 'Administrador' || currentLoggedUser?.role === 'Qualidade' || currentLoggedUser?.role === 'Gestor';
+
+  // Toggle de ação CRUD específica para o usuário selecionado
+  const handleToggleUserCrudAction = (moduleId: string, action: CrudAction) => {
+    if (!canManageAccessMatrix) {
+      showToast('Apenas administradores ou analistas de qualidade podem editar a matriz de acessos (ISO 9001:2015).', 'error');
+      return;
+    }
+    if (!selectedUserForMatrix) return;
+
+    const userRole = selectedUserForMatrix.role || 'Colaborador';
+    const currentEffective = getEffectiveModulePermission(userRole, moduleId, selectedUserForMatrix.customPermissions);
+    
+    // Calcula novo estado da ação
+    const newActionState = !currentEffective[action];
+    
+    // Se estiver desativando a visualização ('ver'), desativa também criar, editar e excluir
+    let updatedModulePerm: ModuleCrudPermission = {
+      ...currentEffective,
+      [action]: newActionState
+    };
+
+    if (action === 'ver' && !newActionState) {
+      updatedModulePerm = {
+        ...updatedModulePerm,
+        ver: false,
+        criar: false,
+        editar: false,
+        excluir: false
+      };
+    } else if (action !== 'ver' && newActionState) {
+      // Se ativar criar/editar/excluir, garante que 'ver' esteja ativado
+      updatedModulePerm.ver = true;
+    }
+
+    const updatedCustom: Record<string, ModuleCrudPermission> = {
+      ...(selectedUserForMatrix.customPermissions || {}),
+      [moduleId]: updatedModulePerm
+    };
+
+    const updatedUser: UserAccount = {
+      ...selectedUserForMatrix,
+      customPermissions: updatedCustom
+    };
+
+    onUpdateUser(updatedUser);
+    onAddLog(
+      'Permissão de Usuário Alterada', 
+      `Ação [${action.toUpperCase()}] ${newActionState ? 'concedida' : 'revogada'} no módulo ${moduleId} para o usuário ${selectedUserForMatrix.name} (${selectedUserForMatrix.email}).`
+    );
+
+    if (selectedUserForMatrix.email === currentLoggedUser?.email) {
+      refreshUser({
+        ...currentLoggedUser,
+        customPermissions: updatedCustom
+      });
+    }
+
+    showToast(`Permissão de ${action.toUpperCase()} no módulo atualizada.`);
+  };
+
+  // Alterna o escopo de setor do módulo para o usuário
+  const handleToggleUserModuleScope = (moduleId: string) => {
+    if (!canManageAccessMatrix) {
+      showToast('Apenas administradores ou analistas de qualidade podem editar o escopo de setor.', 'error');
+      return;
+    }
+    if (!selectedUserForMatrix) return;
+
+    const userRole = selectedUserForMatrix.role || 'Colaborador';
+    const currentEffective = getEffectiveModulePermission(userRole, moduleId, selectedUserForMatrix.customPermissions);
+    const newScope: SectorScope = currentEffective.escopoSetor === 'setor_proprio' ? 'todos' : 'setor_proprio';
+
+    const updatedModulePerm: ModuleCrudPermission = {
+      ...currentEffective,
+      escopoSetor: newScope
+    };
+
+    const updatedCustom: Record<string, ModuleCrudPermission> = {
+      ...(selectedUserForMatrix.customPermissions || {}),
+      [moduleId]: updatedModulePerm
+    };
+
+    const updatedUser: UserAccount = {
+      ...selectedUserForMatrix,
+      customPermissions: updatedCustom
+    };
+
+    onUpdateUser(updatedUser);
+    onAddLog(
+      'Escopo de Setor Alterado',
+      `Escopo do módulo ${moduleId} alterado para [${newScope === 'todos' ? 'Todos os Setores (Global)' : `Setor Próprio (${selectedUserForMatrix.sector})`}] para ${selectedUserForMatrix.name}.`
+    );
+
+    if (selectedUserForMatrix.email === currentLoggedUser?.email) {
+      refreshUser({
+        ...currentLoggedUser,
+        customPermissions: updatedCustom
+      });
+    }
+
+    showToast(`Escopo de setor alterado para ${newScope === 'todos' ? 'Global (Todos os Setores)' : `Apenas ${selectedUserForMatrix.sector}`}.`);
+  };
+
+  // Restaura as permissões para o padrão do Perfil Técnico (Role)
+  const handleResetUserToRoleDefaults = () => {
+    if (!canManageAccessMatrix) {
+      showToast('Permissão negada.', 'error');
+      return;
+    }
+    if (!selectedUserForMatrix) return;
+
+    const updatedUser: UserAccount = {
+      ...selectedUserForMatrix,
+      customPermissions: undefined // Remove customizações, passa a herdar diretamente do perfil técnico
+    };
+
+    onUpdateUser(updatedUser);
+    onAddLog(
+      'Restauração de Permissões',
+      `Permissões de ${selectedUserForMatrix.name} restauradas para a herança padrão do perfil de ${selectedUserForMatrix.role}.`
+    );
+
+    if (selectedUserForMatrix.email === currentLoggedUser?.email) {
+      refreshUser({
+        ...currentLoggedUser,
+        customPermissions: undefined
+      });
+    }
+
+    showToast(`Permissões restauradas com sucesso para o padrão de ${selectedUserForMatrix.role}.`);
+  };
+
+  // Concede Acesso Total (V + C + E + X e Escopo Global em todos os 16 módulos)
+  const handleGrantAllAccess = () => {
+    if (!canManageAccessMatrix) {
+      showToast('Permissão negada.', 'error');
+      return;
+    }
+    if (!selectedUserForMatrix) return;
+
+    const allGranted: Record<string, ModuleCrudPermission> = {};
+    SYSTEM_MODULES.forEach(m => {
+      allGranted[m.id] = {
+        ver: true,
+        criar: true,
+        editar: true,
+        excluir: true,
+        escopoSetor: 'todos'
+      };
+    });
+
+    const updatedUser: UserAccount = {
+      ...selectedUserForMatrix,
+      customPermissions: allGranted
+    };
+
+    onUpdateUser(updatedUser);
+    onAddLog(
+      'Acesso Total Concedido',
+      `Liberado acesso total (V+C+E+X / Global) em todos os módulos para ${selectedUserForMatrix.name}.`
+    );
+
+    if (selectedUserForMatrix.email === currentLoggedUser?.email) {
+      refreshUser({
+        ...currentLoggedUser,
+        customPermissions: allGranted
+      });
+    }
+
+    showToast(`Acesso Total liberado em todos os 16 módulos para ${selectedUserForMatrix.name}.`);
+  };
+
+  // Define modo Somente Leitura em todos os módulos
+  const handleSetReadOnlyAll = () => {
+    if (!canManageAccessMatrix) {
+      showToast('Permissão negada.', 'error');
+      return;
+    }
+    if (!selectedUserForMatrix) return;
+
+    const readOnlyAll: Record<string, ModuleCrudPermission> = {};
+    SYSTEM_MODULES.forEach(m => {
+      readOnlyAll[m.id] = {
+        ver: true,
+        criar: false,
+        editar: false,
+        excluir: false,
+        escopoSetor: 'todos'
+      };
+    });
+
+    const updatedUser: UserAccount = {
+      ...selectedUserForMatrix,
+      customPermissions: readOnlyAll
+    };
+
+    onUpdateUser(updatedUser);
+    onAddLog(
+      'Acesso Somente Leitura',
+      `Definido modo somente leitura (apenas Visualizar) em todos os módulos para ${selectedUserForMatrix.name}.`
+    );
+
+    if (selectedUserForMatrix.email === currentLoggedUser?.email) {
+      refreshUser({
+        ...currentLoggedUser,
+        customPermissions: readOnlyAll
+      });
+    }
+
+    showToast(`Modo Somente Leitura aplicado para ${selectedUserForMatrix.name}.`);
+  };
+
+  // Altera o escopo de todos os módulos de uma vez para o usuário
+  const handleSetAllScope = (scope: SectorScope) => {
+    if (!canManageAccessMatrix) {
+      showToast('Permissão negada.', 'error');
+      return;
+    }
+    if (!selectedUserForMatrix) return;
+
+    const currentRole = selectedUserForMatrix.role || 'Colaborador';
+    const updatedCustom: Record<string, ModuleCrudPermission> = {};
+
+    SYSTEM_MODULES.forEach(m => {
+      const effective = getEffectiveModulePermission(currentRole, m.id, selectedUserForMatrix.customPermissions);
+      updatedCustom[m.id] = {
+        ...effective,
+        escopoSetor: scope
+      };
+    });
+
+    const updatedUser: UserAccount = {
+      ...selectedUserForMatrix,
+      customPermissions: updatedCustom
+    };
+
+    onUpdateUser(updatedUser);
+    onAddLog(
+      'Escopo em Massa Alterado',
+      `Todos os módulos do usuário ${selectedUserForMatrix.name} foram configurados para o escopo: [${scope === 'todos' ? 'Global (Todos os Setores)' : `Apenas Setor Próprio (${selectedUserForMatrix.sector})`}].`
+    );
+
+    if (selectedUserForMatrix.email === currentLoggedUser?.email) {
+      refreshUser({
+        ...currentLoggedUser,
+        customPermissions: updatedCustom
+      });
+    }
+
+    showToast(`Escopo de todos os módulos atualizado para ${scope === 'todos' ? 'Global' : `Setor Próprio (${selectedUserForMatrix.sector})`}.`);
+  };
+
+  // Clona permissões de outro usuário
+  const handleApplyClone = () => {
+    if (!canManageAccessMatrix) {
+      showToast('Permissão negada.', 'error');
+      return;
+    }
+    if (!selectedUserForMatrix || !cloneSourceUserId) {
+      showToast('Selecione um colaborador de origem para clonar.', 'error');
+      return;
+    }
+
+    const sourceUser = users.find(u => u.id === cloneSourceUserId);
+    if (!sourceUser) return;
+
+    // Constrói objeto de permissões do usuário de origem
+    const sourceRole = sourceUser.role || 'Colaborador';
+    const sourcePermissions: Record<string, ModuleCrudPermission> = {};
+
+    SYSTEM_MODULES.forEach(m => {
+      sourcePermissions[m.id] = getEffectiveModulePermission(sourceRole, m.id, sourceUser.customPermissions);
+    });
+
+    const updatedTargetUser: UserAccount = {
+      ...selectedUserForMatrix,
+      customPermissions: sourcePermissions
+    };
+
+    onUpdateUser(updatedTargetUser);
+    onAddLog(
+      'Clonagem de Direitos de Acesso',
+      `Direitos e alçadas de acesso do colaborador ${sourceUser.name} (${sourceUser.sector}) clonados para ${selectedUserForMatrix.name} (${selectedUserForMatrix.sector}).`
+    );
+
+    if (selectedUserForMatrix.email === currentLoggedUser?.email) {
+      refreshUser({
+        ...currentLoggedUser,
+        customPermissions: sourcePermissions
+      });
+    }
+
+    setIsCloneModalOpen(false);
+    setCloneSourceUserId('');
+    showToast(`Direitos de ${sourceUser.name} clonados com sucesso para ${selectedUserForMatrix.name}!`);
   };
 
   // Filter users list based on filters
@@ -788,7 +1124,18 @@ export const UsuariosAcessos: React.FC<UsuariosAcessosProps> = ({
                             </span>
                           </td>
                           <td className="px-5 py-3.5 text-right">
-                            <div className="flex items-center justify-end space-x-2">
+                            <div className="flex items-center justify-end space-x-1.5">
+                              <button
+                                onClick={() => {
+                                  setSelectedUserIdForMatrix(userItem.id);
+                                  setMatrizMode('usuario');
+                                  setActiveTab('permissoes');
+                                }}
+                                className="p-1.5 text-slate-500 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 rounded-md transition-colors"
+                                title="Gerenciar Direitos & Matriz [V|C|E|X]"
+                              >
+                                <ShieldCheck className="w-3.5 h-3.5" />
+                              </button>
                               <button
                                 onClick={() => handleOpenEditForm(userItem)}
                                 className="p-1.5 text-slate-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/30 rounded-md transition-colors"
@@ -820,93 +1167,709 @@ export const UsuariosAcessos: React.FC<UsuariosAcessosProps> = ({
         {activeTab === 'permissoes' && (
           <div className="space-y-6">
             
-            {/* Disclaimer Informativo */}
-            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-xl space-y-3 shadow-xs">
-              <h3 className="text-sm font-extrabold text-slate-800 dark:text-slate-100 flex items-center space-x-2">
-                <ShieldCheck className="w-4.5 h-4.5 text-blue-600" />
-                <span>Matriz Multidisciplinar de Direitos de Acesso ao SGQ</span>
-              </h3>
-              <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed max-w-4xl">
-                Altere os direitos de leitura/gravação associando ou desassociando os módulos às respectivas funções de trabalho da Vickytex.
-                As políticas definidas aqui entrarão em vigor em tempo real, limitando ou liberando as opções exibidas no menu principal e protegendo os dados de acessos não autorizados por pessoas externas ou sem a certificação correspondente.
-              </p>
-              {currentLoggedUser?.role !== 'Administrador' && currentLoggedUser?.role !== 'Qualidade' && (
-                <div className="bg-rose-50 dark:bg-rose-950/20 border border-rose-200 dark:border-rose-900 px-3 py-2.5 rounded-lg text-xs font-semibold text-rose-700 dark:text-rose-400 flex items-center space-x-2">
+            {/* Feedback Toast */}
+            {feedbackToast && (
+              <div className={`p-3 rounded-xl border flex items-center justify-between text-xs font-semibold animate-in fade-in slide-in-from-top-2 ${
+                feedbackToast.type === 'error' 
+                  ? 'bg-rose-50 border-rose-200 text-rose-700 dark:bg-rose-950/40 dark:border-rose-900 dark:text-rose-300'
+                  : 'bg-emerald-50 border-emerald-200 text-emerald-700 dark:bg-emerald-950/40 dark:border-emerald-900 dark:text-emerald-300'
+              }`}>
+                <div className="flex items-center space-x-2">
+                  {feedbackToast.type === 'error' ? <AlertTriangle className="w-4 h-4" /> : <CheckCircle className="w-4 h-4" />}
+                  <span>{feedbackToast.message}</span>
+                </div>
+                <button onClick={() => setFeedbackToast(null)} className="text-slate-400 hover:text-slate-600">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            )}
+
+            {/* Disclaimer & Sub-Navegação de Modos */}
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl space-y-4 shadow-xs">
+              <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+                <div className="space-y-1">
+                  <div className="flex items-center space-x-2.5">
+                    <div className="w-8 h-8 rounded-lg bg-blue-500/10 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400 flex items-center justify-center">
+                      <ShieldCheck className="w-4.5 h-4.5" />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-extrabold text-slate-900 dark:text-slate-100">
+                        Matriz Multidisciplinar de Direitos de Acesso ao SGQ
+                      </h3>
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                        Conformidade ISO 9001:2015 (Requisitos 5.3 Papéis & 7.5 Informação Documentada)
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Alternador de Modo: Por Usuário x Setor VS Por Perfil Técnico */}
+                <div className="flex items-center bg-slate-100 dark:bg-slate-800/80 p-1 rounded-xl border border-slate-200 dark:border-slate-700/60 self-start lg:self-auto">
+                  <button
+                    type="button"
+                    onClick={() => setMatrizMode('usuario')}
+                    className={`flex items-center space-x-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                      matrizMode === 'usuario'
+                        ? 'bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-xs'
+                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+                    }`}
+                  >
+                    <Users className="w-3.5 h-3.5" />
+                    <span>Por Colaborador & Setor [V, C, E, X]</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setMatrizMode('roles')}
+                    className={`flex items-center space-x-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                      matrizMode === 'roles'
+                        ? 'bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-xs'
+                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+                    }`}
+                  >
+                    <Briefcase className="w-3.5 h-3.5" />
+                    <span>Perfis Técnicos (Roles Herdadas)</span>
+                  </button>
+                </div>
+              </div>
+
+              {!canManageAccessMatrix && (
+                <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900 px-3.5 py-2.5 rounded-xl text-xs font-semibold text-amber-700 dark:text-amber-400 flex items-center space-x-2">
                   <AlertTriangle className="w-4 h-4 shrink-0" />
-                  <span>Sua conta atual de ({currentLoggedUser?.role}) está no modo de visualização. Apenas Qualidade ou Administradores podem modificar esta tabela.</span>
+                  <span>Modo de visualização (Auditoria). Apenas analistas de Qualidade ou Administradores têm alçada para alterar direitos de acesso.</span>
                 </div>
               )}
             </div>
 
-            {/* Tabela de Matriz */}
-            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden shadow-sm">
-              <div className="overflow-x-auto">
-                <table className="w-full text-center border-collapse">
-                  <thead>
-                    <tr className="bg-slate-50 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 text-[10px] font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                      <th className="px-5 py-4 text-left">Módulo / Sub-Área do SGQ</th>
-                      {ROLES.map(role => (
-                        <th key={role} className="px-4 py-4 min-w-[120px]">
-                          <span className="block text-slate-800 dark:text-slate-100">{role}</span>
-                          <span className="text-[9px] font-mono font-normal text-slate-400 lowercase">perfil técnico</span>
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-200 dark:divide-slate-800/80">
-                    {SECTION_METADATA.map((section) => {
-                      const SectionIcon = section.icon;
-                      return (
-                        <tr 
-                          key={section.id} 
-                          className="hover:bg-slate-50/50 dark:hover:bg-slate-800/20 transition-colors text-xs text-slate-700 dark:text-slate-300"
-                        >
-                          {/* Coluna 1: Nome do Módulo */}
-                          <td className="px-5 py-4 text-left">
-                            <div className="flex items-center space-x-3">
-                              <div className="w-7 h-7 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 flex items-center justify-center">
-                                <SectionIcon className="w-4 h-4" />
-                              </div>
-                              <div>
-                                <p className="font-bold text-slate-900 dark:text-slate-100">{section.label}</p>
-                                <p className="text-[10px] text-slate-400 font-mono">id: /{section.id}</p>
-                              </div>
-                            </div>
-                          </td>
+            {/* MODO 1: MATRIZ POR USUÁRIO X SETOR X FUNÇÃO [V, C, E, X] */}
+            {matrizMode === 'usuario' && (
+              <div className="space-y-6 animate-in fade-in duration-200">
+                
+                {/* Seletor do Colaborador e Painel de Alçada */}
+                <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl space-y-4 shadow-xs">
+                  
+                  <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 border-b border-slate-100 dark:border-slate-800/80 pb-4">
+                    {/* Seletor de Usuário */}
+                    <div className="flex flex-1 items-center gap-3">
+                      <div className="relative shrink-0">
+                        <img 
+                          src={selectedUserForMatrix?.photoURL || PRESET_AVATARS[0]} 
+                          alt={selectedUserForMatrix?.name} 
+                          className="w-12 h-12 rounded-full object-cover border-2 border-blue-500/20 shadow-xs"
+                        />
+                        <span className={`absolute bottom-0 right-0 w-3.5 h-3.5 rounded-full border-2 border-white dark:border-slate-900 ${
+                          selectedUserForMatrix?.status === 'Ativo' ? 'bg-emerald-500' : 'bg-slate-400'
+                        }`} />
+                      </div>
 
-                          {/* Colunas dos Roles */}
-                          {ROLES.map(role => {
-                            const rolePerm = permissions.find(p => p.role === role);
-                            const hasAccess = rolePerm?.allowedSections.includes(section.id) || false;
+                      <div className="space-y-1 flex-1">
+                        <label className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">
+                          Selecionar Colaborador para Gerenciar Alçadas:
+                        </label>
+                        <select
+                          value={selectedUserIdForMatrix}
+                          onChange={(e) => setSelectedUserIdForMatrix(e.target.value)}
+                          className="w-full max-w-md bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 dark:text-slate-100 focus:outline-hidden focus:ring-2 focus:ring-blue-500"
+                        >
+                          {users.map(u => (
+                            <option key={u.id} value={u.id}>
+                              {u.name} — {u.role} ({u.sector}) [{u.status}]
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+
+                    {/* Badges de Identificação do Usuário Selecionado */}
+                    {selectedUserForMatrix && (
+                      <div className="flex flex-wrap items-center gap-2">
+                        <div className="bg-slate-50 dark:bg-slate-800 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 text-right">
+                          <span className="block text-[9px] font-mono text-slate-400 uppercase">Perfil Técnico:</span>
+                          <span className="text-xs font-extrabold text-blue-600 dark:text-blue-400">{selectedUserForMatrix.role}</span>
+                        </div>
+                        <div className="bg-slate-50 dark:bg-slate-800 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 text-right">
+                          <span className="block text-[9px] font-mono text-slate-400 uppercase">Setor Vinculado:</span>
+                          <span className="text-xs font-extrabold text-slate-800 dark:text-slate-200 flex items-center space-x-1 justify-end">
+                            <Building2 className="w-3 h-3 text-slate-500" />
+                            <span>{selectedUserForMatrix.sector}</span>
+                          </span>
+                        </div>
+                        {selectedUserForMatrix.customPermissions && Object.keys(selectedUserForMatrix.customPermissions).length > 0 ? (
+                          <div className="bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 px-3 py-1.5 rounded-xl text-right">
+                            <span className="block text-[9px] font-mono text-emerald-600 dark:text-emerald-400 uppercase">Status Matriz:</span>
+                            <span className="text-xs font-extrabold text-emerald-700 dark:text-emerald-300">Regras Customizadas Ativas</span>
+                          </div>
+                        ) : (
+                          <div className="bg-slate-50 dark:bg-slate-800 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 text-right">
+                            <span className="block text-[9px] font-mono text-slate-400 uppercase">Status Matriz:</span>
+                            <span className="text-xs font-semibold text-slate-500">Herança Padrão ({selectedUserForMatrix.role})</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Barra de Ações Rápidas em Massa */}
+                  {canManageAccessMatrix && (
+                    <div className="flex flex-wrap items-center gap-2 pt-1">
+                      <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider mr-1">
+                        Ações Rápidas:
+                      </span>
+
+                      <button
+                        type="button"
+                        onClick={handleResetUserToRoleDefaults}
+                        className="inline-flex items-center space-x-1.5 px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg text-xs font-semibold transition-colors"
+                        title="Restaura as permissões para o padrão do cargo"
+                      >
+                        <RefreshCw className="w-3.5 h-3.5" />
+                        <span>Restaurar Padrão do Cargo</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={handleGrantAllAccess}
+                        className="inline-flex items-center space-x-1.5 px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:hover:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 rounded-lg text-xs font-semibold transition-colors"
+                        title="Concede leitura, criação, edição e exclusão global em todos os 16 módulos"
+                      >
+                        <Zap className="w-3.5 h-3.5 text-emerald-600" />
+                        <span>Liberar Acesso Total</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={handleSetReadOnlyAll}
+                        className="inline-flex items-center space-x-1.5 px-2.5 py-1.5 bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/40 dark:hover:bg-blue-900/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 rounded-lg text-xs font-semibold transition-colors"
+                        title="Define todos os módulos para visualização apenas"
+                      >
+                        <Eye className="w-3.5 h-3.5 text-blue-600" />
+                        <span>Somente Leitura [V]</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleSetAllScope('setor_proprio')}
+                        className="inline-flex items-center space-x-1.5 px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/40 dark:hover:bg-amber-900/60 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800 rounded-lg text-xs font-semibold transition-colors"
+                        title="Restringe todos os módulos ao setor vinculado do colaborador"
+                      >
+                        <Building2 className="w-3.5 h-3.5 text-amber-600" />
+                        <span>Restringir ao Setor ({selectedUserForMatrix?.sector})</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleSetAllScope('todos')}
+                        className="inline-flex items-center space-x-1.5 px-2.5 py-1.5 bg-purple-50 hover:bg-purple-100 dark:bg-purple-950/40 dark:hover:bg-purple-900/60 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800 rounded-lg text-xs font-semibold transition-colors"
+                        title="Expande o escopo de todos os módulos para acesso global a todos os setores"
+                      >
+                        <Globe className="w-3.5 h-3.5 text-purple-600" />
+                        <span>Escopo Global (Todos os Setores)</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setIsCloneModalOpen(true)}
+                        className="inline-flex items-center space-x-1.5 px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg text-xs font-semibold transition-colors ml-auto"
+                      >
+                        <Copy className="w-3.5 h-3.5" />
+                        <span>Clonar de Outro Usuário</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setIsPrintOfficialModalOpen(true)}
+                        className="inline-flex items-center space-x-1.5 px-2.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-white dark:bg-slate-100 dark:hover:bg-white dark:text-slate-900 rounded-lg text-xs font-bold transition-colors shadow-xs"
+                      >
+                        <Printer className="w-3.5 h-3.5" />
+                        <span>Visualizar / Imprimir Matriz Oficial (ISO 9001)</span>
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Filtro e Busca de Módulos */}
+                  <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-3 border-t border-slate-100 dark:border-slate-800/80">
+                    <div className="relative w-full sm:w-64">
+                      <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                      <input
+                        type="text"
+                        value={matrixSearchModule}
+                        onChange={(e) => setMatrixSearchModule(e.target.value)}
+                        placeholder="Buscar módulo do SGQ..."
+                        className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg pl-8 pr-3 py-1.5 text-xs text-slate-800 dark:text-slate-100 focus:outline-hidden focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+
+                    <div className="flex items-center gap-1.5 overflow-x-auto w-full sm:w-auto pb-1">
+                      {['todos', 'Geral & Estratégico', 'Qualidade & Documentação', 'Operação & Processos', 'Suporte & Sistema'].map((cat) => (
+                        <button
+                          key={cat}
+                          type="button"
+                          onClick={() => setMatrixCategoryFilter(cat)}
+                          className={`px-2.5 py-1 rounded-lg text-[11px] font-bold whitespace-nowrap transition-colors ${
+                            matrixCategoryFilter === cat
+                              ? 'bg-blue-600 text-white shadow-xs'
+                              : 'bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-400'
+                          }`}
+                        >
+                          {cat === 'todos' ? 'Todos os Módulos' : cat}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Tabela Interativa de Módulos x Funções [V, C, E, X] x Escopo */}
+                <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-sm">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse">
+                      <thead>
+                        <tr className="bg-slate-50 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 text-[10px] font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                          <th className="px-5 py-3.5">Módulo / Sub-Área do SGQ</th>
+                          <th className="px-3 py-3.5 text-center w-20">
+                            <span className="block text-slate-800 dark:text-slate-200">Ver [V]</span>
+                            <span className="text-[9px] font-mono font-normal text-slate-400 lowercase">leitura</span>
+                          </th>
+                          <th className="px-3 py-3.5 text-center w-20">
+                            <span className="block text-slate-800 dark:text-slate-200">Criar [C]</span>
+                            <span className="text-[9px] font-mono font-normal text-slate-400 lowercase">inclusão</span>
+                          </th>
+                          <th className="px-3 py-3.5 text-center w-20">
+                            <span className="block text-slate-800 dark:text-slate-200">Editar [E]</span>
+                            <span className="text-[9px] font-mono font-normal text-slate-400 lowercase">alteração</span>
+                          </th>
+                          <th className="px-3 py-3.5 text-center w-20">
+                            <span className="block text-slate-800 dark:text-slate-200">Excluir [X]</span>
+                            <span className="text-[9px] font-mono font-normal text-slate-400 lowercase">deleção</span>
+                          </th>
+                          <th className="px-4 py-3.5 text-center min-w-[200px]">
+                            <span className="block text-slate-800 dark:text-slate-200">Regra de Escopo do Setor</span>
+                            <span className="text-[9px] font-mono font-normal text-slate-400 lowercase">alçada de abrangência</span>
+                          </th>
+                          <th className="px-4 py-3.5 text-right">Alçada Geral</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-200 dark:divide-slate-800/80">
+                        {SYSTEM_MODULES
+                          .filter(m => {
+                            const matchesCat = matrixCategoryFilter === 'todos' || m.category === matrixCategoryFilter;
+                            const matchesSearch = m.label.toLowerCase().includes(matrixSearchModule.toLowerCase()) || 
+                                                  m.description.toLowerCase().includes(matrixSearchModule.toLowerCase()) ||
+                                                  m.id.toLowerCase().includes(matrixSearchModule.toLowerCase());
+                            return matchesCat && matchesSearch;
+                          })
+                          .map((mod) => {
+                            const sectionMeta = SECTION_METADATA.find(s => s.id === mod.id);
+                            const ModIcon = sectionMeta?.icon || FileText;
+                            
+                            const userRole = selectedUserForMatrix?.role || 'Colaborador';
+                            const effective = getEffectiveModulePermission(userRole, mod.id, selectedUserForMatrix?.customPermissions);
+
+                            // Status sintético consolidado
+                            let statusLabel = 'Sem Acesso';
+                            let statusBadgeClass = 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400';
+
+                            if (effective.ver && effective.criar && effective.editar && effective.excluir) {
+                              statusLabel = effective.escopoSetor === 'todos' ? 'Acesso Total (Global)' : 'Controle Total (Setor)';
+                              statusBadgeClass = 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400';
+                            } else if (effective.ver && (effective.criar || effective.editar)) {
+                              statusLabel = effective.escopoSetor === 'todos' ? 'Operação Global' : `Operação (${selectedUserForMatrix?.sector})`;
+                              statusBadgeClass = 'bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:text-blue-400';
+                            } else if (effective.ver) {
+                              statusLabel = 'Somente Leitura';
+                              statusBadgeClass = 'bg-indigo-100 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-400';
+                            }
 
                             return (
-                              <td key={role} className="px-4 py-4">
-                                <button
-                                  onClick={() => handleTogglePermission(role, section.id)}
-                                  className={`px-3 py-1.5 rounded-full text-[10px] font-bold transition-all ${
-                                    hasAccess 
-                                      ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 hover:ring-2 hover:ring-emerald-500/20' 
-                                      : 'bg-slate-100 text-slate-400 dark:bg-slate-800 dark:text-slate-500 hover:ring-2 hover:ring-slate-500/10'
-                                  }`}
-                                  title={`${hasAccess ? 'Revogar' : 'Conceder'} acesso ao módulo ${section.label} para o perfil de ${role}`}
-                                >
-                                  {hasAccess ? 'Permitido' : 'Bloqueado'}
-                                </button>
-                              </td>
+                              <tr 
+                                key={mod.id}
+                                className="hover:bg-slate-50/60 dark:hover:bg-slate-800/20 transition-colors text-xs text-slate-700 dark:text-slate-300"
+                              >
+                                {/* Coluna 1: Informações do Módulo */}
+                                <td className="px-5 py-3.5">
+                                  <div className="flex items-start space-x-3">
+                                    <div className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 flex items-center justify-center shrink-0 mt-0.5">
+                                      <ModIcon className="w-4 h-4" />
+                                    </div>
+                                    <div className="space-y-0.5">
+                                      <div className="flex items-center space-x-2">
+                                        <p className="font-extrabold text-slate-900 dark:text-slate-100">{mod.label}</p>
+                                        <span className="text-[9px] font-mono font-semibold px-1.5 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400">
+                                          {mod.category}
+                                        </span>
+                                      </div>
+                                      <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-tight">
+                                        {mod.description}
+                                      </p>
+                                    </div>
+                                  </div>
+                                </td>
+
+                                {/* Coluna 2: [V] Ver */}
+                                <td className="px-3 py-3.5 text-center">
+                                  <button
+                                    id={`btn-perm-ver-${mod.id}`}
+                                    type="button"
+                                    onClick={() => handleToggleUserCrudAction(mod.id, 'ver')}
+                                    className={`w-9 h-8 rounded-lg font-bold text-xs inline-flex items-center justify-center transition-all cursor-pointer select-none active:scale-95 ${
+                                      effective.ver
+                                        ? 'bg-emerald-600 text-white shadow-xs hover:bg-emerald-700'
+                                        : 'bg-slate-100 dark:bg-slate-800 text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
+                                    }`}
+                                    title={effective.ver ? 'Visualização Ativa [V]. Clique para bloquear/desativar.' : 'Visualização Bloqueada [V]. Clique para liberar.'}
+                                  >
+                                    {effective.ver ? <Check className="w-4 h-4" /> : <X className="w-4 h-4" />}
+                                  </button>
+                                </td>
+
+                                {/* Coluna 3: [C] Criar */}
+                                <td className="px-3 py-3.5 text-center">
+                                  <button
+                                    id={`btn-perm-criar-${mod.id}`}
+                                    type="button"
+                                    onClick={() => handleToggleUserCrudAction(mod.id, 'criar')}
+                                    className={`w-9 h-8 rounded-lg font-bold text-xs inline-flex items-center justify-center transition-all cursor-pointer select-none active:scale-95 ${
+                                      effective.criar
+                                        ? 'bg-blue-600 text-white shadow-xs hover:bg-blue-700'
+                                        : 'bg-slate-100 dark:bg-slate-800 text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
+                                    }`}
+                                    title={effective.criar ? 'Inclusão Permitida [C]. Clique para bloquear.' : 'Inclusão Bloqueada [C]. Clique para liberar.'}
+                                  >
+                                    {effective.criar ? <Check className="w-4 h-4" /> : <X className="w-4 h-4" />}
+                                  </button>
+                                </td>
+
+                                {/* Coluna 4: [E] Editar */}
+                                <td className="px-3 py-3.5 text-center">
+                                  <button
+                                    id={`btn-perm-editar-${mod.id}`}
+                                    type="button"
+                                    onClick={() => handleToggleUserCrudAction(mod.id, 'editar')}
+                                    className={`w-9 h-8 rounded-lg font-bold text-xs inline-flex items-center justify-center transition-all cursor-pointer select-none active:scale-95 ${
+                                      effective.editar
+                                        ? 'bg-amber-600 text-white shadow-xs hover:bg-amber-700'
+                                        : 'bg-slate-100 dark:bg-slate-800 text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
+                                    }`}
+                                    title={effective.editar ? 'Edição Permitida [E]. Clique para bloquear.' : 'Edição Bloqueada [E]. Clique para liberar.'}
+                                  >
+                                    {effective.editar ? <Check className="w-4 h-4" /> : <X className="w-4 h-4" />}
+                                  </button>
+                                </td>
+
+                                {/* Coluna 5: [X] Excluir */}
+                                <td className="px-3 py-3.5 text-center">
+                                  <button
+                                    id={`btn-perm-excluir-${mod.id}`}
+                                    type="button"
+                                    onClick={() => handleToggleUserCrudAction(mod.id, 'excluir')}
+                                    className={`w-9 h-8 rounded-lg font-bold text-xs inline-flex items-center justify-center transition-all cursor-pointer select-none active:scale-95 ${
+                                      effective.excluir
+                                        ? 'bg-rose-600 text-white shadow-xs hover:bg-rose-700'
+                                        : 'bg-slate-100 dark:bg-slate-800 text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
+                                    }`}
+                                    title={effective.excluir ? 'Exclusão Permitida [X]. Clique para bloquear.' : 'Exclusão Bloqueada [X]. Clique para liberar.'}
+                                  >
+                                    {effective.excluir ? <Check className="w-4 h-4" /> : <X className="w-4 h-4" />}
+                                  </button>
+                                </td>
+
+                                {/* Coluna 6: Escopo do Setor */}
+                                <td className="px-4 py-3.5 text-center">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleToggleUserModuleScope(mod.id)}
+                                    className={`inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all border ${
+                                      effective.escopoSetor === 'todos'
+                                        ? 'bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/40 dark:text-purple-300 dark:border-purple-800 hover:bg-purple-100'
+                                        : 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800 hover:bg-amber-100'
+                                    }`}
+                                    title="Clique para alternar entre escopo do setor próprio e escopo global"
+                                  >
+                                    {effective.escopoSetor === 'todos' ? (
+                                      <>
+                                        <Globe className="w-3.5 h-3.5" />
+                                        <span>Todos os Setores (Global)</span>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <Building2 className="w-3.5 h-3.5" />
+                                        <span>Apenas Setor ({selectedUserForMatrix?.sector})</span>
+                                      </>
+                                    )}
+                                  </button>
+                                </td>
+
+                                {/* Coluna 7: Status Geral */}
+                                <td className="px-4 py-3.5 text-right">
+                                  <span className={`inline-block px-2.5 py-1 rounded-full text-[10px] font-bold ${statusBadgeClass}`}>
+                                    {statusLabel}
+                                  </span>
+                                </td>
+                              </tr>
                             );
                           })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+              </div>
+            )}
+
+            {/* MODO 2: MATRIZ DE PERFIS TÉCNICOS (HERANÇA GLOBAL) */}
+            {matrizMode === 'roles' && (
+              <div className="space-y-4 animate-in fade-in duration-200">
+                
+                <div className="bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 p-4 rounded-xl flex items-center justify-between text-xs text-slate-600 dark:text-slate-300">
+                  <div className="flex items-center space-x-2">
+                    <Briefcase className="w-4 h-4 text-blue-600 shrink-0" />
+                    <span>
+                      Esta matriz define as permissões padrão herdadas pelos colaboradores conforme o cargo atribuído. Colaboradores sem regras customizadas recebem este perfil automaticamente.
+                    </span>
+                  </div>
+                </div>
+
+                {/* Tabela de Matriz por Roles */}
+                <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-sm">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-center border-collapse">
+                      <thead>
+                        <tr className="bg-slate-50 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 text-[10px] font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                          <th className="px-5 py-4 text-left">Módulo / Sub-Área do SGQ</th>
+                          {ROLES.map(role => (
+                            <th key={role} className="px-4 py-4 min-w-[120px]">
+                              <span className="block text-slate-800 dark:text-slate-100">{role}</span>
+                              <span className="text-[9px] font-mono font-normal text-slate-400 lowercase">perfil técnico</span>
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-200 dark:divide-slate-800/80">
+                        {SECTION_METADATA.map((section) => {
+                          const SectionIcon = section.icon;
+                          return (
+                            <tr 
+                              key={section.id} 
+                              className="hover:bg-slate-50/50 dark:hover:bg-slate-800/20 transition-colors text-xs text-slate-700 dark:text-slate-300"
+                            >
+                              {/* Coluna 1: Nome do Módulo */}
+                              <td className="px-5 py-4 text-left">
+                                <div className="flex items-center space-x-3">
+                                  <div className="w-7 h-7 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 flex items-center justify-center">
+                                    <SectionIcon className="w-4 h-4" />
+                                  </div>
+                                  <div>
+                                    <p className="font-bold text-slate-900 dark:text-slate-100">{section.label}</p>
+                                    <p className="text-[10px] text-slate-400 font-mono">id: /{section.id}</p>
+                                  </div>
+                                </div>
+                              </td>
+
+                              {/* Colunas dos Roles */}
+                              {ROLES.map(role => {
+                                const rolePerm = permissions.find(p => p.role === role);
+                                const hasAccess = rolePerm?.allowedSections.includes(section.id) || false;
+
+                                return (
+                                  <td key={role} className="px-4 py-4">
+                                    <button
+                                      onClick={() => handleTogglePermission(role, section.id)}
+                                      className={`px-3 py-1.5 rounded-full text-[10px] font-bold transition-all ${
+                                        hasAccess 
+                                          ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 hover:ring-2 hover:ring-emerald-500/20' 
+                                          : 'bg-slate-100 text-slate-400 dark:bg-slate-800 dark:text-slate-500 hover:ring-2 hover:ring-slate-500/10'
+                                      }`}
+                                      title={`${hasAccess ? 'Revogar' : 'Conceder'} acesso ao módulo ${section.label} para o perfil de ${role}`}
+                                    >
+                                      {hasAccess ? 'Permitido' : 'Bloqueado'}
+                                    </button>
+                                  </td>
+                                );
+                              })}
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+              </div>
+            )}
+
+          </div>
+        )}
+
+      </div>
+
+      {/* MODAL: CLONAGEM DE PERMISSÕES */}
+      {isCloneModalOpen && selectedUserForMatrix && (
+        <div className="fixed inset-0 bg-slate-950/50 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl animate-in fade-in duration-150">
+            <div className="px-6 py-4 bg-slate-50 dark:bg-slate-800/40 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <Copy className="w-4 h-4 text-blue-600" />
+                <h3 className="text-sm font-extrabold text-slate-800 dark:text-slate-100">
+                  Clonar Direitos de Acesso
+                </h3>
+              </div>
+              <button 
+                onClick={() => setIsCloneModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4 text-xs">
+              <p className="text-slate-600 dark:text-slate-300">
+                Copiar todas as alçadas de <strong>[V, C, E, X]</strong> e escopo de setor de outro colaborador para o usuário destino:
+              </p>
+
+              <div className="bg-blue-50 dark:bg-blue-950/30 p-3 rounded-xl border border-blue-200 dark:border-blue-800">
+                <span className="block text-[10px] font-mono text-blue-600 dark:text-blue-400 uppercase font-bold">Colaborador Destino:</span>
+                <span className="text-xs font-extrabold text-slate-900 dark:text-slate-100">{selectedUserForMatrix.name} ({selectedUserForMatrix.role} - {selectedUserForMatrix.sector})</span>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-slate-500">Selecione o Colaborador de Origem (Modelo):</label>
+                <select
+                  value={cloneSourceUserId}
+                  onChange={(e) => setCloneSourceUserId(e.target.value)}
+                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-2.5 text-xs text-slate-800 dark:text-slate-100 focus:outline-hidden focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">Selecione um usuário...</option>
+                  {users
+                    .filter(u => u.id !== selectedUserForMatrix.id)
+                    .map(u => (
+                      <option key={u.id} value={u.id}>
+                        {u.name} — {u.role} ({u.sector})
+                      </option>
+                    ))}
+                </select>
+              </div>
+
+              <div className="flex items-center justify-end space-x-2 pt-3 border-t border-slate-100 dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setIsCloneModalOpen(false)}
+                  className="px-4 py-2 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-lg text-xs font-bold hover:bg-slate-200 transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  disabled={!cloneSourceUserId}
+                  onClick={handleApplyClone}
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-lg text-xs font-bold transition-colors shadow-xs"
+                >
+                  Confirmar e Clonar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: IMPRESSÃO / EXPORTAÇÃO DA MATRIZ OFICIAL SGQ (ISO 9001:2015) */}
+      {isPrintOfficialModalOpen && (
+        <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-4 z-50 overflow-y-auto">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl w-full max-w-5xl overflow-hidden shadow-2xl animate-in fade-in duration-200 my-8">
+            
+            {/* Header com botões de ação */}
+            <div className="px-6 py-4 bg-slate-50 dark:bg-slate-800/40 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <Printer className="w-5 h-5 text-blue-600" />
+                <h3 className="text-sm font-extrabold text-slate-800 dark:text-slate-100">
+                  Documento Oficial SGQ: Matriz Multidisciplinar de Direitos de Acesso
+                </h3>
+              </div>
+              <div className="flex items-center space-x-2">
+                <button
+                  type="button"
+                  onClick={() => window.print()}
+                  className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold transition-colors flex items-center space-x-1.5 shadow-xs"
+                >
+                  <Printer className="w-3.5 h-3.5" />
+                  <span>Imprimir / Gerar PDF</span>
+                </button>
+                <button 
+                  onClick={() => setIsPrintOfficialModalOpen(false)}
+                  className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Conteúdo Formal da Matriz (Padrão ABNT / ISO 9001) */}
+            <div className="p-8 space-y-6 max-h-[75vh] overflow-y-auto print:max-h-none print:p-0">
+              
+              {/* Cabeçalho Documental */}
+              <div className="border-2 border-slate-800 dark:border-slate-200 p-4 rounded-xl flex flex-col md:flex-row items-center justify-between gap-4">
+                <div className="flex items-center space-x-2">
+                  <div className="w-8 h-8 rounded-lg bg-blue-600 text-white font-black flex items-center justify-center text-sm">V</div>
+                  <div>
+                    <h4 className="font-extrabold text-sm tracking-wider text-slate-900 dark:text-slate-100">{personalizacao?.nomeEmpresa || 'VICKYTEX'}</h4>
+                    <p className="text-[10px] text-slate-500 font-mono">Têxtil & Confecções</p>
+                  </div>
+                </div>
+                <div className="text-center md:text-right">
+                  <h2 className="text-xs font-black uppercase tracking-wider text-slate-900 dark:text-slate-100">
+                    MATRIZ MULTIDISCIPLINAR DE DIREITOS E ALÇADAS DE ACESSO AO SGQ
+                  </h2>
+                  <p className="text-[10px] text-slate-500 font-mono mt-0.5">
+                    ISO 9001:2015 — Requisitos 5.3 (Papéis e Responsabilidades) e 7.5 (Informação Documentada)
+                  </p>
+                </div>
+              </div>
+
+              {/* Tabela Resumo Consolidada de Colaboradores e Módulos */}
+              <div className="border border-slate-300 dark:border-slate-700 rounded-xl overflow-hidden">
+                <table className="w-full text-left text-[11px] border-collapse">
+                  <thead>
+                    <tr className="bg-slate-100 dark:bg-slate-800 border-b border-slate-300 dark:border-slate-700 font-bold text-slate-800 dark:text-slate-200">
+                      <th className="p-2 border-r border-slate-300 dark:border-slate-700">Colaborador</th>
+                      <th className="p-2 border-r border-slate-300 dark:border-slate-700">Cargo</th>
+                      <th className="p-2 border-r border-slate-300 dark:border-slate-700">Setor</th>
+                      <th className="p-2">Alçadas nos Módulos Principais [V: Ver | C: Criar | E: Editar | X: Excluir]</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+                    {users.map((u) => {
+                      return (
+                        <tr key={u.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30">
+                          <td className="p-2 font-bold text-slate-900 dark:text-slate-100 border-r border-slate-200 dark:border-slate-800">
+                            {u.name}
+                            <span className="block text-[9px] font-normal text-slate-400 font-mono">{u.email}</span>
+                          </td>
+                          <td className="p-2 border-r border-slate-200 dark:border-slate-800 font-mono">{u.role}</td>
+                          <td className="p-2 border-r border-slate-200 dark:border-slate-800 font-medium">{u.sector}</td>
+                          <td className="p-2">
+                            <div className="flex flex-wrap gap-1.5">
+                              {SYSTEM_MODULES.slice(0, 8).map(m => {
+                                const eff = getEffectiveModulePermission(u.role, m.id, u.customPermissions);
+                                if (!eff.ver) return null;
+                                return (
+                                  <span 
+                                    key={m.id} 
+                                    className="px-1.5 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-[9px] font-mono border border-slate-200 dark:border-slate-700"
+                                  >
+                                    <strong>{m.id}:</strong> {eff.ver ? 'V' : ''}{eff.criar ? '+C' : ''}{eff.editar ? '+E' : ''}{eff.excluir ? '+X' : ''} ({eff.escopoSetor === 'todos' ? 'Global' : u.sector})
+                                  </span>
+                                );
+                              })}
+                            </div>
+                          </td>
                         </tr>
                       );
                     })}
                   </tbody>
                 </table>
               </div>
+
             </div>
-
           </div>
-        )}
-
-      </div>
+        </div>
+      )}
 
       {/* MODAL / DIALOG DE CADASTRO OU EDICÃO DE USUÁRIO */}
       {isFormOpen && (

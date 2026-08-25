@@ -26,6 +26,39 @@ export type PermissionCode =
   | 'settings.manage'
   | 'audits.manage';
 
+export type CrudAction = 'ver' | 'criar' | 'editar' | 'excluir';
+export type SectorScope = 'todos' | 'setor_proprio';
+
+export type SystemModuleId = 
+  | 'dashboard'
+  | 'documentos'
+  | 'indicadores'
+  | 'ceo'
+  | 'registros'
+  | 'fornecedores'
+  | 'auditorias'
+  | 'riscos'
+  | 'planos'
+  | '5s'
+  | 'treinamentos'
+  | 'calibracao'
+  | 'usuarios'
+  | 'configuracoes'
+  | 'integracao'
+  | 'database';
+
+export interface ModuleCrudPermission {
+  ver: boolean;
+  criar: boolean;
+  editar: boolean;
+  excluir: boolean;
+  escopoSetor: SectorScope;
+}
+
+export interface UserCustomPermissions {
+  [moduleId: string]: ModuleCrudPermission;
+}
+
 export interface Permission {
   id: string;
   codigo: PermissionCode;

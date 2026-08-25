@@ -128,7 +128,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               name: found.name || fbUser.displayName || 'Usuário SGQ',
               role: (found.role as UserRole) || 'Qualidade',
               sector: (found.sector as SectorType) || 'Qualidade',
-              photoURL: found.photoURL || fbUser.photoURL || undefined
+              photoURL: found.photoURL || fbUser.photoURL || undefined,
+              customPermissions: found.customPermissions
             });
           } else {
             // Determine role/sector based on presets or default
@@ -285,7 +286,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         name: firestoreUser?.name || cred?.user?.displayName || cleanEmail.split('@')[0],
         role: (firestoreUser?.role as UserRole) || 'Qualidade',
         sector: (firestoreUser?.sector as SectorType) || 'Qualidade',
-        photoURL: firestoreUser?.photoURL || cred?.user?.photoURL
+        photoURL: firestoreUser?.photoURL || cred?.user?.photoURL,
+        customPermissions: firestoreUser?.customPermissions
       };
 
       setUser(userProfile);

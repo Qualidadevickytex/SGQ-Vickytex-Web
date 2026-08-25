@@ -30,6 +30,7 @@ import { CEOProvider } from './contexts/CEOContext';
 
 import { Documento, ActivityLog, Auditoria, NaoConformidade, PlanoAcao, RiscoOportunidade, Auditoria5S, UserAccount, RolePermission, Equipamento, ColaboradorCompetencia, Registro, Fornecedor, Treinamento } from './types';
 import { INITIAL_DOCUMENTS, INITIAL_LOGS, INITIAL_AUDITORIAS, INITIAL_NAO_CONFORMIDADES, INITIAL_PLANOS_ACAO, INITIAL_RISCOS, INITIAL_5S_AUDITS, INITIAL_USER_ACCOUNTS, INITIAL_ROLE_PERMISSIONS, INITIAL_FORNECEDORES, getPersonalizacaoGeral, normalizePersonalizacao, PersonalizacaoGeral } from './utils/mockData';
+import { canUserPerform } from './utils/permissionManager';
 import { DocumentRepository } from './services/database/repositories/document.repository';
 import { AuditRepository } from './services/database/repositories/audit.repository';
 import { FiveSRepository } from './services/database/repositories/fiveS.repository';
@@ -204,33 +205,21 @@ function AppContent() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
-  // Redireciona para o Painel Geral caso o perfil atual não tenha permissão de visualizar a seção ativa
+  // Redireciona para o Painel Geral caso o usuário atual não tenha permissão de visualizar a seção ativa
   useEffect(() => {
     if (!user) return;
-    const userPerm = permissions.find((p) => p.role === user.role);
-    let allowed = userPerm ? userPerm.allowedSections : [];
+    if (activeSection === 'dashboard') return;
     
-    // Fallback de roles padrões caso as permissões locais não estejam povoadas
-    if (allowed.length === 0) {
-      if (user.role === 'Administrador' || user.role === 'Gestor') {
-        allowed = ['dashboard', 'documentos', 'auditorias', 'riscos', '5s', 'treinamentos', 'calibracao', 'planos', 'configuracoes', 'usuarios', 'integracao', 'database', 'registros', 'fornecedores', 'indicadores', 'ceo'];
-      } else if (user.role === 'Qualidade') {
-        allowed = ['dashboard', 'documentos', 'auditorias', 'riscos', '5s', 'treinamentos', 'calibracao', 'planos', 'configuracoes', 'usuarios', 'registros', 'fornecedores', 'indicadores', 'ceo'];
-      } else if (user.role === 'Supervisor') {
-        allowed = ['dashboard', 'documentos', 'auditorias', '5s', 'treinamentos', 'calibracao', 'planos', 'registros', 'fornecedores', 'indicadores', 'ceo'];
-      } else if (user.role === 'Colaborador') {
-        allowed = ['dashboard', 'documentos', '5s', 'treinamentos', 'registros', 'indicadores', 'ceo'];
-      } else if (user.role === 'Auditor') {
-        allowed = ['dashboard', 'documentos', 'auditorias', 'riscos', '5s', 'planos', 'registros', 'fornecedores', 'indicadores', 'ceo'];
-      } else {
-        allowed = ['dashboard', 'documentos', 'registros', 'indicadores', 'ceo'];
-      }
+    // Admins e Gestores têm acesso total
+    if (user.role === 'Administrador' || user.role === 'Gestor') {
+      return;
     }
-    
-    if (allowed.length > 0 && !allowed.includes(activeSection)) {
+
+    const hasViewPermission = canUserPerform(user, activeSection, 'ver');
+    if (!hasViewPermission) {
       setActiveSection('dashboard');
     }
-  }, [user?.role, activeSection, permissions]);
+  }, [user, activeSection, permissions]);
 
   // Adicionar Log de Auditabilidade Geral (ISO 9001 7.5)
   const handleAddLog = (action: string, details: string, docId?: string) => {
@@ -544,15 +533,15 @@ function AppContent() {
   };
 
   const handleUpdateUser = async (updated: UserAccount) => {
+    // Atualização otimista imediata na UI
+    setUsers((prev) => prev.map((u) => (u.id === updated.id ? updated : u)));
     try {
       const res = await UserRepository.update(updated.id, updated);
       if (res.success && res.data) {
         setUsers((prev) => prev.map((u) => (u.id === updated.id ? res.data : u)));
-      } else {
-        setUsers((prev) => prev.map((u) => (u.id === updated.id ? updated : u)));
       }
     } catch (e) {
-      setUsers((prev) => prev.map((u) => (u.id === updated.id ? updated : u)));
+      console.warn('Falha ao atualizar usuário no Firestore:', e);
     }
   };
 

@@ -31,8 +31,9 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
-import { UserRole, RolePermission } from '../types';
+import { UserRole, RolePermission, SystemModuleId } from '../types';
 import { PersonalizacaoGeral } from '../utils/mockData';
+import { canUserPerform } from '../utils/permissionManager';
 
 interface MainLayoutProps {
   children: React.ReactNode;
@@ -56,41 +57,24 @@ export const MainLayout: React.FC<MainLayoutProps> = ({
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   const allowedSections = React.useMemo(() => {
-    if (permissions && permissions.length > 0 && user) {
-      const userPerm = permissions.find((p) => p.role === user.role);
-      if (userPerm) {
-        return userPerm.allowedSections;
+    if (!user) {
+      return ['dashboard', 'documentos', 'registros', 'indicadores', 'ceo'];
+    }
+
+    const allModuleKeys: SystemModuleId[] = [
+      'dashboard', 'documentos', 'indicadores', 'ceo', 'registros', 'fornecedores', 
+      'auditorias', 'riscos', 'planos', '5s', 'treinamentos', 'calibracao', 
+      'usuarios', 'configuracoes', 'integracao', 'database'
+    ];
+
+    // Verificar se o usuário possui permissão de leitura ('ver') no módulo
+    return allModuleKeys.filter(modId => {
+      // Admins e Gestores sempre têm acesso total garantido
+      if (user.role === 'Administrador' || user.role === 'Gestor') {
+        return true;
       }
-    }
-    try {
-      const saved = localStorage.getItem('sgq_vickytex_permissions');
-      if (saved && user) {
-        const perms = JSON.parse(saved);
-        const userPerm = perms.find((p: any) => p.role === user.role);
-        if (userPerm) {
-          return userPerm.allowedSections;
-        }
-      }
-    } catch (e) {
-      // ignore
-    }
-    // Fallback based on default role permissions if local storage is not populated yet
-    if (user?.role === 'Administrador' || user?.role === 'Gestor') {
-      return ['dashboard', 'documentos', 'auditorias', 'riscos', '5s', 'treinamentos', 'calibracao', 'planos', 'configuracoes', 'usuarios', 'integracao', 'database', 'registros', 'fornecedores', 'indicadores', 'ceo'];
-    }
-    if (user?.role === 'Qualidade') {
-      return ['dashboard', 'documentos', 'auditorias', 'riscos', '5s', 'treinamentos', 'calibracao', 'planos', 'configuracoes', 'usuarios', 'registros', 'fornecedores', 'indicadores', 'ceo'];
-    }
-    if (user?.role === 'Supervisor') {
-      return ['dashboard', 'documentos', 'auditorias', '5s', 'treinamentos', 'calibracao', 'planos', 'registros', 'fornecedores', 'indicadores', 'ceo'];
-    }
-    if (user?.role === 'Colaborador') {
-      return ['dashboard', 'documentos', '5s', 'treinamentos', 'registros', 'indicadores', 'ceo'];
-    }
-    if (user?.role === 'Auditor') {
-      return ['dashboard', 'documentos', 'auditorias', 'riscos', '5s', 'planos', 'registros', 'fornecedores', 'indicadores', 'ceo'];
-    }
-    return ['dashboard', 'documentos', 'registros', 'indicadores', 'ceo'];
+      return canUserPerform(user, modId, 'ver');
+    });
   }, [user, permissions]);
 
   const MENU_ITEMS = [
