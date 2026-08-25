@@ -321,11 +321,6 @@ export function canUserPerform(
 
   const role = user.role || 'Colaborador';
   
-  // Administrador tem superpoderes caso não haja bloqueio explícito
-  if (role === 'Administrador' && (!user.customPermissions || !user.customPermissions[moduleId])) {
-    return true;
-  }
-
   const effective = getEffectiveModulePermission(role, moduleId, user.customPermissions, dynamicRolePermissions);
   const actionAllowed = effective[action];
 

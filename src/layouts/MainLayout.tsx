@@ -69,10 +69,6 @@ export const MainLayout: React.FC<MainLayoutProps> = ({
 
     // Verificar se o usuário possui permissão de leitura ('ver') no módulo
     return allModuleKeys.filter(modId => {
-      // Administrador sempre tem acesso total garantido ao sistema
-      if (user.role === 'Administrador') {
-        return true;
-      }
       return canUserPerform(user, modId, 'ver', undefined, permissions);
     });
   }, [user, permissions]);

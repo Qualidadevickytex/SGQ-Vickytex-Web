@@ -52,7 +52,7 @@ import { clearFiveSMemoryStore } from './utils/fiveSStore';
 import { cacheService } from './services/cache.service';
 
 function AppContent() {
-  const { user, needsAuth } = useAuth();
+  const { user, needsAuth, refreshUser } = useAuth();
   
   // Estado de Personalizacao Geral do Sistema
   const [personalizacao, setPersonalizacao] = useState<PersonalizacaoGeral>(() => getPersonalizacaoGeral());
@@ -209,11 +209,6 @@ function AppContent() {
   useEffect(() => {
     if (!user) return;
     if (activeSection === 'dashboard') return;
-    
-    // Administrador tem acesso total
-    if (user.role === 'Administrador') {
-      return;
-    }
 
     const hasViewPermission = canUserPerform(user, activeSection, 'ver', undefined, permissions);
     if (!hasViewPermission) {
@@ -535,6 +530,20 @@ function AppContent() {
   const handleUpdateUser = async (updated: UserAccount) => {
     // Atualização otimista imediata na UI
     setUsers((prev) => prev.map((u) => (u.id === updated.id ? updated : u)));
+
+    // Se o usuário editado for o usuário logado atualmente, atualiza o contexto de autenticação imediatamente
+    if (user && (user.id === updated.id || user.email?.toLowerCase() === updated.email?.toLowerCase())) {
+      refreshUser({
+        ...user,
+        name: updated.name,
+        email: updated.email,
+        role: updated.role,
+        sector: updated.sector,
+        photoURL: updated.photoURL,
+        customPermissions: updated.customPermissions
+      });
+    }
+
     try {
       const res = await UserRepository.update(updated.id, updated);
       if (res.success && res.data) {

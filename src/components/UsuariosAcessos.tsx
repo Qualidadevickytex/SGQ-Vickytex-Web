@@ -60,7 +60,8 @@ import {
   SYSTEM_MODULES, 
   DEFAULT_ROLE_CRUD_PERMISSIONS, 
   getEffectiveModulePermission, 
-  generateDefaultPermissionsForRole 
+  generateDefaultPermissionsForRole,
+  canUserPerform
 } from '../utils/permissionManager';
 
 interface UsuariosAcessosProps {
@@ -265,8 +266,33 @@ export const UsuariosAcessos: React.FC<UsuariosAcessosProps> = ({
     setTimeout(() => setPassSuccess(''), 4000);
   };
 
+  // Permissões dinâmicas granulares para o módulo de usuários
+  const canManageAccessMatrix = Boolean(
+    !currentLoggedUser || 
+    canUserPerform(currentLoggedUser, 'usuarios', 'editar', undefined, permissions)
+  );
+
+  const canAddUser = Boolean(
+    !currentLoggedUser || 
+    canUserPerform(currentLoggedUser, 'usuarios', 'criar', undefined, permissions)
+  );
+
+  const canEditUser = Boolean(
+    !currentLoggedUser || 
+    canUserPerform(currentLoggedUser, 'usuarios', 'editar', undefined, permissions)
+  );
+
+  const canDeleteUser = Boolean(
+    !currentLoggedUser || 
+    canUserPerform(currentLoggedUser, 'usuarios', 'excluir', undefined, permissions)
+  );
+
   // Handle opening form for adding a user
   const handleOpenAddForm = () => {
+    if (!canAddUser) {
+      showToast('Você não possui permissão para cadastrar novos colaboradores.', 'error');
+      return;
+    }
     setEditingUserId(null);
     setFormData({
       name: '',
@@ -283,6 +309,10 @@ export const UsuariosAcessos: React.FC<UsuariosAcessosProps> = ({
 
   // Handle opening form for editing a user
   const handleOpenEditForm = (u: UserAccount) => {
+    if (!canEditUser) {
+      showToast('Você não possui permissão para editar colaboradores.', 'error');
+      return;
+    }
     setEditingUserId(u.id);
     setFormData({
       name: u.name,
@@ -301,6 +331,10 @@ export const UsuariosAcessos: React.FC<UsuariosAcessosProps> = ({
   const handleSaveUser = (e: React.FormEvent) => {
     e.preventDefault();
     if (editingUserId) {
+      if (!canEditUser) {
+        showToast('Você não possui permissão para editar colaboradores.', 'error');
+        return;
+      }
       const existingUser = users.find(u => u.id === editingUserId);
       const finalPassword = formData.password.trim() !== '' 
         ? formData.password.trim() 
@@ -331,6 +365,10 @@ export const UsuariosAcessos: React.FC<UsuariosAcessosProps> = ({
         });
       }
     } else {
+      if (!canAddUser) {
+        showToast('Você não possui permissão para cadastrar novos colaboradores.', 'error');
+        return;
+      }
       const finalPassword = formData.password.trim() !== '' ? formData.password.trim() : 'vickytex123';
       const newUser: UserAccount = {
         id: `user-${Date.now()}`,
@@ -352,9 +390,9 @@ export const UsuariosAcessos: React.FC<UsuariosAcessosProps> = ({
 
   // Toggle module permission for a specific role
   const handleTogglePermission = (role: UserRole, sectionId: typeof SECTION_METADATA[number]['id']) => {
-    // Quality/Admins are allowed to adjust security policies
-    if (currentLoggedUser?.role !== 'Administrador' && currentLoggedUser?.role !== 'Qualidade') {
-      alert('Apenas administradores ou analistas de qualidade têm permissão para redefinir a matriz de acessos (ISO 9001:2015).');
+    // Quality/Admins/Authorized are allowed to adjust security policies
+    if (!canManageAccessMatrix) {
+      showToast('Você não possui permissão para redefinir a matriz de acessos.', 'error');
       return;
     }
 
@@ -392,13 +430,10 @@ export const UsuariosAcessos: React.FC<UsuariosAcessosProps> = ({
   // Usuário selecionado na Matriz de Acessos
   const selectedUserForMatrix = users.find(u => u.id === selectedUserIdForMatrix) || users[0];
 
-  // Helper para verificar se o usuário logado pode editar permissões
-  const canManageAccessMatrix = !currentLoggedUser || currentLoggedUser?.role === 'Administrador' || currentLoggedUser?.role === 'Qualidade' || currentLoggedUser?.role === 'Gestor';
-
   // Toggle de ação CRUD específica para o usuário selecionado
   const handleToggleUserCrudAction = (moduleId: string, action: CrudAction) => {
     if (!canManageAccessMatrix) {
-      showToast('Apenas administradores ou analistas de qualidade podem editar a matriz de acessos (ISO 9001:2015).', 'error');
+      showToast('Você não possui permissão para editar alçadas de acesso.', 'error');
       return;
     }
     if (!selectedUserForMatrix) return;
@@ -1144,7 +1179,13 @@ export const UsuariosAcessos: React.FC<UsuariosAcessosProps> = ({
                                 <Edit2 className="w-3.5 h-3.5" />
                               </button>
                               <button
-                                onClick={() => setUserToDelete(userItem)}
+                                onClick={() => {
+                                  if (!canDeleteUser) {
+                                    showToast('Você não possui permissão para excluir colaboradores.', 'error');
+                                    return;
+                                  }
+                                  setUserToDelete(userItem);
+                                }}
                                 className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-md transition-colors"
                                 title="Deletar Usuário"
                               >

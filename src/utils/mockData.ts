@@ -849,7 +849,7 @@ export const INITIAL_USER_ACCOUNTS: UserAccount[] = [
     id: 'user-1',
     name: 'Rodrigo Berto',
     email: 'qualidade@vickytex.com.br',
-    role: 'Administrador',
+    role: 'Qualidade',
     sector: 'Qualidade',
     photoURL: 'https://api.dicebear.com/7.x/adventurer/svg?seed=Rodrigo',
     status: 'Ativo',
@@ -930,7 +930,7 @@ export const INITIAL_ROLE_PERMISSIONS: RolePermission[] = [
   },
   {
     role: 'Qualidade',
-    allowedSections: ['dashboard', 'documentos', 'auditorias', 'riscos', '5s', 'treinamentos', 'calibracao', 'planos', 'configuracoes', 'usuarios', 'registros', 'fornecedores', 'ceo', 'indicadores']
+    allowedSections: ['dashboard', 'documentos', 'auditorias', 'riscos', '5s', 'treinamentos', 'calibracao', 'planos', 'configuracoes', 'usuarios', 'integracao', 'registros', 'fornecedores', 'ceo', 'indicadores']
   },
   {
     role: 'Supervisor',
@@ -943,6 +943,10 @@ export const INITIAL_ROLE_PERMISSIONS: RolePermission[] = [
   {
     role: 'Auditor',
     allowedSections: ['dashboard', 'documentos', 'auditorias', 'riscos', '5s', 'planos', 'registros', 'fornecedores', 'ceo', 'indicadores']
+  },
+  {
+    role: 'Visitante',
+    allowedSections: ['dashboard', 'documentos', 'registros', 'indicadores', 'ceo']
   }
 ];
 

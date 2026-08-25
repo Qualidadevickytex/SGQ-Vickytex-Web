@@ -36,7 +36,7 @@ const PRESET_USERS: Record<UserRole, UserProfile> = {
   Qualidade: {
     email: 'qualidade@vickytex.com.br',
     name: 'Rodrigo Berto',
-    role: 'Administrador',
+    role: 'Qualidade',
     sector: 'Qualidade',
     photoURL: 'https://api.dicebear.com/7.x/adventurer/svg?seed=Rodrigo'
   },
@@ -138,8 +138,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             let sector: SectorType = 'Geral';
             let name = fbUser.displayName || emailLower.split('@')[0] || 'Novo Usuário';
 
-            if (emailLower.includes('admin') || emailLower.includes('qualidade')) {
+            if (emailLower.includes('admin')) {
               role = 'Administrador';
+              sector = 'Administração';
+            } else if (emailLower.includes('qualidade')) {
+              role = 'Qualidade';
               sector = 'Qualidade';
             } else if (emailLower.includes('gestor') || emailLower.includes('gerencia')) {
               role = 'Gestor';
