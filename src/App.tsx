@@ -210,12 +210,12 @@ function AppContent() {
     if (!user) return;
     if (activeSection === 'dashboard') return;
     
-    // Admins e Gestores têm acesso total
-    if (user.role === 'Administrador' || user.role === 'Gestor') {
+    // Administrador tem acesso total
+    if (user.role === 'Administrador') {
       return;
     }
 
-    const hasViewPermission = canUserPerform(user, activeSection, 'ver');
+    const hasViewPermission = canUserPerform(user, activeSection, 'ver', undefined, permissions);
     if (!hasViewPermission) {
       setActiveSection('dashboard');
     }

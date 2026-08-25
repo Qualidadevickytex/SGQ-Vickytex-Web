@@ -404,7 +404,7 @@ export const UsuariosAcessos: React.FC<UsuariosAcessosProps> = ({
     if (!selectedUserForMatrix) return;
 
     const userRole = selectedUserForMatrix.role || 'Colaborador';
-    const currentEffective = getEffectiveModulePermission(userRole, moduleId, selectedUserForMatrix.customPermissions);
+    const currentEffective = getEffectiveModulePermission(userRole, moduleId, selectedUserForMatrix.customPermissions, permissions);
     
     // Calcula novo estado da ação
     const newActionState = !currentEffective[action];
@@ -463,7 +463,7 @@ export const UsuariosAcessos: React.FC<UsuariosAcessosProps> = ({
     if (!selectedUserForMatrix) return;
 
     const userRole = selectedUserForMatrix.role || 'Colaborador';
-    const currentEffective = getEffectiveModulePermission(userRole, moduleId, selectedUserForMatrix.customPermissions);
+    const currentEffective = getEffectiveModulePermission(userRole, moduleId, selectedUserForMatrix.customPermissions, permissions);
     const newScope: SectorScope = currentEffective.escopoSetor === 'setor_proprio' ? 'todos' : 'setor_proprio';
 
     const updatedModulePerm: ModuleCrudPermission = {
@@ -1461,7 +1461,7 @@ export const UsuariosAcessos: React.FC<UsuariosAcessosProps> = ({
                             const ModIcon = sectionMeta?.icon || FileText;
                             
                             const userRole = selectedUserForMatrix?.role || 'Colaborador';
-                            const effective = getEffectiveModulePermission(userRole, mod.id, selectedUserForMatrix?.customPermissions);
+                            const effective = getEffectiveModulePermission(userRole, mod.id, selectedUserForMatrix?.customPermissions, permissions);
 
                             // Status sintético consolidado
                             let statusLabel = 'Sem Acesso';
@@ -1846,7 +1846,7 @@ export const UsuariosAcessos: React.FC<UsuariosAcessosProps> = ({
                           <td className="p-2">
                             <div className="flex flex-wrap gap-1.5">
                               {SYSTEM_MODULES.slice(0, 8).map(m => {
-                                const eff = getEffectiveModulePermission(u.role, m.id, u.customPermissions);
+                                const eff = getEffectiveModulePermission(u.role, m.id, u.customPermissions, permissions);
                                 if (!eff.ver) return null;
                                 return (
                                   <span 

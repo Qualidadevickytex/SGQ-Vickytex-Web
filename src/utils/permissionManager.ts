@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { UserRole, SystemModuleId, ModuleCrudPermission, SectorScope, CrudAction } from '../types';
+import { UserRole, SystemModuleId, ModuleCrudPermission, SectorScope, CrudAction, RolePermission } from '../types';
 
 export interface ModuleDefinition {
   id: SystemModuleId;
@@ -251,12 +251,13 @@ export const DEFAULT_ROLE_CRUD_PERMISSIONS: Record<UserRole, Record<SystemModule
 };
 
 /**
- * Obtém a permissão efetiva do usuário para determinado módulo, combinando herança do cargo com customizações do usuário.
+ * Obtém a permissão efetiva do usuário para determinado módulo, combinando herança do cargo (com suporte a permissões dinâmicas de papéis) com customizações do usuário.
  */
 export function getEffectiveModulePermission(
   role: UserRole = 'Colaborador',
   moduleId: SystemModuleId | string,
-  customPermissions?: Record<string, ModuleCrudPermission>
+  customPermissions?: Record<string, ModuleCrudPermission>,
+  dynamicRolePermissions?: RolePermission[]
 ): ModuleCrudPermission {
   const roleDefaults = DEFAULT_ROLE_CRUD_PERMISSIONS[role] || DEFAULT_ROLE_CRUD_PERMISSIONS['Colaborador'];
   const basePerm = (roleDefaults as any)[moduleId] || {
@@ -267,19 +268,43 @@ export function getEffectiveModulePermission(
     escopoSetor: 'setor_proprio' as SectorScope
   };
 
+  // Se houver configuração dinâmica do perfil técnico (da aba Perfis Técnicos)
+  let roleEffectivePerm = { ...basePerm };
+  if (dynamicRolePermissions && dynamicRolePermissions.length > 0) {
+    const roleConfig = dynamicRolePermissions.find(p => p.role === role);
+    if (roleConfig) {
+      const isAllowedInRole = (roleConfig.allowedSections as string[]).includes(moduleId);
+      if (!isAllowedInRole) {
+        roleEffectivePerm = {
+          ...roleEffectivePerm,
+          ver: false,
+          criar: false,
+          editar: false,
+          excluir: false
+        };
+      } else if (!roleEffectivePerm.ver) {
+        roleEffectivePerm = {
+          ...roleEffectivePerm,
+          ver: true
+        };
+      }
+    }
+  }
+
+  // Se o usuário possui regra customizada individual (da aba Por Colaborador & Setor), ela tem prioridade
   if (customPermissions && customPermissions[moduleId]) {
     return {
-      ...basePerm,
+      ...roleEffectivePerm,
       ...customPermissions[moduleId]
     };
   }
 
-  return basePerm;
+  return roleEffectivePerm;
 }
 
 /**
  * Verifica se o usuário tem permissão para realizar uma ação (Ver, Criar, Editar, Excluir)
- * levando em consideração o Perfil Técnico, as Customizações do Usuário e o Setor do Item.
+ * levando em consideração o Perfil Técnico, as Customizações do Usuário, as Permissões Dinâmicas e o Setor do Item.
  */
 export function canUserPerform(
   user: {
@@ -289,7 +314,8 @@ export function canUserPerform(
   } | null,
   moduleId: SystemModuleId | string,
   action: CrudAction,
-  itemSector?: string
+  itemSector?: string,
+  dynamicRolePermissions?: RolePermission[]
 ): boolean {
   if (!user) return false;
 
@@ -300,7 +326,7 @@ export function canUserPerform(
     return true;
   }
 
-  const effective = getEffectiveModulePermission(role, moduleId, user.customPermissions);
+  const effective = getEffectiveModulePermission(role, moduleId, user.customPermissions, dynamicRolePermissions);
   const actionAllowed = effective[action];
 
   if (!actionAllowed) {
