@@ -1,7 +1,7 @@
-# Especificação Oficial do Esquema de Banco de Dados — Firebase Firestore
+# Especificação Oficial do Esquema de Banco de Dados — Firebase Firestore (v1.2.3)
 
 > 🟢 **SINGLE SOURCE OF TRUTH (SSOT) — CAMADA DE DADOS FIRESTORE**
-> Este documento é a única fonte oficial sobre a modelagem de dados no **Firebase Firestore** do **SGQ WEB VICKYTEX (v1.2.2)**.
+> Este documento é a única fonte oficial sobre a modelagem de dados no **Firebase Firestore** do **SGQ WEB VICKYTEX (v1.2.3)**.
 
 ---
 
@@ -43,36 +43,67 @@ O **SGQ WEB Vickytex** adota o **Firebase Firestore** como mecanismo principal d
 
 | Coleção Firestore | Entidade / Classe | Descrição Funcional |
 | :--- | :--- | :--- |
-| `/documents` | `Document` | Documentos da Lista Mestra ISO 9001, POPs, Instruções de Trabalho e relatórios. |
+| `/documents` | `Documento` | Documentos da Lista Mestra ISO 9001, POPs, Instruções de Trabalho e relatórios. |
 | `/document_versions` | `DocumentVersion` | Histórico de revisões, aprovações e anexos vinculados aos documentos. |
-| `/audits` | `Audit` | Auditorias internas da qualidade e processos. |
-| `/ncs` | `NC` | Não Conformidades (RNCs) com causa raiz e investigações. |
-| `/action_plans` | `ActionPlan` | Planos de Ação 5W2H vinculados a RNCs ou auditorias. |
-| `/fives_audits` | `FiveSAudits` | Auditorias do Programa 5S por senso, fotos, notas e planos. |
-| `/equipments` | `Equipment` | Instrumentos de medição, calibração industrial (ISO 7.1.5) e inventário. |
+| `/audits` | `Auditoria` | Auditorias internas da qualidade e processos. |
+| `/ncs` | `NaoConformidade` | Não Conformidades (RNCs) com causa raiz (5 Porquês / Ishikawa) e investigações. |
+| `/action_plans` | `PlanoAcao` | Planos de Ação 5W2H vinculados a RNCs ou auditorias. |
+| `/fives_audits` | `Auditoria5S` | Auditorias do Programa 5S por senso, fotos antes/depois, notas e planos. |
+| `/equipments` | `Equipment` | Instrumentos de medição, calibração industrial (ISO 7.1.5) e inventário metrológico. |
 | `/trainings` | `Training` | Treinamentos, capacitações e matriz de polivalência (ISO 7.2). |
-| `/indicators` | `Indicator` | Indicadores de desempenho (KPIs/BSC) por setor com metas. |
-| `/suppliers` | `Supplier` | Cadastro e avaliações contínuas de fornecedores de insumos (ISO 8.4). |
-| `/risks` | `Risk` | Matriz de Riscos e Oportunidades (ISO 6.1). |
+| `/indicators` | `Indicator` | Indicadores de desempenho (KPIs/BSC) por setor com medições mensais e metas. |
+| `/suppliers` | `Fornecedor` | Cadastro e avaliações contínuas de fornecedores de insumos e serviços (ISO 8.4). |
+| `/risks` | `RiscoOportunidade` | Matriz de Riscos e Oportunidades (ISO 6.1). |
 | `/critical_analyses` | `CriticalAnalysis` | Atas e tópicos da Análise Crítica pela Direção (ISO 9.3). |
 | `/collaborators` | `Collaborator` | Colaboradores da fábrica e vínculos com organograma. |
-| `/records` | `Record` | Registros arquivados e tabela de temporalidade (ISO 7.5.3). |
-| `/ceo_projects` | `CEOProject` | Projetos A3, Kaizen e Lean do Centro de Excelência Operacional. |
-| `/ceo_ideas` | `CEOIdea` | Caixa de sugestões dos colaboradores. |
-| `/users` | `User` | Cadastro de usuários corporativos e perfis de acesso. |
-| `/role_permissions` | `RolePermission` | Matriz RBAC de permissões por perfil (Administrador, Qualidade, Supervisor, Colaborador, Auditor). |
+| `/records` | `RegistroQualidade` | Registros arquivados e tabela de temporalidade (ISO 7.5.3). |
+| `/ceo_projects` | `CEOProject` | Projetos A3, Kaizen e Lean do Centro de Excelência Operacional com portões de governança. |
+| `/ceo_ideas` | `CEOIdea` | Caixa de sugestões dos colaboradores com status de implantação. |
+| `/users` | `UserAccount` | Cadastro de usuários corporativos, perfis e permissões customizadas `customPermissions`. |
+| `/role_permissions` | `RolePermission` | Matriz RBAC de permissões por perfil técnico (Administrador, Gestor, Qualidade, Supervisor, Colaborador, Auditor, Visitante). |
 | `/notifications` | `Notification` | Alertas do sistema, avisos de prazos e comunicados. |
-| `/audit_logs` | `AuditLog` | Trilha imutável de auditoria de alterações do sistema. |
+| `/audit_logs` | `ActivityLog` | Trilha imutável de auditoria de alterações do sistema. |
 | `/system_settings` | `SystemSettings` | Parâmetros globais do sistema e dados operacionais dinâmicos. |
 
 ---
 
-## 3. Documentos Especiais na Coleção `/system_settings`
+## 3. Estrutura Detalhada de Usuários e Permissões Customizadas (`/users`)
+
+Cada documento na coleção `/users` possui a seguinte estrutura:
+
+```typescript
+interface UserAccount {
+  id: string;
+  name: string;
+  email: string;
+  role: 'Administrador' | 'Gestor' | 'Qualidade' | 'Supervisor' | 'Auditor' | 'Colaborador' | 'Visitante';
+  sector: SectorType;
+  photoURL?: string;
+  status: 'Ativo' | 'Inativo';
+  passwordHash?: string;
+  lastLogin?: string;
+  telefone?: string;
+  // Permissões customizadas granulares por módulo [V, C, E, X]
+  customPermissions?: {
+    [moduloId: string]: {
+      ver: boolean;       // Alçada de visualização [V]
+      criar: boolean;     // Alçada de criação [C]
+      editar: boolean;    // Alçada de edição [E]
+      excluir: boolean;   // Alçada de exclusão [X]
+      regraSetor?: 'apenasSetor' | 'todos'; // Restrição de escopo de setor
+    };
+  };
+}
+```
+
+---
+
+## 4. Documentos Especiais na Coleção `/system_settings`
 
 A coleção `/system_settings` armazena configurações globais com escuta e sincronização em tempo real:
 
 1. **`sgq_vickytex_personalizacao`**:
-   - Armazena nome da empresa, logotipo, cores do tema, texto do cabeçalho e versão ativa (`SGQ WEB v1.2.1`).
+   - Armazena nome da empresa, logotipo, cores do tema, texto do cabeçalho e versão ativa (`SGQ WEB v1.2.3`).
 2. **`sgq_vickytex_fluxos_documentos`**:
    - Armazena a lista de fluxos parametrizados de aprovação documental (etapas, cargos revisores e aprovadores para POP, FOR, IT, MAN, LIST).
 3. **`google_drive`**:
@@ -86,7 +117,7 @@ A coleção `/system_settings` armazena configurações globais com escuta e sin
 
 ---
 
-## 4. Regras de Segurança no Firestore (`firestore.rules`)
+## 5. Regras de Segurança no Firestore (`firestore.rules`)
 
 O Firestore opera com controle de acesso centralizado via `firestore.rules`:
 ```javascript
@@ -102,7 +133,8 @@ service cloud.firestore {
 
 ---
 
-## 5. Estrutura de Fallback e Desduplicação Offline
+## 6. Estrutura de Fallback e Desduplicação Offline
 
 Caso o dispositivo perca a conexão ou utilize o sistema antes de configurar as chaves do Firebase, os Repositórios redirecionam de forma transparente para o `localStorage`. O motor de desduplicação em `base.repository.ts` garante que IDs repetidos sejam sanados de forma atômica e automatizada na leitura, gravação e sincronização via `subscribe()`.
+
 

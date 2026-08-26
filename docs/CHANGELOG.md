@@ -5,6 +5,23 @@
 
 ---
 
+## [v1.2.3] - 2026-08-26 (Matriz de Acessos RBAC em Tempo Real com Alçadas Granulares [V, C, E, X], Regras de Escopo de Setor e Sincronização Dinâmica)
+
+### 🚀 Destaques da Release v1.2.3
+- **Matriz de Acessos RBAC em Tempo Real com Dupla Visão**:
+  - Implementação das abas integradas **"Por Colaborador & Setor [V, C, E, X]"** e **"Perfis Técnicos (Roles Herdadas)"** em `UsuariosAcessos.tsx`.
+  - Controle de alçadas independentes para **[V] Ver**, **[C] Criar**, **[E] Editar** e **[X] Excluir** por módulo individual para cada colaborador.
+  - Regra de escopo de setor: restrição de operações exclusivamente ao próprio setor de atuação do colaborador (`apenasSetor`) ou liberação global para todos os setores (`todos`).
+- **Engine de Sincronização Reativa sem Reload**:
+  - Integração de `UserRepository.subscribe()` e `RolePermissionsRepository.subscribe()` em `App.tsx` para sincronização em tempo real via Firestore `onSnapshot`.
+  - Invocação de `refreshUser()` no `AuthContext` ao detectar atualizações no perfil do usuário conectado, refletindo as permissões no menu lateral e botões instantaneamente sem recarregar o navegador.
+- **Validação de Permissão Unificada (`canUserPerform`)**:
+  - Função utilitária centralizada que resolve prioridades entre superadministradores, permissões customizadas individuais (`customPermissions`) e perfis técnicos herdados (`role_permissions`).
+- **Sincronização Completa da Suíte de Documentação**:
+  - Atualizados todos os 11 manuais e especificações técnicas no diretório `/docs` para a versão **v1.2.3**.
+
+---
+
 ## [v1.2.2] - 2026-08-13 (Calendário SGQ 100% Dinâmico, Blindagem contra Tradução no DOM e Limpeza Atômica de Dados)
 
 ### 🚀 Destaques da Release v1.2.2

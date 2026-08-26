@@ -1,17 +1,18 @@
-# Manual Técnico de Instalação e Operação — SGQ WEB VICKYTEX (v1.2.2)
+# Manual Técnico de Instalação e Operação — SGQ WEB VICKYTEX (v1.2.3)
 
 > 🟢 **FONTE OFICIAL DA VERDADE (SSOT) - MANUTENÇÃO TÉCNICA**
-> Este manual é a referência para instalação, suporte, banco de dados e operação técnica do sistema. Para o mapa completo da documentação, acesse [`/docs/README.md`](/docs/README.md).
+> Este manual é a referência para instalação, suporte, banco de dados, motor de RBAC e operação técnica do sistema. Para o mapa completo da documentação, acesse [`/docs/README.md`](/docs/README.md).
 
 ## 1. Stack Tecnológica Utilizada
 O sistema **SGQ Web Vickytex** foi estruturado com as tecnologias mais estáveis e de alto desempenho do ecossistema JavaScript moderno:
-- **Core (Frontend)**: React 18, TypeScript
-- **Ferramenta de Build**: Vite
+- **Core (Frontend)**: React 18, TypeScript (~5.8.2)
+- **Ferramenta de Build**: Vite (v6.2.3)
 - **Estilização**: Tailwind CSS v4 (Compilação ultra rápida via plugin oficial do Vite)
 - **Biblioteca de Ícones**: Lucide React
 - **Animações**: Motion
 - **Banco de Dados & Nuvem**: Firebase Firestore com SDK JavaScript v10+ e assinaturas em tempo real (`onSnapshot`)
-- **Camada de Repositórios**: Suíte de 21 repositórios fortemente tipados em `src/services/database/repositories/`
+- **Camada de Repositórios**: Suíte de 21 repositórios fortemente tipados em `src/services/firebase/repositories/` (com alias em `src/services/database/repositories/`)
+- **Engine RBAC em Tempo Real**: Alçadas granulares `[V, C, E, X]` por colaborador, restrição de escopo de setor e herança de perfis técnicos
 - **Fallback Offline**: LocalStorage do navegador com desduplicação atômica de IDs
 - **Blindagem do DOM**: Proteção contra extensões de tradução automática (`translate="no"`, meta tag notranslate)
 - **Hospedagem Frontend**: Cloud Run / Netlify / Vercel
@@ -56,7 +57,29 @@ O comando acima compilará o código React de forma otimizada gerando os arquivo
 
 ---
 
-## 4. Configuração da Integração com a Nuvem (Firebase)
+## 4. Ciclo de Vida do Motor de Permissões RBAC
+
+1. **Assinatura de Ouvintes (`App.tsx`)**:
+   - `UserRepository.subscribe()` escuta modificações em `/users`.
+   - `RolePermissionsRepository.subscribe()` escuta modificações em `/role_permissions`.
+2. **Sincronização com Sessão Local (`AuthContext`)**:
+   - Ao detectar alterações no registro do usuário logado, invoca `refreshUser()`, recalculando a matriz sem recarregar o navegador.
+3. **Validação de Permissões (`canUserPerform`)**:
+   ```typescript
+   export function canUserPerform(
+     user: UserAccount | null | undefined,
+     permissions: RolePermission[] | undefined,
+     moduloId: string,
+     action: 'ver' | 'criar' | 'editar' | 'excluir'
+   ): boolean
+   ```
+   - Administradores possuem liberação universal irrestrita.
+   - Caso haja `customPermissions` para o módulo no usuário, sua regra específica prevalece.
+   - Caso contrário, consulta as permissões herdadas do perfil técnico em `permissions`.
+
+---
+
+## 5. Configuração da Integração com a Nuvem (Firebase)
 
 Para conectar o sistema ao banco de dados no Firebase:
 
@@ -71,7 +94,7 @@ Para conectar o sistema ao banco de dados no Firebase:
 
 ---
 
-## 5. Regras de Segurança no Firebase (`firestore.rules`)
+## 6. Regras de Segurança no Firebase (`firestore.rules`)
 
 Para garantir acesso seguro ao banco de dados em nuvem, aplique as seguintes regras no painel do Firestore:
 
@@ -88,7 +111,8 @@ service cloud.firestore {
 
 ---
 
-## 6. Sincronização e Fallback Offline Resiliente
+## 7. Sincronização e Fallback Offline Resiliente
 
 A camada de dados em `src/services/firebase/repositories/base.repository.ts` possui fallback transparente para `localStorage`. Se a conexão com o Firebase falhar ou estiver indisponível, o sistema opera normalmente gravando localmente e desduplicando registros para evitar conflitos ao reconectar.
+
 

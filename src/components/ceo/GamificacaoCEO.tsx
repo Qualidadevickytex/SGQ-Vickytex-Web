@@ -383,9 +383,9 @@ export const GamificacaoCEO: React.FC<GamificacaoCEOProps> = ({ projects, sugges
 
             // Participantes (set para evitar duplicidade no mesmo treinamento)
             const uniqueParticipants = Array.from(new Set(tr.participantes || []));
-            uniqueParticipants.forEach(part => {
+            uniqueParticipants.forEach((part: any) => {
               if (!part) return;
-              const u = findRegisteredUser(part);
+              const u = findRegisteredUser(String(part));
               if (u) {
                 u.horasTreinamento += hours;
                 u.pontos += pts;

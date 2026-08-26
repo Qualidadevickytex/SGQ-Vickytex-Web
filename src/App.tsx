@@ -143,7 +143,27 @@ function AppContent() {
     const unsubDocs = DocumentRepository.subscribe((items) => setDocuments(items));
     const unsubAudits = AuditRepository.subscribe((items) => setAudits(items));
     const unsubFiveS = FiveSRepository.subscribe((items) => setAuditorias5s(items));
-    const unsubUsers = UserRepository.subscribe((items) => setUsers(items));
+    const unsubUsers = UserRepository.subscribe((items) => {
+      if (Array.isArray(items) && items.length > 0) {
+        setUsers(items);
+        if (user) {
+          const myLatestRecord = items.find(
+            (u) => u.id === user.id || (u.email && u.email.toLowerCase() === user.email?.toLowerCase())
+          );
+          if (myLatestRecord) {
+            refreshUser({
+              ...user,
+              name: myLatestRecord.name,
+              email: myLatestRecord.email,
+              role: myLatestRecord.role,
+              sector: myLatestRecord.sector,
+              photoURL: myLatestRecord.photoURL,
+              customPermissions: myLatestRecord.customPermissions
+            });
+          }
+        }
+      }
+    });
     const unsubNCs = NCRepository.subscribe((items) => setNcs(items));
     const unsubPlanos = ActionPlanRepository.subscribe((items) => setPlanos(items));
     const unsubRiscos = RiskRepository.subscribe((items) => setRiscos(items));
@@ -157,7 +177,11 @@ function AppContent() {
         setLogs(items as any);
       }
     });
-    const unsubPerms = RolePermissionsRepository.subscribe((items) => setPermissions(items as any));
+    const unsubPerms = RolePermissionsRepository.subscribe((items) => {
+      if (Array.isArray(items) && items.length > 0) {
+        setPermissions(items as any);
+      }
+    });
     const unsubSettings = SystemSettingsRepository.subscribe((records) => {
       const pDoc = records.find(r => r.id === 'sgq_vickytex_personalizacao');
       if (pDoc && pDoc.data) {
