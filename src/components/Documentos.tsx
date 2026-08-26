@@ -12,6 +12,7 @@ import { DocumentoDashboard } from './Documentos/DocumentoDashboard';
 import { DocumentoListaMestra } from './Documentos/DocumentoListaMestra';
 import { DocumentoAbasDetalhes } from './Documentos/DocumentoAbasDetalhes';
 import { FluxosParametrizados } from './Documentos/FluxosParametrizados';
+import { useModulePermission } from '../utils/permissionManager';
 
 interface DocumentosProps {
   documents: Documento[];
@@ -290,8 +291,14 @@ export const Documentos: React.FC<DocumentosProps> = ({
     printWindow.document.close();
   };
 
-  // Permissão de escrita (Somente Qualidade, Administrador ou Supervisor)
-  const canCreateDocs = user?.role === 'Qualidade' || user?.role === 'Administrador' || user?.role === 'Supervisor';
+  // Permissões granulares do módulo de Documentos (ISO 7.5)
+  const { 
+    canCreate: canCreateDocs, 
+    canEdit: canEditDocs, 
+    canDelete: canDeleteDocs,
+    canModifyItem,
+    canDeleteItem
+  } = useModulePermission('documentos');
 
   // Buscar o documento selecionado para visualização em detalhes
   const activeDocument = documents.find(doc => doc.id === selectedDocId);
@@ -336,7 +343,7 @@ export const Documentos: React.FC<DocumentosProps> = ({
               <TableProperties className="w-3.5 h-3.5" />
               <span>Lista Mestra</span>
             </button>
-            {(user?.role === 'Qualidade' || user?.role === 'Administrador') && (
+            {canEditDocs && (
               <button
                 onClick={() => setActiveTab('fluxos')}
                 className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
@@ -386,11 +393,15 @@ export const Documentos: React.FC<DocumentosProps> = ({
                 onOpenEditDoc={handleOpenEdit}
                 onShowQrModal={(doc) => setQrModalDoc(doc)}
                 canCreateDocs={canCreateDocs}
+                canEditDocs={canEditDocs}
+                canDeleteDocs={canDeleteDocs}
+                canModifyItem={canModifyItem}
+                canDeleteItem={canDeleteItem}
                 onDeleteDoc={onDeleteDocument}
               />
             )}
 
-            {activeTab === 'fluxos' && (user?.role === 'Qualidade' || user?.role === 'Administrador') && (
+            {activeTab === 'fluxos' && canEditDocs && (
               <FluxosParametrizados />
             )}
           </div>

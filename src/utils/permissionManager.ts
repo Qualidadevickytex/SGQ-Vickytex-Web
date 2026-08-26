@@ -3,7 +3,26 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { useState, useEffect } from 'react';
 import { UserRole, SystemModuleId, ModuleCrudPermission, SectorScope, CrudAction, RolePermission } from '../types';
+import { useAuth } from '../contexts/AuthContext';
+import { RolePermissionsRepository } from '../services/firebase/repositories/rolePermission.repository';
+import { INITIAL_ROLE_PERMISSIONS } from './mockData';
+
+let cachedDynamicRolePermissions: RolePermission[] = INITIAL_ROLE_PERMISSIONS;
+
+// Auto-subscribe to remote role permissions in real-time
+try {
+  RolePermissionsRepository.subscribe((items) => {
+    if (items && Array.isArray(items) && items.length > 0) {
+      cachedDynamicRolePermissions = items;
+    }
+  });
+} catch {}
+
+export function getCachedRolePermissions(): RolePermission[] {
+  return cachedDynamicRolePermissions;
+}
 
 export interface ModuleDefinition {
   id: SystemModuleId;
@@ -320,8 +339,9 @@ export function canUserPerform(
   if (!user) return false;
 
   const role = user.role || 'Colaborador';
+  const rolePerms = dynamicRolePermissions || cachedDynamicRolePermissions;
   
-  const effective = getEffectiveModulePermission(role, moduleId, user.customPermissions, dynamicRolePermissions);
+  const effective = getEffectiveModulePermission(role, moduleId, user.customPermissions, rolePerms);
   const actionAllowed = effective[action];
 
   if (!actionAllowed) {
@@ -352,6 +372,38 @@ export function canUserPerform(
   }
 
   return true;
+}
+
+/**
+ * Hook de React para consumo das permissões do módulo em tempo real
+ */
+export function useModulePermission(moduleId: SystemModuleId) {
+  const { user } = useAuth();
+  const [rolePermissions, setRolePermissions] = useState<RolePermission[]>(cachedDynamicRolePermissions);
+
+  useEffect(() => {
+    const unsub = RolePermissionsRepository.subscribe((items) => {
+      if (items && items.length > 0) {
+        setRolePermissions(items);
+        cachedDynamicRolePermissions = items;
+      }
+    });
+    return () => unsub();
+  }, []);
+
+  const effective = getEffectiveModulePermission(user?.role || 'Colaborador', moduleId, user?.customPermissions, rolePermissions);
+
+  return {
+    canView: effective.ver,
+    canCreate: effective.criar,
+    canEdit: effective.editar,
+    canDelete: effective.excluir,
+    escopoSetor: effective.escopoSetor,
+    canPerform: (action: CrudAction, itemSector?: string) => canUserPerform(user, moduleId, action, itemSector, rolePermissions),
+    canModifyItem: (itemSector?: string) => canUserPerform(user, moduleId, 'editar', itemSector, rolePermissions),
+    canDeleteItem: (itemSector?: string) => canUserPerform(user, moduleId, 'excluir', itemSector, rolePermissions),
+    canCreateInSector: (targetSector?: string) => canUserPerform(user, moduleId, 'criar', targetSector, rolePermissions)
+  };
 }
 
 /**

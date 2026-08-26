@@ -27,6 +27,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useSectors } from '../hooks/useSectors';
 import { SECTORS, getSectors, PersonalizacaoGeral } from '../utils/mockData';
 import { SystemSettingsRepository } from '../services/database/repositories/systemSettings.repository';
+import { useModulePermission } from '../utils/permissionManager';
 
 interface AuditoriasNCProps {
   audits: Auditoria[];
@@ -84,6 +85,15 @@ export const AuditoriasNC: React.FC<AuditoriasNCProps> = ({
   }, []);
 
   const [activeTab, setActiveTab] = useState<'auditorias' | 'ncs'>('auditorias');
+
+  // Permissões granulares de Auditorias e Não Conformidades (ISO 9.2/10.2)
+  const { 
+    canCreate, 
+    canEdit, 
+    canDelete, 
+    canModifyItem, 
+    canDeleteItem 
+  } = useModulePermission('auditorias');
 
   // Modais
   const [isAuditModalOpen, setIsAuditModalOpen] = useState(false);
@@ -413,13 +423,15 @@ export const AuditoriasNC: React.FC<AuditoriasNCProps> = ({
               <p className="text-[10px] text-slate-400">Verificação periódica dos postos de trabalho de corte, costura e expedição.</p>
             </div>
             
-            <button
-              onClick={handleOpenNewAudit}
-              className="px-3.5 py-1.5 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg flex items-center space-x-1.5 transition-colors"
-            >
-              <Plus className="w-4 h-4" />
-              <span>Programar Auditoria</span>
-            </button>
+            {canCreate && (
+              <button
+                onClick={handleOpenNewAudit}
+                className="px-3.5 py-1.5 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg flex items-center space-x-1.5 transition-colors cursor-pointer"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Programar Auditoria</span>
+              </button>
+            )}
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -442,23 +454,23 @@ export const AuditoriasNC: React.FC<AuditoriasNCProps> = ({
                       }`}>
                         {aud.status.toUpperCase()}
                       </span>
-                      {(user?.role === 'Qualidade' || user?.role === 'Gestor' || user?.role === 'Administrador') && (
-                        <>
-                          <button
-                            onClick={() => handleOpenEditAudit(aud)}
-                            className="text-slate-400 hover:text-blue-500 p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded transition-colors"
-                            title="Editar Auditoria"
-                          >
-                            <Pencil className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            onClick={() => setAuditToDelete(aud)}
-                            className="text-slate-400 hover:text-rose-500 p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded transition-colors"
-                            title="Excluir Auditoria"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </>
+                      {canEdit && (!canModifyItem || canModifyItem(aud.setor)) && (
+                        <button
+                          onClick={() => handleOpenEditAudit(aud)}
+                          className="text-slate-400 hover:text-blue-500 p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded transition-colors cursor-pointer"
+                          title="Editar Auditoria"
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                      {canDelete && (!canDeleteItem || canDeleteItem(aud.setor)) && (
+                        <button
+                          onClick={() => setAuditToDelete(aud)}
+                          className="text-slate-400 hover:text-rose-500 p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded transition-colors cursor-pointer"
+                          title="Excluir Auditoria"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
                       )}
                     </div>
                   </div>
@@ -499,13 +511,15 @@ export const AuditoriasNC: React.FC<AuditoriasNCProps> = ({
               <p className="text-[10px] text-slate-400">Tratamento de desvios, falhas de qualidade no corte, costura e estamparia para melhoria contínua.</p>
             </div>
             
-            <button
-              onClick={handleOpenNewNc}
-              className="px-3.5 py-1.5 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg flex items-center space-x-1.5 transition-colors"
-            >
-              <Plus className="w-4 h-4" />
-              <span>Abrir RNC</span>
-            </button>
+            {canCreate && (
+              <button
+                onClick={handleOpenNewNc}
+                className="px-3.5 py-1.5 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg flex items-center space-x-1.5 transition-colors cursor-pointer"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Abrir RNC</span>
+              </button>
+            )}
           </div>
 
           <div className="space-y-3">
@@ -526,23 +540,23 @@ export const AuditoriasNC: React.FC<AuditoriasNCProps> = ({
                     }`}>
                       {nc.status.toUpperCase()}
                     </span>
-                    {(user?.role === 'Qualidade' || user?.role === 'Gestor' || user?.role === 'Administrador') && (
-                      <>
-                        <button
-                          onClick={() => handleOpenEditNc(nc)}
-                          className="text-slate-400 hover:text-blue-500 p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded transition-colors"
-                          title="Editar RNC"
-                        >
-                          <Pencil className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          onClick={() => setNcToDelete(nc)}
-                          className="text-slate-400 hover:text-rose-500 p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded transition-colors"
-                          title="Excluir RNC"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </>
+                    {canEdit && (!canModifyItem || canModifyItem(nc.setor)) && (
+                      <button
+                        onClick={() => handleOpenEditNc(nc)}
+                        className="text-slate-400 hover:text-blue-500 p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded transition-colors cursor-pointer"
+                        title="Editar RNC"
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                    {canDelete && (!canDeleteItem || canDeleteItem(nc.setor)) && (
+                      <button
+                        onClick={() => setNcToDelete(nc)}
+                        className="text-slate-400 hover:text-rose-500 p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded transition-colors cursor-pointer"
+                        title="Excluir RNC"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
                     )}
                   </div>
 

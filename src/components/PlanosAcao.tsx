@@ -33,6 +33,7 @@ import { Documento, Auditoria, NaoConformidade, SectorType, PlanoAcao } from '..
 import { useAuth } from '../contexts/AuthContext';
 import { useSectors } from '../hooks/useSectors';
 import { SECTORS, getSectors, PersonalizacaoGeral } from '../utils/mockData';
+import { useModulePermission } from '../utils/permissionManager';
 
 interface PlanosAcaoProps {
   planos: PlanoAcao[];

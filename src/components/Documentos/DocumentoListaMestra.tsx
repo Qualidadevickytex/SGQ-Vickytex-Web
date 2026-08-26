@@ -12,6 +12,10 @@ interface DocumentoListaMestraProps {
   onOpenEditDoc: (doc: Documento) => void;
   onShowQrModal: (doc: Documento) => void;
   canCreateDocs: boolean;
+  canEditDocs?: boolean;
+  canDeleteDocs?: boolean;
+  canModifyItem?: (sector?: string) => boolean;
+  canDeleteItem?: (sector?: string) => boolean;
   onDeleteDoc?: (id: string) => void;
 }
 
@@ -28,6 +32,10 @@ export const DocumentoListaMestra: React.FC<DocumentoListaMestraProps> = ({
   onOpenEditDoc,
   onShowQrModal,
   canCreateDocs,
+  canEditDocs = true,
+  canDeleteDocs = true,
+  canModifyItem,
+  canDeleteItem,
   onDeleteDoc
 }) => {
   // Estados de Filtros específicos solicitados
@@ -485,7 +493,7 @@ export const DocumentoListaMestra: React.FC<DocumentoListaMestraProps> = ({
                             >
                               <Eye className="w-3.5 h-3.5" />
                             </button>
-                            {canCreateDocs && (
+                            {canEditDocs && (!canModifyItem || canModifyItem(doc.setor)) && (
                               <button
                                 onClick={(e) => {
                                   e.stopPropagation();
@@ -497,7 +505,7 @@ export const DocumentoListaMestra: React.FC<DocumentoListaMestraProps> = ({
                                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>
                               </button>
                             )}
-                            {canCreateDocs && onDeleteDoc && (
+                            {canDeleteDocs && onDeleteDoc && (!canDeleteItem || canDeleteItem(doc.setor)) && (
                               <button
                                 onClick={(e) => {
                                   e.stopPropagation();
