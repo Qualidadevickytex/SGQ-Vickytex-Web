@@ -5,6 +5,7 @@
 
 import { BaseRepository } from './base.repository';
 import { RolePermission } from '../../../types';
+import { INITIAL_ROLE_PERMISSIONS } from '../../../utils/mockData';
 
 export interface RolePermissionDocument extends RolePermission {
   id: string;
@@ -14,10 +15,18 @@ class RolePermissionsRepositoryClass extends BaseRepository<RolePermissionDocume
   protected collectionName = 'role_permissions';
 
   protected getLocalData(): RolePermissionDocument[] {
-    return [];
+    try {
+      const saved = localStorage.getItem('sgq_vickytex_role_permissions');
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return INITIAL_ROLE_PERMISSIONS.map(p => ({ id: p.role, ...p }));
   }
 
-  protected saveLocalData(_data: RolePermissionDocument[]): void {}
+  protected saveLocalData(data: RolePermissionDocument[]): void {
+    try {
+      localStorage.setItem('sgq_vickytex_role_permissions', JSON.stringify(data));
+    } catch {}
+  }
 
   protected mapRecord(rec: any): RolePermissionDocument {
     return {

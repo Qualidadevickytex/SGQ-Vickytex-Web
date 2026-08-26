@@ -36,6 +36,11 @@ interface DatabaseViewerProps {
   auditorias5s: Auditoria5S[];
   users?: UserAccount[];
   permissions?: RolePermission[];
+  equipamentos?: any[];
+  colaboradores?: any[];
+  registros?: any[];
+  suppliers?: any[];
+  trainings?: any[];
   onClearAllData?: () => void;
 }
 
@@ -49,6 +54,11 @@ export const DatabaseViewer: React.FC<DatabaseViewerProps> = ({
   auditorias5s,
   users = [],
   permissions = [],
+  equipamentos = [],
+  colaboradores = [],
+  registros = [],
+  suppliers = [],
+  trainings = [],
   onClearAllData
 }) => {
   const [viewMode, setViewMode] = useState<'admin_panel' | 'collections' | 'cloud_integration'>('admin_panel');
@@ -191,22 +201,15 @@ export const DatabaseViewer: React.FC<DatabaseViewerProps> = ({
         return audits;
       case 'nao_conformidades':
         return ncs;
-      case 'treinamentos': {
-        const saved = localStorage.getItem('sgq_vickytex_treinamentos');
-        return saved ? JSON.parse(saved) : [];
-      }
-      case 'colaboradores': {
-        const saved = localStorage.getItem('sgq_vickytex_colaboradores');
-        return saved ? JSON.parse(saved) : [];
-      }
-      case 'equipamentos': {
-        const saved = localStorage.getItem('sgq_vickytex_equipamentos');
-        return saved ? JSON.parse(saved) : [];
-      }
+      case 'treinamentos':
+        return trainings.length > 0 ? trainings : (JSON.parse(localStorage.getItem('sgq_vickytex_treinamentos') || '[]'));
+      case 'colaboradores':
+        return colaboradores.length > 0 ? colaboradores : (JSON.parse(localStorage.getItem('sgq_vickytex_colaboradores') || '[]'));
+      case 'equipamentos':
+        return equipamentos.length > 0 ? equipamentos : (JSON.parse(localStorage.getItem('sgq_vickytex_equipamentos') || '[]'));
       case 'calibracoes': {
-        const saved = localStorage.getItem('sgq_vickytex_equipamentos');
-        const equips = saved ? JSON.parse(saved) : [];
-        return equips.flatMap((eq: any) => eq.calibracoes || []);
+        const sourceEquips = equipamentos.length > 0 ? equipamentos : (JSON.parse(localStorage.getItem('sgq_vickytex_equipamentos') || '[]'));
+        return sourceEquips.flatMap((eq: any) => eq.calibracoes || []);
       }
       case 'planos_acao':
         return planos;
@@ -218,14 +221,10 @@ export const DatabaseViewer: React.FC<DatabaseViewerProps> = ({
         return users;
       case 'matriz_permissoes':
         return permissions;
-      case 'registros_qualidade': {
-        const saved = localStorage.getItem('sgq_vickytex_registros');
-        return saved ? JSON.parse(saved) : [];
-      }
-      case 'fornecedores': {
-        const saved = localStorage.getItem('sgq_vickytex_fornecedores');
-        return saved ? JSON.parse(saved) : [];
-      }
+      case 'registros_qualidade':
+        return registros.length > 0 ? registros : (JSON.parse(localStorage.getItem('sgq_vickytex_registros') || '[]'));
+      case 'fornecedores':
+        return suppliers.length > 0 ? suppliers : (JSON.parse(localStorage.getItem('sgq_vickytex_fornecedores') || '[]'));
       default:
         return [];
     }
@@ -233,29 +232,23 @@ export const DatabaseViewer: React.FC<DatabaseViewerProps> = ({
 
   const getCollectionLength = (collection: string) => {
     if (collection === 'treinamentos') {
-      const saved = localStorage.getItem('sgq_vickytex_treinamentos');
-      return saved ? JSON.parse(saved).length : 0;
+      return trainings.length || (JSON.parse(localStorage.getItem('sgq_vickytex_treinamentos') || '[]')).length;
     }
     if (collection === 'colaboradores') {
-      const saved = localStorage.getItem('sgq_vickytex_colaboradores');
-      return saved ? JSON.parse(saved).length : 0;
+      return colaboradores.length || (JSON.parse(localStorage.getItem('sgq_vickytex_colaboradores') || '[]')).length;
     }
     if (collection === 'equipamentos') {
-      const saved = localStorage.getItem('sgq_vickytex_equipamentos');
-      return saved ? JSON.parse(saved).length : 0;
+      return equipamentos.length || (JSON.parse(localStorage.getItem('sgq_vickytex_equipamentos') || '[]')).length;
     }
     if (collection === 'calibracoes') {
-      const saved = localStorage.getItem('sgq_vickytex_equipamentos');
-      const equips = saved ? JSON.parse(saved) : [];
-      return equips.reduce((sum: number, eq: any) => sum + (eq.calibracoes ? eq.calibracoes.length : 0), 0);
+      const sourceEquips = equipamentos.length > 0 ? equipamentos : (JSON.parse(localStorage.getItem('sgq_vickytex_equipamentos') || '[]'));
+      return sourceEquips.reduce((sum: number, eq: any) => sum + (eq.calibracoes ? eq.calibracoes.length : 0), 0);
     }
     if (collection === 'registros_qualidade') {
-      const saved = localStorage.getItem('sgq_vickytex_registros');
-      return saved ? JSON.parse(saved).length : 0;
+      return registros.length || (JSON.parse(localStorage.getItem('sgq_vickytex_registros') || '[]')).length;
     }
     if (collection === 'fornecedores') {
-      const saved = localStorage.getItem('sgq_vickytex_fornecedores');
-      return saved ? JSON.parse(saved).length : 0;
+      return suppliers.length || (JSON.parse(localStorage.getItem('sgq_vickytex_fornecedores') || '[]')).length;
     }
     return 0;
   };

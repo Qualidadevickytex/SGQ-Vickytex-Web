@@ -835,6 +835,11 @@ function AppContent() {
           auditorias5s={auditorias5s}
           users={users}
           permissions={permissions}
+          equipamentos={equipamentos}
+          colaboradores={colaboradores}
+          registros={registros}
+          suppliers={suppliers}
+          trainings={trainings}
           onClearAllData={handleClearAllData}
         />
       )}

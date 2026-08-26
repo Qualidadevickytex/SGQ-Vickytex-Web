@@ -50,7 +50,7 @@ export const createDoc = async <T extends DocumentData>(collectionName: string, 
 };
 
 export const updateDocData = async <T extends DocumentData>(collectionName: string, id: string, data: Partial<T>): Promise<void> => {
-  await updateDoc(getDocRef(collectionName, id), { ...data, updatedAt: new Date().toISOString() });
+  await setDoc(getDocRef(collectionName, id), { ...data, updatedAt: new Date().toISOString() }, { merge: true });
 };
 
 export const deleteDocById = async (collectionName: string, id: string): Promise<void> => {
