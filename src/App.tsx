@@ -183,8 +183,17 @@ function AppContent() {
         if (regRes.success && Array.isArray(regRes.data)) setRegistros(regRes.data);
         if (supRes.success && Array.isArray(supRes.data)) setSuppliers(supRes.data);
         if (trainRes.success && Array.isArray(trainRes.data)) setTrainings(trainRes.data);
-        if (permRes.success && Array.isArray(permRes.data)) {
+        if (permRes.success && Array.isArray(permRes.data) && permRes.data.length > 0) {
           setPermissions(permRes.data as any);
+        } else {
+          setPermissions(INITIAL_ROLE_PERMISSIONS);
+          for (const p of INITIAL_ROLE_PERMISSIONS) {
+            RolePermissionsRepository.create({
+              id: p.role,
+              role: p.role,
+              allowedSections: p.allowedSections
+            }).catch(() => {});
+          }
         }
         if (Array.isArray(logData)) setLogs(logData as any);
       } catch (err) {
