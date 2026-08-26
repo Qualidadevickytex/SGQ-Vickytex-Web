@@ -148,10 +148,10 @@ export const DEFAULT_ROLE_CRUD_PERMISSIONS: Record<UserRole, Record<SystemModule
     '5s': { ver: true, criar: true, editar: true, excluir: true, escopoSetor: 'todos' },
     treinamentos: { ver: true, criar: true, editar: true, excluir: true, escopoSetor: 'todos' },
     calibracao: { ver: true, criar: true, editar: true, excluir: true, escopoSetor: 'todos' },
-    usuarios: { ver: true, criar: true, editar: true, excluir: false, escopoSetor: 'todos' },
-    configuracoes: { ver: true, criar: true, editar: true, excluir: false, escopoSetor: 'todos' },
-    integracao: { ver: true, criar: true, editar: true, excluir: false, escopoSetor: 'todos' },
-    database: { ver: false, criar: false, editar: false, excluir: false, escopoSetor: 'todos' }
+    usuarios: { ver: true, criar: true, editar: true, excluir: true, escopoSetor: 'todos' },
+    configuracoes: { ver: true, criar: true, editar: true, excluir: true, escopoSetor: 'todos' },
+    integracao: { ver: true, criar: true, editar: true, excluir: true, escopoSetor: 'todos' },
+    database: { ver: true, criar: true, editar: true, excluir: true, escopoSetor: 'todos' }
   },
 
   Gestor: {

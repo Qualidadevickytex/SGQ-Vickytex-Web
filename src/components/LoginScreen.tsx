@@ -34,62 +34,22 @@ const PRESET_ACCOUNTS = [
   {
     name: 'Rodrigo Berto',
     email: 'qualidade@vickytex.com.br',
-    role: 'Qualidade',
+    role: 'Administrador',
     password: 'mariana2026',
-    desc: 'Gestor do SGQ, controle de documentos e revisões.',
+    desc: 'Gestor do SGQ, controle de documentos, parametrizações e auditorias.',
     avatar: 'https://api.dicebear.com/7.x/adventurer/svg?seed=Rodrigo',
     color: 'border-blue-500/20 hover:border-blue-500 bg-blue-50/40 dark:bg-blue-950/20',
     badge: 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300'
   },
   {
-    name: 'Fernando Oliveira',
-    email: 'gerencia@vickytex.com.br',
-    role: 'Gestor',
-    password: 'fernando2026',
-    desc: 'Aprovações críticas de documentos e relatórios estratégicos.',
-    avatar: 'https://api.dicebear.com/7.x/bottts/svg?seed=Fernando',
+    name: 'Julia',
+    email: 'julia@vickytex.com.br',
+    role: 'Administrador',
+    password: 'julia2026',
+    desc: 'Gestão da Qualidade, aprovações estratégicas e administração geral.',
+    avatar: 'https://api.dicebear.com/7.x/lorelei/svg?seed=Julia',
     color: 'border-emerald-500/20 hover:border-emerald-500 bg-emerald-50/40 dark:bg-emerald-950/20',
     badge: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300'
-  },
-  {
-    name: 'Roberto Costa',
-    email: 'supervisor.costura@vickytex.com.br',
-    role: 'Supervisor',
-    password: 'roberto2026',
-    desc: 'Controles operacionais de costura e auditorias 5S.',
-    avatar: 'https://api.dicebear.com/7.x/lorelei/svg?seed=Roberto',
-    color: 'border-amber-500/20 hover:border-amber-500 bg-amber-50/40 dark:bg-amber-950/20',
-    badge: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300'
-  },
-  {
-    name: 'Carlos Eduardo',
-    email: 'auditor.externo@vickytex.com.br',
-    role: 'Auditor',
-    password: 'carlos2026',
-    desc: 'Auditor Externo ISO 9001:2015. Visualização irrestrita.',
-    avatar: 'https://api.dicebear.com/7.x/fun-emoji/svg?seed=Carlos',
-    color: 'border-violet-500/20 hover:border-violet-500 bg-violet-50/40 dark:bg-violet-950/20',
-    badge: 'bg-violet-100 text-violet-800 dark:bg-violet-900/40 dark:text-violet-300'
-  },
-  {
-    name: 'Ana Souza',
-    email: 'colaborador@vickytex.com.br',
-    role: 'Colaborador',
-    password: 'ana2026',
-    desc: 'Operadora do setor de corte e treinamentos básicos.',
-    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Ana',
-    color: 'border-slate-500/20 hover:border-slate-500 bg-slate-50/40 dark:bg-slate-950/20',
-    badge: 'bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-300'
-  },
-  {
-    name: 'Suporte TI',
-    email: 'admin@vickytex.com.br',
-    role: 'Administrador',
-    password: 'admin123',
-    desc: 'Administrador geral, parametrizações e banco de dados.',
-    avatar: 'https://api.dicebear.com/7.x/pixel-art/svg?seed=Buster',
-    color: 'border-rose-500/20 hover:border-rose-500 bg-rose-50/40 dark:bg-rose-950/20',
-    badge: 'bg-rose-100 text-rose-800 dark:bg-rose-900/40 dark:text-rose-300'
   }
 ];
 

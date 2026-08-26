@@ -232,6 +232,7 @@ export const UsuariosAcessos: React.FC<UsuariosAcessosProps> = ({
     if (currPass) {
       const isCurrValid = currPass === currentActualPassword ||
         (matchingAccount.email === 'qualidade@vickytex.com.br' && (currPass === 'vickytex123' || currPass === 'mariana2026')) ||
+        (matchingAccount.email === 'julia@vickytex.com.br' && (currPass === 'julia2026' || currPass === 'vickytex123')) ||
         (matchingAccount.email === 'gerencia@vickytex.com.br' && (currPass === 'fernando2026' || currPass === 'vickytex123')) ||
         (matchingAccount.email === 'admin@vickytex.com.br' && (currPass === 'admin123' || currPass === 'vickytex123'));
 
@@ -267,23 +268,25 @@ export const UsuariosAcessos: React.FC<UsuariosAcessosProps> = ({
   };
 
   // Permissões dinâmicas granulares para o módulo de usuários
+  const isAdminOrQuality = !currentLoggedUser || currentLoggedUser.role === 'Administrador' || currentLoggedUser.role === 'Qualidade';
+
   const canManageAccessMatrix = Boolean(
-    !currentLoggedUser || 
+    isAdminOrQuality || 
     canUserPerform(currentLoggedUser, 'usuarios', 'editar', undefined, permissions)
   );
 
   const canAddUser = Boolean(
-    !currentLoggedUser || 
+    isAdminOrQuality || 
     canUserPerform(currentLoggedUser, 'usuarios', 'criar', undefined, permissions)
   );
 
   const canEditUser = Boolean(
-    !currentLoggedUser || 
+    isAdminOrQuality || 
     canUserPerform(currentLoggedUser, 'usuarios', 'editar', undefined, permissions)
   );
 
   const canDeleteUser = Boolean(
-    !currentLoggedUser || 
+    isAdminOrQuality || 
     canUserPerform(currentLoggedUser, 'usuarios', 'excluir', undefined, permissions)
   );
 
@@ -2132,7 +2135,12 @@ export const UsuariosAcessos: React.FC<UsuariosAcessosProps> = ({
             </div>
 
             {/* Conteúdo dinâmico com base no tipo de exclusão */}
-            {userToDelete.email === currentLoggedUser?.email ? (
+            {Boolean(
+              currentLoggedUser && (
+                userToDelete.id === currentLoggedUser.id || 
+                (userToDelete.email && userToDelete.email.trim().toLowerCase() === (currentLoggedUser.email || '').trim().toLowerCase())
+              )
+            ) ? (
               <div className="space-y-3">
                 <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
                   Você está atualmente autenticado como <strong className="text-slate-950 dark:text-white font-semibold">{userToDelete.name}</strong>.
@@ -2175,8 +2183,10 @@ export const UsuariosAcessos: React.FC<UsuariosAcessosProps> = ({
                   <button
                     type="button"
                     onClick={() => {
+                      const deletedName = userToDelete.name;
                       onDeleteUser(userToDelete.id);
-                      onAddLog('Usuário Excluído', `Conta de usuário ${userToDelete.name} (${userToDelete.email}) foi removida definitivamente.`);
+                      onAddLog('Usuário Excluído', `Conta de usuário ${deletedName} (${userToDelete.email}) foi removida definitivamente.`);
+                      showToast(`Usuário ${deletedName} removido com sucesso!`, 'success');
                       setUserToDelete(null);
                     }}
                     className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-bold transition-colors shadow-xs"

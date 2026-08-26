@@ -849,73 +849,25 @@ export const INITIAL_USER_ACCOUNTS: UserAccount[] = [
     id: 'user-1',
     name: 'Rodrigo Berto',
     email: 'qualidade@vickytex.com.br',
-    role: 'Qualidade',
+    role: 'Administrador',
     sector: 'Qualidade',
     photoURL: 'https://api.dicebear.com/7.x/adventurer/svg?seed=Rodrigo',
     status: 'Ativo',
     passwordHash: 'mariana2026',
-    lastLogin: '2026-07-10 08:30',
+    lastLogin: '2026-08-26 08:30',
     telefone: '47992774430'
   },
   {
     id: 'user-2',
-    name: 'Fernando Oliveira (Diretor)',
-    email: 'gerencia@vickytex.com.br',
-    role: 'Gestor',
-    sector: 'Administração',
-    photoURL: 'https://api.dicebear.com/7.x/bottts/svg?seed=Fernando',
-    status: 'Ativo',
-    passwordHash: 'fernando2026',
-    lastLogin: '2026-07-09 14:15',
-    telefone: '(11) 97654-3210'
-  },
-  {
-    id: 'user-3',
-    name: 'Roberto Costa (Líder de Costura)',
-    email: 'supervisor.costura@vickytex.com.br',
-    role: 'Supervisor',
-    sector: 'Costura',
-    photoURL: 'https://api.dicebear.com/7.x/lorelei/svg?seed=Roberto',
-    status: 'Ativo',
-    passwordHash: 'roberto2026',
-    lastLogin: '2026-07-10 07:05',
-    telefone: '(11) 96543-2109'
-  },
-  {
-    id: 'user-4',
-    name: 'Suporte TI Vickytex',
-    email: 'admin@vickytex.com.br',
+    name: 'Julia',
+    email: 'julia@vickytex.com.br',
     role: 'Administrador',
-    sector: 'Administração',
-    photoURL: 'https://api.dicebear.com/7.x/pixel-art/svg?seed=Buster',
-    status: 'Ativo',
-    passwordHash: 'admin123',
-    lastLogin: '2026-07-10 09:12',
-    telefone: '(11) 95432-1098'
-  },
-  {
-    id: 'user-5',
-    name: 'Ana Souza (Operadora Corte)',
-    email: 'colaborador@vickytex.com.br',
-    role: 'Colaborador',
-    sector: 'Corte',
-    photoURL: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Ana',
-    status: 'Ativo',
-    passwordHash: 'ana2026',
-    lastLogin: '2026-07-08 11:30',
-    telefone: '(11) 94321-0987'
-  },
-  {
-    id: 'user-6',
-    name: 'Carlos Eduardo (Auditor ISO 9001)',
-    email: 'auditor.externo@vickytex.com.br',
-    role: 'Auditor',
     sector: 'Qualidade',
-    photoURL: 'https://api.dicebear.com/7.x/fun-emoji/svg?seed=Carlos',
+    photoURL: 'https://api.dicebear.com/7.x/lorelei/svg?seed=Julia',
     status: 'Ativo',
-    passwordHash: 'carlos2026',
-    lastLogin: '2026-07-07 16:45',
-    telefone: '(11) 93210-9876'
+    passwordHash: 'julia2026',
+    lastLogin: '2026-08-26 09:00',
+    telefone: '(47) 99999-8888'
   }
 ];
 

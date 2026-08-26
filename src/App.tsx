@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { MainLayout } from './layouts/MainLayout';
@@ -54,6 +54,11 @@ import { cacheService } from './services/cache.service';
 function AppContent() {
   const { user, needsAuth, refreshUser } = useAuth();
   
+  const userRef = useRef(user);
+  useEffect(() => {
+    userRef.current = user;
+  }, [user]);
+
   // Estado de Personalizacao Geral do Sistema
   const [personalizacao, setPersonalizacao] = useState<PersonalizacaoGeral>(() => getPersonalizacaoGeral());
 
@@ -85,7 +90,7 @@ function AppContent() {
   // Carregar dados reais dos repositórios Firestore e assinar atualizações em tempo real
   useEffect(() => {
     // Garantir que chamadas ao Firestore SOMENTE sejam feitas após autenticação do usuário
-    if (needsAuth || !user) {
+    if (needsAuth) {
       return;
     }
 
@@ -119,7 +124,57 @@ function AppContent() {
         if (docRes.success && Array.isArray(docRes.data)) setDocuments(docRes.data);
         if (auditRes.success && Array.isArray(auditRes.data)) setAudits(auditRes.data);
         if (fiveSRes.success && Array.isArray(fiveSRes.data)) setAuditorias5s(fiveSRes.data);
-        if (userRes.success && Array.isArray(userRes.data)) setUsers(userRes.data);
+        if (userRes.success && Array.isArray(userRes.data)) {
+          const currentUsers = userRes.data;
+          const filtered = currentUsers.filter(u => {
+            const email = (u.email || '').toLowerCase().trim();
+            const name = (u.name || '').toLowerCase().trim();
+            const isRodrigo = email === 'qualidade@vickytex.com.br' || name.includes('rodrigo');
+            const isJulia = email === 'julia@vickytex.com.br' || name.includes('julia');
+            return isRodrigo || isJulia;
+          });
+
+          // Delete obsolete users from Firestore
+          const obsoleteUsers = currentUsers.filter(u => {
+            const email = (u.email || '').toLowerCase().trim();
+            const name = (u.name || '').toLowerCase().trim();
+            const isRodrigo = email === 'qualidade@vickytex.com.br' || name.includes('rodrigo');
+            const isJulia = email === 'julia@vickytex.com.br' || name.includes('julia');
+            return !isRodrigo && !isJulia;
+          });
+          for (const obs of obsoleteUsers) {
+            UserRepository.delete(obs.id).catch(() => {});
+          }
+
+          // Ensure Rodrigo exists
+          const hasRodrigo = filtered.some(u => 
+            (u.email || '').toLowerCase().trim() === 'qualidade@vickytex.com.br' || 
+            (u.name || '').toLowerCase().trim().includes('rodrigo')
+          );
+          if (!hasRodrigo && INITIAL_USER_ACCOUNTS[0]) {
+            const rodrigoAccount = INITIAL_USER_ACCOUNTS[0];
+            filtered.push(rodrigoAccount);
+            UserRepository.create(rodrigoAccount).catch(() => {});
+          }
+
+          // Ensure Julia exists
+          const hasJulia = filtered.some(u => 
+            (u.email || '').toLowerCase().trim() === 'julia@vickytex.com.br' || 
+            (u.name || '').toLowerCase().trim().includes('julia')
+          );
+          if (!hasJulia && INITIAL_USER_ACCOUNTS[1]) {
+            const juliaAccount = INITIAL_USER_ACCOUNTS[1];
+            filtered.push(juliaAccount);
+            UserRepository.create(juliaAccount).catch(() => {});
+          }
+
+          setUsers(filtered.length > 0 ? filtered : INITIAL_USER_ACCOUNTS);
+        } else {
+          setUsers(INITIAL_USER_ACCOUNTS);
+          for (const u of INITIAL_USER_ACCOUNTS) {
+            UserRepository.create(u).catch(() => {});
+          }
+        }
         if (ncRes.success && Array.isArray(ncRes.data)) setNcs(ncRes.data);
         if (planoRes.success && Array.isArray(planoRes.data)) setPlanos(planoRes.data);
         if (riscoRes.success && Array.isArray(riscoRes.data)) setRiscos(riscoRes.data);
@@ -146,20 +201,30 @@ function AppContent() {
     const unsubUsers = UserRepository.subscribe((items) => {
       if (Array.isArray(items) && items.length > 0) {
         setUsers(items);
-        if (user) {
+        const currentUser = userRef.current;
+        if (currentUser) {
           const myLatestRecord = items.find(
-            (u) => u.id === user.id || (u.email && u.email.toLowerCase() === user.email?.toLowerCase())
+            (u) => u.id === currentUser.id || (u.email && u.email.toLowerCase() === currentUser.email?.toLowerCase())
           );
           if (myLatestRecord) {
-            refreshUser({
-              ...user,
-              name: myLatestRecord.name,
-              email: myLatestRecord.email,
-              role: myLatestRecord.role,
-              sector: myLatestRecord.sector,
-              photoURL: myLatestRecord.photoURL,
-              customPermissions: myLatestRecord.customPermissions
-            });
+            const hasChanged =
+              currentUser.name !== myLatestRecord.name ||
+              currentUser.role !== myLatestRecord.role ||
+              currentUser.sector !== myLatestRecord.sector ||
+              currentUser.photoURL !== myLatestRecord.photoURL ||
+              JSON.stringify(currentUser.customPermissions || {}) !== JSON.stringify(myLatestRecord.customPermissions || {});
+
+            if (hasChanged) {
+              refreshUser({
+                ...currentUser,
+                name: myLatestRecord.name,
+                email: myLatestRecord.email,
+                role: myLatestRecord.role,
+                sector: myLatestRecord.sector,
+                photoURL: myLatestRecord.photoURL,
+                customPermissions: myLatestRecord.customPermissions
+              });
+            }
           }
         }
       }
@@ -214,7 +279,7 @@ function AppContent() {
       unsubPerms();
       unsubSettings();
     };
-  }, [user, needsAuth]);
+  }, [needsAuth]);
 
 
   // Evento Global de Atalho Cmd+K / Ctrl+K

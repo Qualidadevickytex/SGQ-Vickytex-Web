@@ -33,6 +33,13 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 const PRESET_USERS: Record<UserRole, UserProfile> = {
+  Administrador: {
+    email: 'qualidade@vickytex.com.br',
+    name: 'Rodrigo Berto',
+    role: 'Administrador',
+    sector: 'Qualidade',
+    photoURL: 'https://api.dicebear.com/7.x/adventurer/svg?seed=Rodrigo'
+  },
   Qualidade: {
     email: 'qualidade@vickytex.com.br',
     name: 'Rodrigo Berto',
@@ -41,39 +48,32 @@ const PRESET_USERS: Record<UserRole, UserProfile> = {
     photoURL: 'https://api.dicebear.com/7.x/adventurer/svg?seed=Rodrigo'
   },
   Gestor: {
-    email: 'gestor@vickytex.com.br',
-    name: 'Fernando Oliveira (Gestor)',
+    email: 'julia@vickytex.com.br',
+    name: 'Julia',
     role: 'Gestor',
-    sector: 'Administração',
-    photoURL: 'https://api.dicebear.com/7.x/bottts/svg?seed=Fernando'
+    sector: 'Qualidade',
+    photoURL: 'https://api.dicebear.com/7.x/lorelei/svg?seed=Julia'
   },
   Supervisor: {
-    email: 'supervisor.costura@vickytex.com.br',
-    name: 'Roberto Costa (Líder de Costura)',
+    email: 'julia@vickytex.com.br',
+    name: 'Julia',
     role: 'Supervisor',
     sector: 'Costura',
-    photoURL: 'https://api.dicebear.com/7.x/lorelei/svg?seed=Roberto'
-  },
-  Administrador: {
-    email: 'admin@vickytex.com.br',
-    name: 'Suporte TI Vickytex',
-    role: 'Administrador',
-    sector: 'Administração',
-    photoURL: 'https://api.dicebear.com/7.x/pixel-art/svg?seed=Buster'
+    photoURL: 'https://api.dicebear.com/7.x/lorelei/svg?seed=Julia'
   },
   Colaborador: {
-    email: 'colaborador@vickytex.com.br',
-    name: 'Ana Souza (Operadora Corte)',
+    email: 'julia@vickytex.com.br',
+    name: 'Julia',
     role: 'Colaborador',
     sector: 'Corte',
-    photoURL: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Ana'
+    photoURL: 'https://api.dicebear.com/7.x/lorelei/svg?seed=Julia'
   },
   Auditor: {
-    email: 'auditor.externo@vickytex.com.br',
-    name: 'Carlos Eduardo (Auditor ISO 9001)',
+    email: 'qualidade@vickytex.com.br',
+    name: 'Rodrigo Berto',
     role: 'Auditor',
     sector: 'Qualidade',
-    photoURL: 'https://api.dicebear.com/7.x/fun-emoji/svg?seed=Carlos'
+    photoURL: 'https://api.dicebear.com/7.x/adventurer/svg?seed=Rodrigo'
   },
   Visitante: {
     email: 'visitante@vickytex.com.br',
@@ -256,8 +256,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           // Allow fallback preset passwords if matching
           const isPresetMatch = 
             (cleanEmail === 'qualidade@vickytex.com.br' && (passwordHash === 'mariana2026' || passwordHash === 'vickytex123')) ||
-            (cleanEmail === 'admin@vickytex.com.br' && (passwordHash === 'admin123' || passwordHash === 'vickytex123')) ||
-            (cleanEmail === 'gerencia@vickytex.com.br' && (passwordHash === 'fernando2026' || passwordHash === 'vickytex123'));
+            (cleanEmail === 'julia@vickytex.com.br' && (passwordHash === 'julia2026' || passwordHash === 'vickytex123')) ||
+            (cleanEmail === 'admin@vickytex.com.br' && (passwordHash === 'admin123' || passwordHash === 'vickytex123'));
 
           if (!isPresetMatch) {
             await AuditService.login(

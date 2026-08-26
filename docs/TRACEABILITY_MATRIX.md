@@ -1,4 +1,4 @@
-# Matriz de Rastreabilidade End-to-End — SGQ WEB VICKYTEX (v1.2.3)
+# Matriz de Rastreabilidade End-to-End — SGQ WEB VICKYTEX (v1.2.2)
 
 > 🟢 **FONTE OFICIAL DA VERDADE (SSOT) - RASTREABILIDADE**
 > Esta matriz mapeia a rastreabilidade completa de cada módulo funcional do SGQ Web Vickytex, relacionando os requisitos de negócio, código frontend, repositórios Firebase, coleções do Firestore e documentação oficial correspondente.

@@ -1,32 +1,30 @@
-# Documento de Requisitos de Produto (PRD) — SGQ WEB VICKYTEX (v1.2.3)
+# Documento de Requisitos de Produto (PRD) - SGQ Web Vickytex
 
 ## 1. Visão Geral do Produto
-O **SGQ Web Vickytex** é uma plataforma corporativa e profissional para a Gestão da Qualidade da empresa Vickytex, voltada para a conformidade com a norma **ISO 9001:2015** no segmento de confecção têxtil de uniformes escolares e profissionais. 
+O **SGQ Web Vickytex** é uma plataforma corporativa e profissional para a Gestão da Qualidade da empresa Vickytex, voltada para a conformidade com a norma **ISO 9001:2015** no segmento de confecção têxtil de uniformes escolares. 
 
-Este sistema substitui planilhas isoladas do Excel e centraliza todas as informações críticas, garantindo integridade de dados, histórico de revisões, aprovações formais e rastreabilidade total exigida pelas auditorias de certificação.
+Este sistema substituirá planilhas isoladas do Excel e centralizará todas as informações críticas, garantindo a integridade dos dados, histórico de revisões, aprovações formais e rastreabilidade total exigida pelas auditorias de certificação.
 
 ---
 
 ## 2. Objetivos Estratégicos
 - **Substituir a Lista Mestra em Excel**: Eliminar controles manuais, duplicidade de arquivos e o risco de utilização de documentos obsoletos.
-- **Conformidade ISO 9001:2015**: Atender aos requisitos de controle de informação documentada (item 7.5), ações corretivas (item 10.2), auditorias internas (item 9.2), calibração (7.1.5), competências (7.2), indicadores (9.1.3), fornecedores (8.4), riscos (6.1) e análise crítica (9.3).
-- **Integração com Google Workspace**: Aproveitar a infraestrutura corporativa existente (Google Drive e login via Google SSO).
+- **Conformidade ISO 9001:2015**: Atender aos requisitos de controle de informação documentada (item 7.5), ações corretivas (item 10.2) e auditorias internas (item 9.2).
+- **Integração com Google Workspace**: Aproveitar a infraestrutura corporativa existente (Google Drive, Calendar, Gmail e login via Google SSO).
 - **Rastreabilidade Total**: Log de todas as ações de elaboração, revisão e aprovação de documentos sem nunca excluir registros anteriores.
-- **Motor RBAC Granular em Tempo Real**: Alçadas customizadas de Ver [V], Criar [C], Editar [E] e Excluir [X] por colaborador e por setor, além de matriz de perfis técnicos.
 
 ---
 
-## 3. Público-Alvo e Perfis de Usuário (Matriz RACI / Acessos em Tempo Real)
+## 3. Público-Alvo e Perfis de Usuário (Matriz RACI/Acessos)
 
 | Perfil | Descrição | Permissões Principais |
 | :--- | :--- | :--- |
-| **Administrador** | Gestão de TI e parametrizações globais | Acesso total e irrestrito, gerenciamento do banco de dados, matriz RBAC e logs. |
-| **Qualidade** | Líder do SGQ (SGQ Admin) | Cadastro de documentos, definição de fluxos, controle de Lista Mestra e auditorias. |
-| **Gestor** | Diretores e Gerentes de Áreas | Aprovação final de documentos, visualização de Dashboards estratégicos e Análise Crítica. |
-| **Supervisor** | Líderes de Produção (Corte, Costura, etc.) | Elaboração, revisão técnica de POPs, controle de treinamentos operacionais e 5S. |
-| **Auditor** | Auditores internos/externos | Acesso de leitura total aos documentos, relatórios, evidências e logs para auditoria. |
-| **Colaborador** | Operadores, costureiras, auxiliares | Leitura de documentos homologados (via QRCode ou busca rápida), realização de treinamentos e envio de ideias. |
-| **Visitante** | Acesso temporário / observador | Visualização básica restrita. |
+| **Administrador** | Gestão de TI e parametrizações | Acesso total, configurações de sistema, logs globais. |
+| **Qualidade** | Líder do SGQ (SGQ Admin) | Cadastro de documentos, definição de fluxos, controle de Lista Mestra. |
+| **Gerência** | Diretores e Gerentes de Áreas | Aprovação final de documentos, visualização de Dashboards estratégicos. |
+| **Supervisor** | Líderes de Produção/Corte/Costura | Elaboração, revisão técnica de POPs, controle de treinamentos operacionais. |
+| **Colaborador** | Operadores, costureiras, auxiliares | Leitura de documentos homologados (via QRCode ou busca rápida), realização de treinamentos. |
+| **Auditor** | Auditores internos/externos | Acesso de leitura total aos documentos, relatórios e logs para auditoria. |
 
 ---
 

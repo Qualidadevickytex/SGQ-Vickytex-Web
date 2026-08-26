@@ -19,14 +19,14 @@ Este documento tem por finalidade formalizar os padrões técnicos já existente
 
 A infraestrutura e stack tecnológica homologada do sistema compreende os seguintes componentes principais:
 
-*   **React (v18.x / v19.x):** Biblioteca declarativa principal utilizando componentes funcionais estritos baseados em React Hooks. Todas as renderizações e fluxos de dados de tela devem seguir os ciclos de vida modernos do React.
+*   **React (v19.0.1):** Biblioteca declarativa principal utilizando componentes funcionais estritos baseados em React Hooks. Todas as renderizações e fluxos de dados de tela devem seguir os ciclos de vida modernos do React 19.
 *   **Vite (v6.2.3):** Bundler ultra-rápido para o ambiente de desenvolvimento e build de produção de Single Page Application (SPA).
 *   **TypeScript (~v5.8.2):** Linguagem de tipagem estática obrigatória. O compilador está configurado para emitir erros em caso de tipagens ausentes ou implicitamente fracas (`any` sem justificativa).
-*   **Tailwind CSS (v4.x):** Motor de estilização visual baseado em classes utilitárias. A importação é feita no arquivo global por meio de `@import "tailwindcss";`. Nenhum CSS personalizado ou folha separada é permitida, exceto as especificadas nas diretrizes de design do sistema.
-*   **Firebase Firestore NoSQL + Suíte de 21 Repositórios Tipados:** Camada de banco de dados nativa em tempo real (`onSnapshot`) e com fallback transparente para `localStorage`. O backend gerencia autenticação, controle de permissões por roles/colaborador, documentos estruturados e logs imutáveis de auditoria.
+*   **Tailwind CSS (v4.1.14):** Motor de estilização visual baseado em classes utilitárias. A importação é feita no arquivo global por meio de `@import "tailwindcss";`. Nenhum CSS personalizado ou folha separada é permitida, exceto as especificadas nas diretrizes de design do sistema.
+*   **Node.js / Express + Prisma ORM:** Backend REST API integrado ao banco SQLite nativo. O backend gerencia autenticação, controle de permissões por roles, tabelas de dados estruturadas e logs imutáveis de auditoria.
 *   **Google Workspace (OIDC SSO):** Protocolo corporativo de login único (Single Sign-On). A autenticação é restrita ao domínio corporativo `@vickytex.com.br`.
 *   **Google Drive API (v3):** Repositório físico seguro para PDFs dos Procedimentos Operacionais Padrão (POPs), instruções de trabalho (ITs) e formulários. A integração mapeia e sincroniza identificadores físicos de arquivos (`googleDriveId`) diretamente com a base de dados.
-*   **Cloud Run / Netlify CDN:** Plataforma de hospedagem oficial para distribuição estática global com compactação e certificado SSL.
+*   **Netlify CDN:** Plataforma de hospedagem oficial para distribuição estática global através de Edge Multi-Região com compactação Brotli Level 11 e certificado Let's Encrypt Wildcard.
 
 ---
 
@@ -50,7 +50,7 @@ O projeto segue estritamente a arquitetura de módulos autônomos e separação 
 │   ├── IMPLEMENTATION_STANDARD.md   # Padrão de desenvolvimento e guias de UI/UX anti-slop
 │   ├── MANUAL_TECNICO.md            # Manual técnico de instalação e manutenção
 │   ├── MANUAL_USUARIO.md            # Manual operacional do usuário final
-│   ├── FIRESTORE_SCHEMA.md          # SSOT de Coleções, documentos, regras e tipos Firestore
+│   ├── PRISMA_SCHEMA.md             # SSOT de Tabelas, campos, regras e relações Prisma
 │   ├── PRD.md                       # Documento de Especificação de Requisitos de Produto
 │   ├── SGQ_DEVELOPMENT_CONTRACT.md  # Este Contrato (Constituição do Projeto)
 │   └── TRACEABILITY_MATRIX.md       # Matriz de Rastreabilidade Módulo ➔ Código ➔ Banco ➔ Doc
