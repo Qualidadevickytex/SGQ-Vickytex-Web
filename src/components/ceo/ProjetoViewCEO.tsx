@@ -53,6 +53,8 @@ import { AuditRepository } from '../../services/database/repositories/audit.repo
 import { DocumentRepository } from '../../services/database/repositories/document.repository';
 import { SystemSettingsRepository } from '../../services/database/repositories/systemSettings.repository';
 import { AuditLogsRepository } from '../../services/firebase/repositories/auditLog.repository';
+import { RelatorioA3Modal } from './RelatorioA3Modal';
+import { GoogleDriveEvidenciasModal } from './GoogleDriveEvidenciasModal';
 
 interface ProjetoViewCEOProps {
   project: ProjetoCEO;
@@ -85,6 +87,8 @@ export const ProjetoViewCEO: React.FC<ProjetoViewCEOProps> = ({
   const [activeSubTab, setActiveSubTab] = useState<SubTabType>('visao');
   const [isSaving, setIsSaving] = useState(false);
   const [isConfirmDeleteOpen, setIsConfirmDeleteOpen] = useState(false);
+  const [isA3ModalOpen, setIsA3ModalOpen] = useState(false);
+  const [isGoogleDriveModalOpen, setIsGoogleDriveModalOpen] = useState(false);
 
   // Local state copy of ferramentas to edit and save
   const [tools, setTools] = useState<FerramentasCEO>(() => {
@@ -145,6 +149,23 @@ export const ProjetoViewCEO: React.FC<ProjetoViewCEOProps> = ({
   useEffect(() => {
     if (project.ferramentas) {
       setTools(prev => ({ ...prev, ...project.ferramentas }));
+      if (project.ferramentas.encerramento) {
+        setRelatorioFinal(project.ferramentas.encerramento.relatorioFinal || '');
+        setLicoesAprendidas(project.ferramentas.encerramento.licoesAprendidas || '');
+        setRoiValidado(!!project.ferramentas.encerramento.roiValidado);
+      }
+      if (project.ferramentas.leadTime) {
+        setCalcLtBefore(project.ferramentas.leadTime.before);
+        setCalcLtAfter(project.ferramentas.leadTime.after);
+        setCalcLtUnit(project.ferramentas.leadTime.unit || 'horas');
+      }
+      if (project.ferramentas.auditoriaId !== undefined) setLinkedAuditId(project.ferramentas.auditoriaId || '');
+      if (project.ferramentas.planoAcaoId !== undefined) setLinkedPlanoId(project.ferramentas.planoAcaoId || '');
+      if (project.ferramentas.documentoSopId !== undefined) setLinkedDocId(project.ferramentas.documentoSopId || '');
+      if (project.ferramentas.treinamentoHoras !== undefined) {
+        setCalcTrainingHours(project.ferramentas.treinamentoHoras);
+        setLoggedTrainingHours(project.ferramentas.treinamentoHoras);
+      }
     }
     setCalcInvestimento(project.investimento);
     setCalcRetornoEsperado(project.retornoEsperado);
@@ -174,6 +195,7 @@ export const ProjetoViewCEO: React.FC<ProjetoViewCEOProps> = ({
   });
 
   useEffect(() => {
+    // Initial fetch
     AuditRepository.findAll().then(res => {
       if (res.success && res.data.length > 0) setAvailableAudits(res.data);
     }).catch(() => {});
@@ -185,6 +207,23 @@ export const ProjetoViewCEO: React.FC<ProjetoViewCEOProps> = ({
     DocumentRepository.findAll().then(res => {
       if (res.success && res.data.length > 0) setAvailableDocs(res.data);
     }).catch(() => {});
+
+    // Real-time Firestore subscriptions
+    const unsubAudits = AuditRepository.subscribe(data => {
+      if (Array.isArray(data)) setAvailableAudits(data);
+    });
+    const unsubPlans = ActionPlanRepository.subscribe(data => {
+      if (Array.isArray(data)) setAvailablePlans(data);
+    });
+    const unsubDocs = DocumentRepository.subscribe(data => {
+      if (Array.isArray(data)) setAvailableDocs(data);
+    });
+
+    return () => {
+      unsubAudits();
+      unsubPlans();
+      unsubDocs();
+    };
   }, []);
 
   // Calculations & parameters state
@@ -411,31 +450,27 @@ export const ProjetoViewCEO: React.FC<ProjetoViewCEOProps> = ({
   };
 
   const handleSyncGoogleDrive = () => {
-    setSyncStatus('Sincronizando pasta com o Google Drive...');
-    setTimeout(() => {
-      setSyncStatus('✓ Pasta "SGQ_CEO/' + project.codigo + '" sincronizada com o Google Drive corporativo!');
-      
-      NotificationRepository.create({
-        titulo: 'Nuvem Google Drive Sincronizada',
-        mensagem: `Sincronizada pasta de evidências e anexos para o projeto ${project.codigo}.`,
-        tipo: 'sucesso',
-        destinatarioEmail: 'qualidade@vickytex.com.br'
-      });
-    }, 1500);
+    setIsGoogleDriveModalOpen(true);
+    setSyncStatus('✓ Pasta "SGQ_CEO/' + project.codigo + '" sincronizada com o Google Drive corporativo!');
+    
+    NotificationRepository.create({
+      titulo: 'Nuvem Google Drive Sincronizada',
+      mensagem: `Acessada pasta de evidências e anexos para o projeto ${project.codigo}.`,
+      tipo: 'sucesso',
+      destinatarioEmail: 'qualidade@vickytex.com.br'
+    });
   };
 
   const handleGenerateA3Doc = () => {
-    setSyncStatus('Estruturando Relatório A3 Executivo...');
-    setTimeout(() => {
-      setSyncStatus('✓ Relatório A3 gerado com sucesso no Google Docs corporativo! (Formato ISO 9001:2015)');
-      
-      NotificationRepository.create({
-        titulo: 'Relatório A3 Gerado',
-        mensagem: `Documento Google Docs contendo o sumário A3 do projeto ${project.codigo} foi compilado.`,
-        tipo: 'sucesso',
-        destinatarioEmail: 'qualidade@vickytex.com.br'
-      });
-    }, 1500);
+    setIsA3ModalOpen(true);
+    setSyncStatus('✓ Relatório A3 gerado com sucesso no padrão executivo ISO 9001:2015!');
+    
+    NotificationRepository.create({
+      titulo: 'Relatório A3 Gerado',
+      mensagem: `Documento executivo A3 compilado para o projeto ${project.codigo}.`,
+      tipo: 'sucesso',
+      destinatarioEmail: 'qualidade@vickytex.com.br'
+    });
   };
 
   // ----------------------------------------------------
@@ -3232,6 +3267,27 @@ export const ProjetoViewCEO: React.FC<ProjetoViewCEOProps> = ({
             setIsConfirmDeleteOpen(false);
           }}
           onClose={() => setIsConfirmDeleteOpen(false)}
+        />
+      )}
+
+      {/* Relatório A3 Executivo Modal */}
+      {isA3ModalOpen && (
+        <RelatorioA3Modal
+          project={project}
+          tools={tools}
+          onClose={() => setIsA3ModalOpen(false)}
+        />
+      )}
+
+      {/* Google Drive Evidências Modal */}
+      {isGoogleDriveModalOpen && (
+        <GoogleDriveEvidenciasModal
+          project={project}
+          tools={tools}
+          onSaveEvidencias={(updatedEvidencias) => {
+            saveTools({ ...tools, evidencias: updatedEvidencias });
+          }}
+          onClose={() => setIsGoogleDriveModalOpen(false)}
         />
       )}
 

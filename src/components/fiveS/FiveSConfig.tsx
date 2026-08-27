@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Plus, 
   Trash2, 
@@ -77,8 +77,8 @@ export const FiveSConfig: React.FC<FiveSConfigProps> = ({
   // Classification form state
   const [isClassModalOpen, setIsClassModalOpen] = useState(false);
   const [editingClass, setEditingClass] = useState<Classificacao5S | null>(null);
-  const [classMin, setClassMin] = useState(0);
-  const [classMax, setClassMax] = useState(100);
+  const [classMin, setClassMin] = useState<number | string>(0);
+  const [classMax, setClassMax] = useState<number | string>(100);
   const [className, setClassName] = useState('');
   const [classCor, setClassCor] = useState('blue');
   const [classIcon, setClassIcon] = useState('Award');
@@ -104,6 +104,22 @@ export const FiveSConfig: React.FC<FiveSConfigProps> = ({
   const [trophyPeriod, setTrophyPeriod] = useState(config.trofeuPeriodicidade);
   const [trophyText, setTrophyText] = useState(config.trofeuTextoCertificado);
   const [trophyImg, setTrophyImg] = useState(config.trofeuImagemUrl);
+
+  // Sync state whenever remote/realtime config changes
+  useEffect(() => {
+    if (config) {
+      setPtTotal(config.pontosAtendeTotalmente);
+      setPtParcial(config.pontosAtendeParcialmente);
+      setPtNao(config.pontosNaoAtende);
+      setPenalParcial(config.penalidadeReincidenciaParcial);
+      setPenalNao(config.penalidadeReincidenciaNaoAtende);
+      setTrophyWinners(config.trofeuQtdVencedores);
+      setTrophyName(config.trofeuNomePremio);
+      setTrophyPeriod(config.trofeuPeriodicidade);
+      setTrophyText(config.trofeuTextoCertificado);
+      setTrophyImg(config.trofeuImagemUrl);
+    }
+  }, [config]);
 
   // --- SECTORS ACTIONS ---
   const handleOpenSectorModal = (sector?: Setor5S) => {
@@ -245,17 +261,22 @@ export const FiveSConfig: React.FC<FiveSConfigProps> = ({
     e.preventDefault();
     if (!className.trim()) return;
 
+    const minNum = typeof classMin === 'number' ? classMin : parseFloat(String(classMin).replace(',', '.'));
+    const maxNum = typeof classMax === 'number' ? classMax : parseFloat(String(classMax).replace(',', '.'));
+    const cleanMin = isNaN(minNum) ? 0 : minNum;
+    const cleanMax = isNaN(maxNum) ? 100 : maxNum;
+
     let updatedList = [...classificacoes];
     if (editingClass) {
       updatedList = updatedList.map(c => c.id === editingClass.id
-        ? { ...c, min: Number(classMin), max: Number(classMax), nome: className.trim(), cor: classCor, icone: classIcon }
+        ? { ...c, min: cleanMin, max: cleanMax, nome: className.trim(), cor: classCor, icone: classIcon }
         : c
       );
     } else {
       updatedList.push({
         id: `class-${Date.now()}`,
-        min: Number(classMin),
-        max: Number(classMax),
+        min: cleanMin,
+        max: cleanMax,
         nome: className.trim(),
         cor: classCor,
         icone: classIcon
@@ -571,6 +592,7 @@ export const FiveSConfig: React.FC<FiveSConfigProps> = ({
                 <label className="block text-[10px] font-black text-slate-500 uppercase">Atende Totalmente</label>
                 <input
                   type="number"
+                  step="any"
                   value={ptTotal}
                   onChange={(e) => setPtTotal(Number(e.target.value))}
                   disabled={!canModify}
@@ -581,6 +603,7 @@ export const FiveSConfig: React.FC<FiveSConfigProps> = ({
                 <label className="block text-[10px] font-black text-slate-500 uppercase">Atende Parcialmente</label>
                 <input
                   type="number"
+                  step="any"
                   value={ptParcial}
                   onChange={(e) => setPtParcial(Number(e.target.value))}
                   disabled={!canModify}
@@ -591,6 +614,7 @@ export const FiveSConfig: React.FC<FiveSConfigProps> = ({
                 <label className="block text-[10px] font-black text-slate-500 uppercase">Não Atende</label>
                 <input
                   type="number"
+                  step="any"
                   value={ptNao}
                   onChange={(e) => setPtNao(Number(e.target.value))}
                   disabled={!canModify}
@@ -605,8 +629,9 @@ export const FiveSConfig: React.FC<FiveSConfigProps> = ({
                 <p className="text-[10px] text-slate-400">Pontos deduzidos se o requisito continuar classificado como Atende Parcialmente consecutivamente.</p>
                 <input
                   type="number"
+                  step="any"
                   value={penalParcial}
-                  onChange={(e) => setPtParcial && setPenalParcial(Number(e.target.value))}
+                  onChange={(e) => setPenalParcial(Number(e.target.value))}
                   disabled={!canModify}
                   className="w-32 bg-slate-50 dark:bg-slate-800 text-xs font-mono font-bold border border-slate-200 dark:border-slate-700 rounded-lg p-2 text-rose-500"
                 />
@@ -617,6 +642,7 @@ export const FiveSConfig: React.FC<FiveSConfigProps> = ({
                 <p className="text-[10px] text-slate-400">Pontos deduzidos se o requisito continuar classificado como Não Atende consecutivamente.</p>
                 <input
                   type="number"
+                  step="any"
                   value={penalNao}
                   onChange={(e) => setPenalNao(Number(e.target.value))}
                   disabled={!canModify}
@@ -984,11 +1010,12 @@ export const FiveSConfig: React.FC<FiveSConfigProps> = ({
                   <label className="block text-[10px] font-black text-slate-400 uppercase">Pontuação Mínima (%)</label>
                   <input
                     type="number"
+                    step="any"
                     required
                     min={0}
                     max={100}
                     value={classMin}
-                    onChange={(e) => setClassMin(Number(e.target.value))}
+                    onChange={(e) => setClassMin(e.target.value)}
                     className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-2 font-mono font-bold"
                   />
                 </div>
@@ -997,11 +1024,12 @@ export const FiveSConfig: React.FC<FiveSConfigProps> = ({
                   <label className="block text-[10px] font-black text-slate-400 uppercase">Pontuação Máxima (%)</label>
                   <input
                     type="number"
+                    step="any"
                     required
                     min={0}
                     max={100}
                     value={classMax}
-                    onChange={(e) => setClassMax(Number(e.target.value))}
+                    onChange={(e) => setClassMax(e.target.value)}
                     className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-2 font-mono font-bold"
                   />
                 </div>

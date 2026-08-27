@@ -52,6 +52,7 @@ import {
 } from 'recharts';
 import { PersonalizacaoGeral } from '../utils/mockData';
 import { useAuth } from '../contexts/AuthContext';
+import { useModulePermission } from '../utils/permissionManager';
 import { IndicatorRepository } from '../services/database/repositories/indicator.repository';
 import { CriticalAnalysesRepository } from '../services/firebase/repositories/criticalAnalysis.repository';
 import { IndicadorDesempenho } from '../types/indicator';
@@ -300,6 +301,13 @@ const mapFromRepo = (repoInd: any): Indicador => {
 
 export const Indicadores: React.FC<IndicadoresProps> = ({ onAddLog, personalizacao }) => {
   const { user } = useAuth();
+  const {
+    canCreate,
+    canEdit,
+    canDelete,
+    canModifyItem,
+    canDeleteItem
+  } = useModulePermission('indicadores');
   const [indicadores, setIndicadores] = useState<Indicador[]>(() => {
     return import.meta.env.VITE_DEMO_MODE === 'true' ? INITIAL_INDICADORES : [];
   });
@@ -775,23 +783,27 @@ export const Indicadores: React.FC<IndicadoresProps> = ({ onAddLog, personalizac
         </div>
 
         <div className="flex items-center gap-2 self-start md:self-center">
-          <button
-            id="btn-add-measure"
-            onClick={() => setShowAddMeasureModal(true)}
-            className="flex items-center space-x-1.5 px-4 py-2.5 bg-indigo-50 dark:bg-indigo-950/40 hover:bg-indigo-100/80 dark:hover:bg-indigo-900/40 text-indigo-600 dark:text-indigo-400 text-xs font-bold rounded-xl border border-indigo-200/50 dark:border-indigo-900/50 transition-all cursor-pointer"
-          >
-            <Calendar className="w-4 h-4" />
-            <span>Lançar Medição</span>
-          </button>
+          {canEdit && (
+            <button
+              id="btn-add-measure"
+              onClick={() => setShowAddMeasureModal(true)}
+              className="flex items-center space-x-1.5 px-4 py-2.5 bg-indigo-50 dark:bg-indigo-950/40 hover:bg-indigo-100/80 dark:hover:bg-indigo-900/40 text-indigo-600 dark:text-indigo-400 text-xs font-bold rounded-xl border border-indigo-200/50 dark:border-indigo-900/50 transition-all cursor-pointer"
+            >
+              <Calendar className="w-4 h-4" />
+              <span>Lançar Medição</span>
+            </button>
+          )}
           
-          <button
-            id="btn-add-kpi"
-            onClick={() => setShowAddKpiModal(true)}
-            className="flex items-center space-x-1.5 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl shadow-md hover:shadow-lg transition-all cursor-pointer"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Novo Indicador</span>
-          </button>
+          {canCreate && (
+            <button
+              id="btn-add-kpi"
+              onClick={() => setShowAddKpiModal(true)}
+              className="flex items-center space-x-1.5 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl shadow-md hover:shadow-lg transition-all cursor-pointer"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Novo Indicador</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -960,35 +972,39 @@ export const Indicadores: React.FC<IndicadoresProps> = ({ onAddLog, personalizac
 
                 <div className="flex sm:flex-col items-end gap-3 sm:gap-1.5 shrink-0">
                   <div className="flex items-center gap-1">
-                    <button
-                      onClick={() => {
-                        setEditingKpi(activeKpi);
-                        setNewKpi({
-                          nome: activeKpi.nome,
-                          setor: activeKpi.setor,
-                          unidade: activeKpi.unidade,
-                          meta: activeKpi.meta,
-                          direcaoMeta: activeKpi.direcaoMeta,
-                          frequencia: activeKpi.frequencia,
-                          requisitoISO: activeKpi.requisitoISO,
-                          descricao: activeKpi.descricao,
-                          formula: activeKpi.formula,
-                          responsavel: activeKpi.responsavel
-                        });
-                        setShowAddKpiModal(true);
-                      }}
-                      className="p-2 hover:bg-indigo-50 hover:text-indigo-600 dark:hover:bg-indigo-950/40 dark:hover:text-indigo-400 text-slate-400 rounded-lg transition-colors cursor-pointer"
-                      title="Editar Metadados do Indicador"
-                    >
-                      <Edit3 className="w-4.5 h-4.5" />
-                    </button>
-                    <button
-                      onClick={() => setKpiToDelete(activeKpi)}
-                      className="p-2 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40 dark:hover:text-red-400 text-slate-400 rounded-lg transition-colors cursor-pointer"
-                      title="Excluir Indicador"
-                    >
-                      <Trash2 className="w-4.5 h-4.5" />
-                    </button>
+                    {canEdit && (!canModifyItem || canModifyItem(activeKpi.setor)) && (
+                      <button
+                        onClick={() => {
+                          setEditingKpi(activeKpi);
+                          setNewKpi({
+                            nome: activeKpi.nome,
+                            setor: activeKpi.setor,
+                            unidade: activeKpi.unidade,
+                            meta: activeKpi.meta,
+                            direcaoMeta: activeKpi.direcaoMeta,
+                            frequencia: activeKpi.frequencia,
+                            requisitoISO: activeKpi.requisitoISO,
+                            descricao: activeKpi.descricao,
+                            formula: activeKpi.formula,
+                            responsavel: activeKpi.responsavel
+                          });
+                          setShowAddKpiModal(true);
+                        }}
+                        className="p-2 hover:bg-indigo-50 hover:text-indigo-600 dark:hover:bg-indigo-950/40 dark:hover:text-indigo-400 text-slate-400 rounded-lg transition-colors cursor-pointer"
+                        title="Editar Metadados do Indicador"
+                      >
+                        <Edit3 className="w-4.5 h-4.5" />
+                      </button>
+                    )}
+                    {canDelete && (!canDeleteItem || canDeleteItem(activeKpi.setor)) && (
+                      <button
+                        onClick={() => setKpiToDelete(activeKpi)}
+                        className="p-2 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40 dark:hover:text-red-400 text-slate-400 rounded-lg transition-colors cursor-pointer"
+                        title="Excluir Indicador"
+                      >
+                        <Trash2 className="w-4.5 h-4.5" />
+                      </button>
+                    )}
                   </div>
                   
                   <div className="text-right">
@@ -1204,37 +1220,41 @@ export const Indicadores: React.FC<IndicadoresProps> = ({ onAddLog, personalizac
                                 <div className="inline-flex space-x-1">
                                   <button
                                     onClick={() => handleSaveEditHistory(idx)}
-                                    className="px-2 py-0.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-[10px] font-bold"
+                                    className="px-2 py-0.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-[10px] font-bold cursor-pointer"
                                   >
                                     Salvar
                                   </button>
                                   <button
                                     onClick={() => setEditingHistIndex(null)}
-                                    className="px-2 py-0.5 bg-slate-200 dark:bg-slate-850 text-slate-600 dark:text-slate-300 rounded text-[10px] font-bold"
+                                    className="px-2 py-0.5 bg-slate-200 dark:bg-slate-850 text-slate-600 dark:text-slate-300 rounded text-[10px] font-bold cursor-pointer"
                                   >
                                     Cancelar
                                   </button>
                                 </div>
                               ) : (
                                 <div className="inline-flex space-x-1">
-                                  <button
-                                    onClick={() => {
-                                      setEditingHistIndex(idx);
-                                      setEditingHistMes(h.mes);
-                                      setEditingHistValue(String(h.valor));
-                                    }}
-                                    className="px-2 py-0.5 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/40 dark:hover:bg-indigo-900 text-indigo-600 dark:text-indigo-400 rounded text-[10px] font-bold inline-flex items-center gap-0.5"
-                                  >
-                                    <Edit3 className="w-2.5 h-2.5" />
-                                    <span>Editar</span>
-                                  </button>
-                                  <button
-                                    onClick={() => handleDeleteHistory(idx)}
-                                    className="px-2 py-0.5 bg-red-50 hover:bg-red-100 dark:bg-red-950/40 dark:hover:bg-red-900 text-red-600 dark:text-red-400 rounded text-[10px] font-bold inline-flex items-center gap-0.5"
-                                  >
-                                    <Trash2 className="w-2.5 h-2.5" />
-                                    <span>Excluir</span>
-                                  </button>
+                                  {canEdit && (!canModifyItem || canModifyItem(activeKpi.setor)) && (
+                                    <button
+                                      onClick={() => {
+                                        setEditingHistIndex(idx);
+                                        setEditingHistMes(h.mes);
+                                        setEditingHistValue(String(h.valor));
+                                      }}
+                                      className="px-2 py-0.5 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/40 dark:hover:bg-indigo-900 text-indigo-600 dark:text-indigo-400 rounded text-[10px] font-bold inline-flex items-center gap-0.5 cursor-pointer"
+                                    >
+                                      <Edit3 className="w-2.5 h-2.5" />
+                                      <span>Editar</span>
+                                    </button>
+                                  )}
+                                  {canDelete && (!canDeleteItem || canDeleteItem(activeKpi.setor)) && (
+                                    <button
+                                      onClick={() => handleDeleteHistory(idx)}
+                                      className="px-2 py-0.5 bg-red-50 hover:bg-red-100 dark:bg-red-950/40 dark:hover:bg-red-900 text-red-600 dark:text-red-400 rounded text-[10px] font-bold inline-flex items-center gap-0.5 cursor-pointer"
+                                    >
+                                      <Trash2 className="w-2.5 h-2.5" />
+                                      <span>Excluir</span>
+                                    </button>
+                                  )}
                                 </div>
                               )}
                             </td>
@@ -1266,22 +1286,24 @@ export const Indicadores: React.FC<IndicadoresProps> = ({ onAddLog, personalizac
                 <p className="text-xs text-slate-400">Avaliações consolidadas pelo comitê de qualidade e gerência</p>
               </div>
 
-              <button
-                id="btn-add-critica"
-                onClick={() => {
-                  setNewCritica({
-                    indicadorId: selectedKpiId || indicadores[0]?.id || '',
-                    conclusao: '',
-                    statusAcao: 'Sob Controle',
-                    linkPlanoId: ''
-                  });
-                  setShowAddCriticaModal(true);
-                }}
-                className="flex items-center space-x-1 px-3 py-1.5 bg-indigo-50 dark:bg-indigo-950/40 hover:bg-indigo-100 dark:hover:bg-indigo-900 text-indigo-600 dark:text-indigo-400 text-xs font-bold rounded-lg border border-indigo-200/50 dark:border-indigo-900/50 transition-colors cursor-pointer"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>Nova Análise</span>
-              </button>
+              {canCreate && (
+                <button
+                  id="btn-add-critica"
+                  onClick={() => {
+                    setNewCritica({
+                      indicadorId: selectedKpiId || indicadores[0]?.id || '',
+                      conclusao: '',
+                      statusAcao: 'Sob Controle',
+                      linkPlanoId: ''
+                    });
+                    setShowAddCriticaModal(true);
+                  }}
+                  className="flex items-center space-x-1 px-3 py-1.5 bg-indigo-50 dark:bg-indigo-950/40 hover:bg-indigo-100 dark:hover:bg-indigo-900 text-indigo-600 dark:text-indigo-400 text-xs font-bold rounded-lg border border-indigo-200/50 dark:border-indigo-900/50 transition-colors cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Nova Análise</span>
+                </button>
+              )}
             </div>
 
             <div className="space-y-3">
@@ -1313,13 +1335,15 @@ export const Indicadores: React.FC<IndicadoresProps> = ({ onAddLog, personalizac
                       }`}>
                         {critica.statusAcao}
                       </span>
-                      <button
-                        onClick={() => handleDeleteCritica(critica.id)}
-                        className="p-1 text-slate-400 hover:text-red-600 dark:hover:text-red-400 rounded-md hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"
-                        title="Excluir parecer"
-                      >
-                        <Trash2 className="w-3 h-3" />
-                      </button>
+                      {canDelete && (
+                        <button
+                          onClick={() => handleDeleteCritica(critica.id)}
+                          className="p-1 text-slate-400 hover:text-red-600 dark:hover:text-red-400 rounded-md hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors cursor-pointer"
+                          title="Excluir parecer"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      )}
                     </div>
                     {critica.linkPlanoId && (
                       <span className="text-[9px] font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/20 px-1.5 py-0.5 rounded-sm font-mono">

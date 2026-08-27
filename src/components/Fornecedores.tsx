@@ -27,13 +27,15 @@ import {
   ArrowLeft,
   X,
   PlusCircle,
-  HelpCircle
+  HelpCircle,
+  RefreshCw
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Fornecedor, AvaliacaoFornecedor } from '../types';
 import { INITIAL_FORNECEDORES } from '../utils/mockData';
 import { SupplierRepository } from '../services/database/repositories/supplier.repository';
 import { SystemSettingsRepository } from '../services/database/repositories/systemSettings.repository';
+import { useModulePermission } from '../utils/permissionManager';
 
 interface FornecedoresProps {
   onAddLog: (action: string, details: string) => void;
@@ -41,16 +43,34 @@ interface FornecedoresProps {
 }
 
 export const Fornecedores: React.FC<FornecedoresProps> = ({ onAddLog, personalizacao }) => {
+  const {
+    canCreate,
+    canEdit,
+    canDelete,
+    canModifyItem,
+    canDeleteItem
+  } = useModulePermission('fornecedores');
+
   const [fornecedores, setFornecedores] = useState<Fornecedor[]>(() => {
     return import.meta.env.VITE_DEMO_MODE === 'true' ? INITIAL_FORNECEDORES : [];
   });
 
+  const [toastMessage, setToastMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  const showToast = (text: string, type: 'success' | 'error' = 'success') => {
+    setToastMessage({ type, text });
+    setTimeout(() => {
+      setToastMessage(null);
+    }, 4000);
+  };
+
   // Carregar os fornecedores reais do Banco de Dados via SupplierRepository na montagem e manter sincronizado
   useEffect(() => {
+    let isSubscribed = true;
     const fetchSuppliers = async () => {
       try {
         const res = await SupplierRepository.findAll();
-        if (res.success && res.data) {
+        if (res.success && res.data && isSubscribed) {
           setFornecedores(res.data);
         }
       } catch (err) {
@@ -60,12 +80,20 @@ export const Fornecedores: React.FC<FornecedoresProps> = ({ onAddLog, personaliz
     fetchSuppliers();
 
     const unsub = SupplierRepository.subscribe((items) => {
-      if (Array.isArray(items)) {
+      if (Array.isArray(items) && isSubscribed) {
         setFornecedores(items);
+        setSelectedSupplier((prev) => {
+          if (!prev) return null;
+          const found = items.find((it) => it.id === prev.id);
+          return found || prev;
+        });
       }
     });
 
-    return () => unsub();
+    return () => {
+      isSubscribed = false;
+      unsub();
+    };
   }, []);
 
   // Estados de busca, filtros e modais
@@ -121,6 +149,10 @@ export const Fornecedores: React.FC<FornecedoresProps> = ({ onAddLog, personaliz
   const [isEvaluating, setIsEvaluating] = useState<Fornecedor | null>(null);
   const [supplierToDelete, setSupplierToDelete] = useState<{ id: string; name: string } | null>(null);
 
+  const [isSubmittingEval, setIsSubmittingEval] = useState(false);
+  const [isSubmittingSupplier, setIsSubmittingSupplier] = useState(false);
+  const [isDeletingSupplier, setIsDeletingSupplier] = useState(false);
+
   // Form states para Fornecedor
   const [cnpj, setCnpj] = useState('');
   const [razaoSocial, setRazaoSocial] = useState('');
@@ -139,17 +171,34 @@ export const Fornecedores: React.FC<FornecedoresProps> = ({ onAddLog, personaliz
   const [criterioAtendimento, setCriterioAtendimento] = useState<number>(100);
   const [parecerTecnico, setParecerTecnico] = useState('');
 
+  // Auto-fill evaluator when evaluation modal opens
+  useEffect(() => {
+    if (isEvaluating) {
+      try {
+        const storedUser = localStorage.getItem('currentUser');
+        if (storedUser) {
+          const parsed = JSON.parse(storedUser);
+          if (parsed?.name) {
+            setEvaluator(parsed.name + ' (Qualidade / Vickytex)');
+            return;
+          }
+        }
+      } catch (e) {}
+      setEvaluator('Qualidade (Vickytex)');
+    }
+  }, [isEvaluating]);
+
   // Sincronizar form ao editar
   useEffect(() => {
     if (editingSupplier) {
-      setCnpj(editingSupplier.cnpj);
-      setRazaoSocial(editingSupplier.razaoSocial);
-      setNomeFantasia(editingSupplier.nomeFantasia);
-      setContatoNome(editingSupplier.contatoNome);
-      setContatoEmail(editingSupplier.contatoEmail);
-      setContatoTelefone(editingSupplier.contatoTelefone);
-      setCategoria(editingSupplier.categoria);
-      setCriticidade(editingSupplier.criticidade);
+      setCnpj(editingSupplier.cnpj || '');
+      setRazaoSocial(editingSupplier.razaoSocial || '');
+      setNomeFantasia(editingSupplier.nomeFantasia || '');
+      setContatoNome(editingSupplier.contatoNome || '');
+      setContatoEmail(editingSupplier.contatoEmail || '');
+      setContatoTelefone(editingSupplier.contatoTelefone || '');
+      setCategoria(editingSupplier.categoria || categorias[0] || 'Fios e Fibras');
+      setCriticidade(editingSupplier.criticidade || 'Alta');
       setObservacoes(editingSupplier.observacoes || '');
     } else {
       resetForm();
@@ -179,73 +228,80 @@ export const Fornecedores: React.FC<FornecedoresProps> = ({ onAddLog, personaliz
   // Handlers
   const handleAddSupplier = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!razaoSocial || !cnpj) {
-      alert('Razão Social e CNPJ são obrigatórios.');
+    if (isSubmittingSupplier) return;
+
+    if (!razaoSocial.trim() || !cnpj.trim()) {
+      showToast('Razão Social e CNPJ são obrigatórios.', 'error');
       return;
     }
 
+    setIsSubmittingSupplier(true);
+
     const newSupplier: Fornecedor = {
       id: `forn-${Date.now()}`,
-      cnpj,
-      razaoSocial,
-      nomeFantasia: nomeFantasia || razaoSocial,
-      contatoNome,
-      contatoEmail,
-      contatoTelefone,
+      cnpj: cnpj.trim(),
+      razaoSocial: razaoSocial.trim(),
+      nomeFantasia: (nomeFantasia.trim() || razaoSocial.trim()),
+      contatoNome: contatoNome.trim(),
+      contatoEmail: contatoEmail.trim(),
+      contatoTelefone: contatoTelefone.trim(),
       categoria,
       criticidade,
       statusQualificacao: 'Em Avaliação',
       historicoAvaliacoes: [],
-      observacoes
+      observacoes: observacoes.trim()
     };
 
-    setFornecedores([newSupplier, ...fornecedores]);
+    setFornecedores((prev) => [newSupplier, ...prev.filter(f => f.id !== newSupplier.id)]);
     setIsAddingSupplier(false);
     resetForm();
-    onAddLog('Cadastro de Fornecedor', `Cadastrou o fornecedor ${newSupplier.nomeFantasia} (CNPJ: ${cnpj})`);
+    onAddLog('Cadastro de Fornecedor', `Cadastrou o fornecedor ${newSupplier.nomeFantasia} (CNPJ: ${newSupplier.cnpj})`);
+    showToast('Fornecedor cadastrado com sucesso!', 'success');
 
     try {
       await SupplierRepository.create(newSupplier);
     } catch (err) {
       console.error('Falha ao salvar fornecedor remoto:', err);
+    } finally {
+      setIsSubmittingSupplier(false);
     }
   };
 
   const handleUpdateSupplier = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingSupplier || !razaoSocial || !cnpj) return;
+    if (isSubmittingSupplier || !editingSupplier || !razaoSocial.trim() || !cnpj.trim()) return;
 
-    let updatedItem: Fornecedor | null = null;
-    const updated = fornecedores.map(f => {
-      if (f.id === editingSupplier.id) {
-        updatedItem = {
-          ...f,
-          cnpj,
-          razaoSocial,
-          nomeFantasia: nomeFantasia || razaoSocial,
-          contatoNome,
-          contatoEmail,
-          contatoTelefone,
-          categoria,
-          criticidade,
-          observacoes
-        };
-        return updatedItem;
-      }
-      return f;
-    });
+    setIsSubmittingSupplier(true);
 
-    setFornecedores(updated);
+    const updatedItem: Fornecedor = {
+      ...editingSupplier,
+      cnpj: cnpj.trim(),
+      razaoSocial: razaoSocial.trim(),
+      nomeFantasia: (nomeFantasia.trim() || razaoSocial.trim()),
+      contatoNome: contatoNome.trim(),
+      contatoEmail: contatoEmail.trim(),
+      contatoTelefone: contatoTelefone.trim(),
+      categoria,
+      criticidade,
+      observacoes: observacoes.trim(),
+      historicoAvaliacoes: Array.isArray(editingSupplier.historicoAvaliacoes) ? editingSupplier.historicoAvaliacoes : []
+    };
+
+    setFornecedores((prev) => prev.map(f => f.id === editingSupplier.id ? updatedItem : f));
+    if (selectedSupplier?.id === editingSupplier.id) {
+      setSelectedSupplier(updatedItem);
+    }
     setEditingSupplier(null);
     resetForm();
-    onAddLog('Atualização de Fornecedor', `Atualizou os dados do fornecedor ${nomeFantasia || razaoSocial}`);
+    onAddLog('Atualização de Fornecedor', `Atualizou os dados do fornecedor ${updatedItem.nomeFantasia}`);
+    showToast('Dados do fornecedor atualizados com sucesso!', 'success');
 
-    if (updatedItem) {
-      try {
-        await SupplierRepository.update(editingSupplier.id, updatedItem);
-      } catch (err) {
-        console.error('Falha ao atualizar fornecedor remoto:', err);
-      }
+    try {
+      await SupplierRepository.update(editingSupplier.id, updatedItem);
+    } catch (err) {
+      console.error('Falha ao atualizar fornecedor remoto:', err);
+    } finally {
+      setIsSubmittingSupplier(false);
     }
   };
 
@@ -254,94 +310,99 @@ export const Fornecedores: React.FC<FornecedoresProps> = ({ onAddLog, personaliz
   };
 
   const confirmDeleteSupplier = async () => {
-    if (!supplierToDelete) return;
+    if (!supplierToDelete || isDeletingSupplier) return;
     const { id, name } = supplierToDelete;
-    setFornecedores(fornecedores.filter(f => f.id !== id));
+
+    setIsDeletingSupplier(true);
+    setFornecedores((prev) => prev.filter(f => f.id !== id));
     if (selectedSupplier?.id === id) {
       setSelectedSupplier(null);
     }
     onAddLog('Exclusão de Fornecedor', `Removeu o fornecedor ${name}`);
     setSupplierToDelete(null);
+    showToast(`Fornecedor "${name}" removido com sucesso!`, 'success');
 
     try {
       await SupplierRepository.delete(id);
     } catch (err) {
       console.error('Falha ao deletar fornecedor remoto:', err);
+    } finally {
+      setIsDeletingSupplier(false);
     }
   };
 
   const handlePerformEvaluation = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!isEvaluating) return;
+    if (!isEvaluating || isSubmittingEval) return;
 
-    const parsedQualidade = Number(criterioQualidade);
-    const parsedPrazo = Number(criterioPrazo);
-    const parsedAtendimento = Number(criterioAtendimento);
-    const finalGrade = Math.round((parsedQualidade + parsedPrazo + parsedAtendimento) / 3);
+    setIsSubmittingEval(true);
 
-    // Critério padrão ISO 9001 Vickytex:
-    // >= 85: Aprovado (Qualificado)
-    // >= 70 e < 85: Aprovado com Restrições (Qualificado com Restrições)
-    // < 70: Reprovado (Não Qualificado)
-    let result: 'Aprovado' | 'Aprovado com Restrições' | 'Reprovado' = 'Aprovado';
-    let status: Fornecedor['statusQualificacao'] = 'Qualificado';
+    try {
+      const parsedQualidade = Math.max(0, Math.min(100, Number(criterioQualidade) || 0));
+      const parsedPrazo = Math.max(0, Math.min(100, Number(criterioPrazo) || 0));
+      const parsedAtendimento = Math.max(0, Math.min(100, Number(criterioAtendimento) || 0));
+      const finalGrade = Math.round((parsedQualidade + parsedPrazo + parsedAtendimento) / 3);
 
-    if (finalGrade < 70) {
-      result = 'Reprovado';
-      status = 'Não Qualificado';
-    } else if (finalGrade < 85) {
-      result = 'Aprovado com Restrições';
-      status = 'Qualificado com Restrições';
-    }
+      // Critério padrão ISO 9001 Vickytex:
+      // >= 85: Aprovado (Qualificado)
+      // >= 70 e < 85: Aprovado com Restrições (Qualificado com Restrições)
+      // < 70: Reprovado (Não Qualificado)
+      let result: 'Aprovado' | 'Aprovado com Restrições' | 'Reprovado' = 'Aprovado';
+      let status: Fornecedor['statusQualificacao'] = 'Qualificado';
 
-    const newEval: AvaliacaoFornecedor = {
-      id: `eval-${Date.now()}`,
-      dataAvaliacao: new Date().toISOString().split('T')[0],
-      avaliador: evaluator || 'Qualidade (Vickytex)',
-      criterioQualidade: parsedQualidade,
-      criterioPrazo: parsedPrazo,
-      criterioAtendimento: parsedAtendimento,
-      notaGeral: finalGrade,
-      resultado: result,
-      parecerTecnico: parecerTecnico
-    };
-
-    let updatedItem: Fornecedor | null = null;
-    const updated = fornecedores.map(f => {
-      if (f.id === isEvaluating.id) {
-        const newHistory = [newEval, ...f.historicoAvaliacoes];
-        // Calcular média geral
-        const avgScore = Math.round(newHistory.reduce((sum, ev) => sum + ev.notaGeral, 0) / newHistory.length);
-        updatedItem = {
-          ...f,
-          statusQualificacao: status,
-          dataQualificacao: newEval.dataAvaliacao,
-          notaAvaliacao: avgScore,
-          historicoAvaliacoes: newHistory
-        };
-        return updatedItem;
+      if (finalGrade < 70) {
+        result = 'Reprovado';
+        status = 'Não Qualificado';
+      } else if (finalGrade < 85) {
+        result = 'Aprovado com Restrições';
+        status = 'Qualificado com Restrições';
       }
-      return f;
-    });
 
-    setFornecedores(updated);
-    
-    // Se o fornecedor estiver em visualização detalhada, atualizar o estado selecionado
-    const updatedSelected = updated.find(f => f.id === isEvaluating.id);
-    if (updatedSelected) {
-      setSelectedSupplier(updatedSelected);
-    }
+      const newEval: AvaliacaoFornecedor = {
+        id: `eval-${Date.now()}`,
+        dataAvaliacao: new Date().toISOString().split('T')[0],
+        avaliador: evaluator.trim() || 'Qualidade (Vickytex)',
+        criterioQualidade: parsedQualidade,
+        criterioPrazo: parsedPrazo,
+        criterioAtendimento: parsedAtendimento,
+        notaGeral: finalGrade,
+        resultado: result,
+        parecerTecnico: parecerTecnico.trim()
+      };
 
-    setIsEvaluating(null);
-    resetEvalForm();
-    onAddLog('Avaliação de Fornecedor', `Realizou avaliação ISO 8.4 para ${isEvaluating.nomeFantasia}. Nota: ${finalGrade}% - Status: ${status}`);
+      const currentHistory = Array.isArray(isEvaluating.historicoAvaliacoes) ? isEvaluating.historicoAvaliacoes : [];
+      const newHistory = [newEval, ...currentHistory];
+      const avgScore = Math.round(newHistory.reduce((sum, ev) => sum + (ev.notaGeral || 0), 0) / newHistory.length);
 
-    if (updatedItem) {
-      try {
-        await SupplierRepository.update(isEvaluating.id, updatedItem);
-      } catch (err) {
-        console.error('Falha ao atualizar avaliação remota:', err);
+      const updatedItem: Fornecedor = {
+        ...isEvaluating,
+        statusQualificacao: status,
+        dataQualificacao: newEval.dataAvaliacao,
+        notaAvaliacao: avgScore,
+        historicoAvaliacoes: newHistory
+      };
+
+      // Atualiza estado local imediatamente
+      setFornecedores((prev) => prev.map(f => f.id === isEvaluating.id ? updatedItem : f));
+      
+      // Se o fornecedor estiver em visualização detalhada, atualizar o estado selecionado
+      if (selectedSupplier?.id === isEvaluating.id) {
+        setSelectedSupplier(updatedItem);
       }
+
+      const supplierName = isEvaluating.nomeFantasia || isEvaluating.razaoSocial;
+      setIsEvaluating(null);
+      resetEvalForm();
+      onAddLog('Avaliação de Fornecedor', `Realizou avaliação ISO 8.4 para ${supplierName}. Nota: ${finalGrade}% - Status: ${status}`);
+      showToast(`Avaliação de "${supplierName}" registrada com sucesso! Nota: ${finalGrade}%`, 'success');
+
+      // Persistir no repositório Firestore
+      await SupplierRepository.update(isEvaluating.id, updatedItem);
+    } catch (err) {
+      console.error('Falha ao atualizar avaliação remota:', err);
+      showToast('Erro ao gravar avaliação remota no banco de dados.', 'error');
+    } finally {
+      setIsSubmittingEval(false);
     }
   };
 
@@ -431,16 +492,18 @@ export const Fornecedores: React.FC<FornecedoresProps> = ({ onAddLog, personaliz
             </p>
           </div>
         </div>
-        <button
-          onClick={() => {
-            resetForm();
-            setIsAddingSupplier(true);
-          }}
-          className="inline-flex items-center justify-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors shadow-sm cursor-pointer"
-        >
-          <Plus className="w-4 h-4 mr-2" />
-          Cadastrar Fornecedor
-        </button>
+        {canCreate && (
+          <button
+            onClick={() => {
+              resetForm();
+              setIsAddingSupplier(true);
+            }}
+            className="inline-flex items-center justify-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors shadow-sm cursor-pointer"
+          >
+            <Plus className="w-4 h-4 mr-2" />
+            Cadastrar Fornecedor
+          </button>
+        )}
       </div>
 
       {/* Indicadores Estatísticos */}
@@ -628,27 +691,33 @@ export const Fornecedores: React.FC<FornecedoresProps> = ({ onAddLog, personaliz
                     </td>
                     <td className="py-4 px-4 text-right">
                       <div className="flex items-center justify-end space-x-1.5">
-                        <button
-                          onClick={() => setIsEvaluating(f)}
-                          title="Avaliar Desempenho (ISO 8.4)"
-                          className="p-1.5 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded transition-colors"
-                        >
-                          <Award className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => setEditingSupplier(f)}
-                          title="Editar Cadastro"
-                          className="p-1.5 bg-slate-100 text-slate-600 hover:bg-slate-200 rounded transition-colors"
-                        >
-                          <Edit3 className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => handleDeleteSupplier(f.id, f.nomeFantasia)}
-                          title="Remover Fornecedor"
-                          className="p-1.5 bg-rose-50 text-rose-600 hover:bg-rose-100 rounded transition-colors"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                        {canEdit && (
+                          <button
+                            onClick={() => setIsEvaluating(f)}
+                            title="Avaliar Desempenho (ISO 8.4)"
+                            className="p-1.5 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded transition-colors cursor-pointer"
+                          >
+                            <Award className="w-4 h-4" />
+                          </button>
+                        )}
+                        {canEdit && (
+                          <button
+                            onClick={() => setEditingSupplier(f)}
+                            title="Editar Cadastro"
+                            className="p-1.5 bg-slate-100 text-slate-600 hover:bg-slate-200 rounded transition-colors cursor-pointer"
+                          >
+                            <Edit3 className="w-4 h-4" />
+                          </button>
+                        )}
+                        {canDelete && (
+                          <button
+                            onClick={() => handleDeleteSupplier(f.id, f.nomeFantasia)}
+                            title="Remover Fornecedor"
+                            className="p-1.5 bg-rose-50 text-rose-600 hover:bg-rose-100 rounded transition-colors cursor-pointer"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -1029,16 +1098,25 @@ export const Fornecedores: React.FC<FornecedoresProps> = ({ onAddLog, personaliz
                 <div className="bg-slate-50 px-6 py-4 flex justify-end space-x-2 -mx-6 -mb-6 border-t border-gray-100 mt-6">
                   <button
                     type="button"
+                    disabled={isSubmittingSupplier}
                     onClick={() => setIsAddingSupplier(false)}
-                    className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-semibold rounded-lg transition-colors cursor-pointer"
+                    className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-semibold rounded-lg transition-colors cursor-pointer disabled:opacity-50"
                   >
                     Cancelar
                   </button>
                   <button
                     type="submit"
-                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg transition-colors cursor-pointer"
+                    disabled={isSubmittingSupplier}
+                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg transition-colors cursor-pointer flex items-center space-x-1.5 disabled:opacity-50"
                   >
-                    Salvar Cadastro
+                    {isSubmittingSupplier ? (
+                      <>
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                        <span>Salvando...</span>
+                      </>
+                    ) : (
+                      <span>Salvar Cadastro</span>
+                    )}
                   </button>
                 </div>
               </form>
@@ -1207,16 +1285,25 @@ export const Fornecedores: React.FC<FornecedoresProps> = ({ onAddLog, personaliz
                 <div className="bg-slate-50 px-6 py-4 flex justify-end space-x-2 -mx-6 -mb-6 border-t border-gray-100 mt-6">
                   <button
                     type="button"
+                    disabled={isSubmittingSupplier}
                     onClick={() => setEditingSupplier(null)}
-                    className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-semibold rounded-lg transition-colors cursor-pointer"
+                    className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-semibold rounded-lg transition-colors cursor-pointer disabled:opacity-50"
                   >
                     Cancelar
                   </button>
                   <button
                     type="submit"
-                    className="px-4 py-2 bg-slate-900 hover:bg-slate-850 text-white text-xs font-semibold rounded-lg transition-colors cursor-pointer"
+                    disabled={isSubmittingSupplier}
+                    className="px-4 py-2 bg-slate-900 hover:bg-slate-850 text-white text-xs font-semibold rounded-lg transition-colors cursor-pointer flex items-center space-x-1.5 disabled:opacity-50"
                   >
-                    Salvar Alterações
+                    {isSubmittingSupplier ? (
+                      <>
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                        <span>Salvando...</span>
+                      </>
+                    ) : (
+                      <span>Salvar Alterações</span>
+                    )}
                   </button>
                 </div>
               </form>
@@ -1342,19 +1429,28 @@ export const Fornecedores: React.FC<FornecedoresProps> = ({ onAddLog, personaliz
                 <div className="bg-slate-50 px-6 py-4 flex justify-end space-x-2 -mx-6 -mb-6 border-t border-gray-100 mt-6">
                   <button
                     type="button"
+                    disabled={isSubmittingEval}
                     onClick={() => {
                       setIsEvaluating(null);
                       resetEvalForm();
                     }}
-                    className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-semibold rounded-lg transition-colors cursor-pointer"
+                    className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-semibold rounded-lg transition-colors cursor-pointer disabled:opacity-50"
                   >
                     Cancelar
                   </button>
                   <button
                     type="submit"
-                    className="px-4 py-2 bg-blue-950 hover:bg-blue-900 text-white text-xs font-semibold rounded-lg transition-colors cursor-pointer"
+                    disabled={isSubmittingEval}
+                    className="px-4 py-2 bg-blue-950 hover:bg-blue-900 text-white text-xs font-semibold rounded-lg transition-colors cursor-pointer flex items-center space-x-1.5 disabled:opacity-50"
                   >
-                    Registrar Avaliação
+                    {isSubmittingEval ? (
+                      <>
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                        <span>Gravando Avaliação...</span>
+                      </>
+                    ) : (
+                      <span>Registrar Avaliação</span>
+                    )}
                   </button>
                 </div>
               </form>
@@ -1399,21 +1495,59 @@ export const Fornecedores: React.FC<FornecedoresProps> = ({ onAddLog, personaliz
               <div className="flex items-center justify-end space-x-2 pt-3 border-t border-gray-100">
                 <button
                   type="button"
+                  disabled={isDeletingSupplier}
                   onClick={() => setSupplierToDelete(null)}
-                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-bold transition-colors"
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-bold transition-colors disabled:opacity-50"
                 >
                   Cancelar
                 </button>
                 <button
                   type="button"
+                  disabled={isDeletingSupplier}
                   onClick={confirmDeleteSupplier}
-                  className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-bold transition-colors shadow-xs"
+                  className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-bold transition-colors shadow-xs flex items-center space-x-1.5 disabled:opacity-50"
                 >
-                  Sim, Remover Fornecedor
+                  {isDeletingSupplier ? (
+                    <>
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      <span>Removendo...</span>
+                    </>
+                  ) : (
+                    <span>Sim, Remover Fornecedor</span>
+                  )}
                 </button>
               </div>
             </motion.div>
           </div>
+        )}
+      </AnimatePresence>
+
+      {/* Toast Notification Overlay */}
+      <AnimatePresence>
+        {toastMessage && (
+          <motion.div
+            initial={{ opacity: 0, y: 20, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 10, scale: 0.95 }}
+            className={`fixed bottom-6 right-6 z-50 flex items-center space-x-3 px-4 py-3 rounded-xl shadow-xl border ${
+              toastMessage.type === 'success'
+                ? 'bg-slate-900 text-white border-slate-800'
+                : 'bg-rose-900 text-white border-rose-800'
+            }`}
+          >
+            {toastMessage.type === 'success' ? (
+              <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+            ) : (
+              <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
+            )}
+            <span className="text-xs font-medium">{toastMessage.text}</span>
+            <button
+              onClick={() => setToastMessage(null)}
+              className="text-slate-400 hover:text-white ml-2 transition-colors"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </motion.div>
         )}
       </AnimatePresence>
 

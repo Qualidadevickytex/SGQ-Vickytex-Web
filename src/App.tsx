@@ -126,49 +126,30 @@ function AppContent() {
         if (fiveSRes.success && Array.isArray(fiveSRes.data)) setAuditorias5s(fiveSRes.data);
         if (userRes.success && Array.isArray(userRes.data)) {
           const currentUsers = userRes.data;
-          const filtered = currentUsers.filter(u => {
-            const email = (u.email || '').toLowerCase().trim();
-            const name = (u.name || '').toLowerCase().trim();
-            const isRodrigo = email === 'qualidade@vickytex.com.br' || name.includes('rodrigo');
-            const isJulia = email === 'julia@vickytex.com.br' || name.includes('julia');
-            return isRodrigo || isJulia;
-          });
+          const seenIds = new Set<string>();
+          const seenEmails = new Set<string>();
+          const uniqueUsers: UserAccount[] = [];
 
-          // Delete obsolete users from Firestore
-          const obsoleteUsers = currentUsers.filter(u => {
-            const email = (u.email || '').toLowerCase().trim();
-            const name = (u.name || '').toLowerCase().trim();
-            const isRodrigo = email === 'qualidade@vickytex.com.br' || name.includes('rodrigo');
-            const isJulia = email === 'julia@vickytex.com.br' || name.includes('julia');
-            return !isRodrigo && !isJulia;
-          });
-          for (const obs of obsoleteUsers) {
-            UserRepository.delete(obs.id).catch(() => {});
+          for (const u of currentUsers) {
+            if (!u || !u.id) continue;
+            const emailKey = (u.email || '').toLowerCase().trim();
+            if (seenIds.has(u.id)) continue;
+            if (emailKey && seenEmails.has(emailKey)) continue;
+
+            seenIds.add(u.id);
+            if (emailKey) seenEmails.add(emailKey);
+            uniqueUsers.push(u);
           }
 
-          // Ensure Rodrigo exists
-          const hasRodrigo = filtered.some(u => 
-            (u.email || '').toLowerCase().trim() === 'qualidade@vickytex.com.br' || 
-            (u.name || '').toLowerCase().trim().includes('rodrigo')
-          );
-          if (!hasRodrigo && INITIAL_USER_ACCOUNTS[0]) {
-            const rodrigoAccount = INITIAL_USER_ACCOUNTS[0];
-            filtered.push(rodrigoAccount);
-            UserRepository.create(rodrigoAccount).catch(() => {});
+          // Ensure default administrative accounts exist if database is completely fresh
+          if (uniqueUsers.length === 0) {
+            setUsers(INITIAL_USER_ACCOUNTS);
+            for (const u of INITIAL_USER_ACCOUNTS) {
+              UserRepository.create(u).catch(() => {});
+            }
+          } else {
+            setUsers(uniqueUsers);
           }
-
-          // Ensure Julia exists
-          const hasJulia = filtered.some(u => 
-            (u.email || '').toLowerCase().trim() === 'julia@vickytex.com.br' || 
-            (u.name || '').toLowerCase().trim().includes('julia')
-          );
-          if (!hasJulia && INITIAL_USER_ACCOUNTS[1]) {
-            const juliaAccount = INITIAL_USER_ACCOUNTS[1];
-            filtered.push(juliaAccount);
-            UserRepository.create(juliaAccount).catch(() => {});
-          }
-
-          setUsers(filtered.length > 0 ? filtered : INITIAL_USER_ACCOUNTS);
         } else {
           setUsers(INITIAL_USER_ACCOUNTS);
           for (const u of INITIAL_USER_ACCOUNTS) {
@@ -613,15 +594,23 @@ function AppContent() {
   };
 
   const handleAddUser = async (userAccount: UserAccount) => {
+    const emailKey = (userAccount.email || '').toLowerCase().trim();
     try {
       const res = await UserRepository.create(userAccount);
-      if (res.success && res.data) {
-        setUsers((prev) => [res.data, ...prev]);
-      } else {
-        setUsers((prev) => [userAccount, ...prev]);
-      }
+      const created = (res.success && res.data) ? res.data : userAccount;
+      setUsers((prev) => {
+        const filtered = prev.filter(
+          (u) => u.id !== created.id && (u.email || '').toLowerCase().trim() !== emailKey
+        );
+        return [created, ...filtered];
+      });
     } catch (e) {
-      setUsers((prev) => [userAccount, ...prev]);
+      setUsers((prev) => {
+        const filtered = prev.filter(
+          (u) => u.id !== userAccount.id && (u.email || '').toLowerCase().trim() !== emailKey
+        );
+        return [userAccount, ...filtered];
+      });
     }
   };
 

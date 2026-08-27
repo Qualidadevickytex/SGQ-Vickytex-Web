@@ -28,6 +28,7 @@ import { useSectors } from '../hooks/useSectors';
 import { SECTORS, getSectors, PersonalizacaoGeral } from '../utils/mockData';
 import { SystemSettingsRepository } from '../services/database/repositories/systemSettings.repository';
 import { useAuth } from '../contexts/AuthContext';
+import { useModulePermission } from '../utils/permissionManager';
 
 interface RiscosOportunidadesProps {
   riscos: RiscoOportunidade[];
@@ -72,8 +73,14 @@ export const RiscosOportunidadesComponent: React.FC<RiscosOportunidadesProps> = 
   }, []);
 
 
-  // Permissões de edição (Qualidade, Gerência, Supervisor, Administrador)
-  const canModify = user?.role === 'Qualidade' || user?.role === 'Gestor' || user?.role === 'Supervisor' || user?.role === 'Administrador';
+  // Permissões granulares do módulo de Riscos e Oportunidades (ISO 6.1)
+  const {
+    canCreate,
+    canEdit,
+    canDelete,
+    canModifyItem,
+    canDeleteItem
+  } = useModulePermission('riscos');
 
   // Filtros de busca
   const [searchTerm, setSearchTerm] = useState('');
@@ -155,7 +162,11 @@ export const RiscosOportunidadesComponent: React.FC<RiscosOportunidadesProps> = 
   // Handler para Salvar (Criar ou Editar)
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!canModify) return;
+    if (editingRisco) {
+      if (!canEdit || (canModifyItem && !canModifyItem(formData.setor || ''))) return;
+    } else {
+      if (!canCreate) return;
+    }
 
     const prob = Number(formData.probabilidade) || 3;
     const imp = Number(formData.impacto) || 3;
@@ -233,7 +244,7 @@ export const RiscosOportunidadesComponent: React.FC<RiscosOportunidadesProps> = 
 
   // Excluir item
   const handleDelete = (id: string, codigo: string) => {
-    if (!canModify) return;
+    if (!canDelete) return;
     setRiscoToDelete({ id, codigo });
   };
 
@@ -259,10 +270,10 @@ export const RiscosOportunidadesComponent: React.FC<RiscosOportunidadesProps> = 
               {personalizacao?.riscosSubtitulo || 'Identifique, analise e mitigue proativamente os riscos que impactam a qualidade dos uniformes da Vickytex, garantindo a continuidade operacional e a satisfação dos clientes escolares.'}
             </p>
           </div>
-          {canModify && (
+          {canCreate && (
             <button
               onClick={handleOpenCreateModal}
-              className="bg-amber-500 hover:bg-amber-600 text-slate-950 px-4 py-2.5 rounded-lg text-xs font-bold flex items-center space-x-2 transition-colors shadow-xs shrink-0 self-start md:self-center"
+              className="bg-amber-500 hover:bg-amber-600 text-slate-950 px-4 py-2.5 rounded-lg text-xs font-bold flex items-center space-x-2 transition-colors shadow-xs shrink-0 self-start md:self-center cursor-pointer"
             >
               <Plus className="w-4 h-4 text-slate-900" />
               <span>Novo Risco ou Oportunidade</span>
@@ -487,13 +498,13 @@ export const RiscosOportunidadesComponent: React.FC<RiscosOportunidadesProps> = 
                   <th className="p-3 text-center">Nível (P×I)</th>
                   <th className="p-3 text-center">Status</th>
                   <th className="p-3">Ação Vinculada</th>
-                  {canModify && <th className="p-3 text-right">Ações</th>}
+                  {(canEdit || canDelete) && <th className="p-3 text-right">Ações</th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-medium">
                 {filteredRiscos.length === 0 ? (
                   <tr>
-                    <td colSpan={canModify ? 6 : 5} className="p-8 text-center text-slate-400 italic">
+                    <td colSpan={(canEdit || canDelete) ? 6 : 5} className="p-8 text-center text-slate-400 italic">
                       Nenhum registro encontrado para os filtros ativos.
                     </td>
                   </tr>
@@ -555,23 +566,27 @@ export const RiscosOportunidadesComponent: React.FC<RiscosOportunidadesProps> = 
                             <span className="text-[10px] text-slate-400 italic">Sem plano</span>
                           )}
                         </td>
-                        {canModify && (
+                        {(canEdit || canDelete) && (
                           <td className="p-3 text-right">
                             <div className="flex justify-end space-x-1">
-                              <button
-                                onClick={() => handleOpenEditModal(item)}
-                                className="p-1 text-slate-400 hover:text-blue-600 dark:hover:text-blue-400"
-                                title="Editar"
-                              >
-                                <Edit2 className="w-3.5 h-3.5" />
-                              </button>
-                              <button
-                                onClick={() => handleDelete(item.id, item.codigo)}
-                                className="p-1 text-slate-400 hover:text-red-600 dark:hover:text-red-400"
-                                title="Remover"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
+                              {canEdit && (!canModifyItem || canModifyItem(item.setor)) && (
+                                <button
+                                  onClick={() => handleOpenEditModal(item)}
+                                  className="p-1 text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 cursor-pointer"
+                                  title="Editar"
+                                >
+                                  <Edit2 className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                              {canDelete && (!canDeleteItem || canDeleteItem(item.setor)) && (
+                                <button
+                                  onClick={() => handleDelete(item.id, item.codigo)}
+                                  className="p-1 text-slate-400 hover:text-red-600 dark:hover:text-red-400 cursor-pointer"
+                                  title="Remover"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              )}
                             </div>
                           </td>
                         )}

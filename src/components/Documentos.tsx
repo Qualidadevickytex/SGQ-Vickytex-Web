@@ -402,7 +402,7 @@ export const Documentos: React.FC<DocumentosProps> = ({
             )}
 
             {activeTab === 'fluxos' && canEditDocs && (
-              <FluxosParametrizados />
+              <FluxosParametrizados onClose={() => setActiveTab('lista-mestra')} />
             )}
           </div>
         )}

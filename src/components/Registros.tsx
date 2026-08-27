@@ -41,6 +41,7 @@ import { useSectors } from '../hooks/useSectors';
 import { getSectors } from '../utils/mockData';
 import { RecordRepository } from '../services/database/repositories/record.repository';
 import { compressImage } from '../utils/imageCompressor';
+import { useModulePermission } from '../utils/permissionManager';
 
 interface RegistrosProps {
   documents: Documento[];
@@ -123,6 +124,13 @@ export const INITIAL_REGISTROS: Registro[] = [
 ];
 
 export const Registros: React.FC<RegistrosProps> = ({ documents, onAddLog, personalizacao, registros, setRegistros }) => {
+  const {
+    canCreate,
+    canEdit,
+    canDelete,
+    canModifyItem,
+    canDeleteItem
+  } = useModulePermission('registros');
   const sectorsList = useSectors();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedSector, setSelectedSector] = useState<string>('Todos');
@@ -555,14 +563,16 @@ export const Registros: React.FC<RegistrosProps> = ({ documents, onAddLog, perso
             <span>Exportar Matriz</span>
           </button>
 
-          <button 
-            id="btn-add-record"
-            onClick={handleOpenNewForm}
-            className="flex items-center space-x-1.5 px-4.5 py-2.5 rounded-xl text-xs font-extrabold bg-[#0B3A63] hover:bg-[#07243e] text-white transition-all shadow-md cursor-pointer"
-          >
-            <Plus className="w-4.5 h-4.5" />
-            <span>Cadastrar Diretriz</span>
-          </button>
+          {canCreate && (
+            <button 
+              id="btn-add-record"
+              onClick={handleOpenNewForm}
+              className="flex items-center space-x-1.5 px-4.5 py-2.5 rounded-xl text-xs font-extrabold bg-[#0B3A63] hover:bg-[#07243e] text-white transition-all shadow-md cursor-pointer"
+            >
+              <Plus className="w-4.5 h-4.5" />
+              <span>Cadastrar Diretriz</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -889,7 +899,7 @@ export const Registros: React.FC<RegistrosProps> = ({ documents, onAddLog, perso
 
                 <div className="flex items-center gap-1.5">
                   {/* Status switcher helper dropdown/buttons */}
-                  {reg.statusControle === 'Ativo' && (
+                  {canEdit && (!canModifyItem || canModifyItem(reg.setor)) && reg.statusControle === 'Ativo' && (
                     <button 
                       onClick={() => handleTransitionStatus(reg, 'Arquivado')}
                       className="px-2 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 rounded-lg text-[10px] font-bold text-amber-700 dark:text-amber-400 border border-slate-200 dark:border-slate-700 cursor-pointer"
@@ -898,7 +908,7 @@ export const Registros: React.FC<RegistrosProps> = ({ documents, onAddLog, perso
                       Arquivar
                     </button>
                   )}
-                  {reg.statusControle === 'Arquivado' && (
+                  {canEdit && (!canModifyItem || canModifyItem(reg.setor)) && reg.statusControle === 'Arquivado' && (
                     <button 
                       onClick={() => handleTransitionStatus(reg, 'Descartado')}
                       className="px-2 py-1.5 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-900/50 rounded-lg text-[10px] font-bold text-rose-700 dark:text-rose-400 border border-rose-200/30 dark:border-rose-900/30 cursor-pointer"
@@ -907,7 +917,7 @@ export const Registros: React.FC<RegistrosProps> = ({ documents, onAddLog, perso
                       Descartar
                     </button>
                   )}
-                  {reg.statusControle === 'Descartado' && (
+                  {canEdit && (!canModifyItem || canModifyItem(reg.setor)) && reg.statusControle === 'Descartado' && (
                     <button 
                       onClick={() => handleTransitionStatus(reg, 'Ativo')}
                       className="px-2 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 rounded-lg text-[10px] font-bold text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 cursor-pointer"
@@ -918,22 +928,26 @@ export const Registros: React.FC<RegistrosProps> = ({ documents, onAddLog, perso
                   )}
 
                   {/* Edit Icon */}
-                  <button 
-                    onClick={() => handleOpenEditForm(reg)}
-                    className="p-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 rounded-lg text-slate-500 hover:text-[#0B3A63] dark:hover:text-blue-400 transition-all cursor-pointer"
-                    title="Editar Diretrizes"
-                  >
-                    <Edit3 className="w-3.5 h-3.5" />
-                  </button>
+                  {canEdit && (!canModifyItem || canModifyItem(reg.setor)) && (
+                    <button 
+                      onClick={() => handleOpenEditForm(reg)}
+                      className="p-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 rounded-lg text-slate-500 hover:text-[#0B3A63] dark:hover:text-blue-400 transition-all cursor-pointer"
+                      title="Editar Diretrizes"
+                    >
+                      <Edit3 className="w-3.5 h-3.5" />
+                    </button>
+                  )}
 
                   {/* Delete Icon */}
-                  <button 
-                    onClick={() => handleDeleteRegistro(reg.id, reg.codigo)}
-                    className="p-1.5 bg-slate-100 hover:bg-rose-100 dark:bg-slate-800 dark:hover:bg-rose-950/50 rounded-lg text-slate-400 hover:text-rose-600 transition-all cursor-pointer"
-                    title="Excluir Diretrizes"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
+                  {canDelete && (!canDeleteItem || canDeleteItem(reg.setor)) && (
+                    <button 
+                      onClick={() => handleDeleteRegistro(reg.id, reg.codigo)}
+                      className="p-1.5 bg-slate-100 hover:bg-rose-100 dark:bg-slate-800 dark:hover:bg-rose-950/50 rounded-lg text-slate-400 hover:text-rose-600 transition-all cursor-pointer"
+                      title="Excluir Diretrizes"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  )}
                 </div>
               </div>
             </motion.div>

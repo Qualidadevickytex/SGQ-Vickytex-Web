@@ -29,6 +29,8 @@ import { useSectors } from '../hooks/useSectors';
 import { SECTORS, getSectors, PersonalizacaoGeral } from '../utils/mockData';
 import { TrainingRepository } from '../services/database/repositories/training.repository';
 import { CollaboratorRepository } from '../services/database/repositories/collaborator.repository';
+import { useAuth } from '../contexts/AuthContext';
+import { useModulePermission } from '../utils/permissionManager';
 
 interface TreinamentosProps {
   documents: Documento[];
@@ -97,6 +99,15 @@ export const Treinamentos: React.FC<TreinamentosProps> = ({
 }) => {
   const sectorsList = useSectors();
   const [activeTab, setActiveTab] = useState<'matriz' | 'historico'>('matriz');
+  
+  const { user } = useAuth();
+  const {
+    canCreate,
+    canEdit,
+    canDelete,
+    canModifyItem,
+    canDeleteItem
+  } = useModulePermission('treinamentos');
   
   // Persistência local simulada das competências e treinamentos
   const [treinamentos, setTreinamentos] = useState<Treinamento[]>(() => {
@@ -708,27 +719,33 @@ export const Treinamentos: React.FC<TreinamentosProps> = ({
             </p>
           </div>
           <div className="flex flex-wrap gap-2 shrink-0">
-            <button
-              onClick={handleOpenNewColaborador}
-              className="px-3.5 py-2 text-xs font-bold bg-emerald-600 hover:bg-emerald-500 rounded-lg text-white shadow-xs transition-all flex items-center space-x-1.5"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span>Cadastrar Colaborador</span>
-            </button>
-            <button
-              onClick={() => setIsSignModalOpen(true)}
-              className="px-3.5 py-2 text-xs font-bold bg-white/10 hover:bg-white/15 border border-white/20 rounded-lg text-white transition-all flex items-center space-x-1.5"
-            >
-              <UserCheck className="w-3.5 h-3.5" />
-              <span>Aptidão Rápida (POP)</span>
-            </button>
-            <button
-              onClick={handleOpenNewTraining}
-              className="px-3.5 py-2 text-xs font-bold bg-blue-600 hover:bg-blue-500 rounded-lg text-white shadow-xs transition-all flex items-center space-x-1.5"
-            >
-              <Plus className="w-4 h-4" />
-              <span>Registrar Treinamento</span>
-            </button>
+            {canCreate && (
+              <button
+                onClick={handleOpenNewColaborador}
+                className="px-3.5 py-2 text-xs font-bold bg-emerald-600 hover:bg-emerald-500 rounded-lg text-white shadow-xs transition-all flex items-center space-x-1.5 cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Cadastrar Colaborador</span>
+              </button>
+            )}
+            {canEdit && (
+              <button
+                onClick={() => setIsSignModalOpen(true)}
+                className="px-3.5 py-2 text-xs font-bold bg-white/10 hover:bg-white/15 border border-white/20 rounded-lg text-white transition-all flex items-center space-x-1.5 cursor-pointer"
+              >
+                <UserCheck className="w-3.5 h-3.5" />
+                <span>Aptidão Rápida (POP)</span>
+              </button>
+            )}
+            {canCreate && (
+              <button
+                onClick={handleOpenNewTraining}
+                className="px-3.5 py-2 text-xs font-bold bg-blue-600 hover:bg-blue-500 rounded-lg text-white shadow-xs transition-all flex items-center space-x-1.5 cursor-pointer"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Registrar Treinamento</span>
+              </button>
+            )}
           </div>
         </div>
 
@@ -890,29 +907,35 @@ export const Treinamentos: React.FC<TreinamentosProps> = ({
                         </td>
                         <td className="py-3.5 px-4 text-right">
                           <div className="flex items-center justify-end space-x-2">
-                            <button
-                              onClick={() => {
-                                setSignForm({ colaboradorId: col.id, documentoId: '' });
-                                setIsSignModalOpen(true);
-                              }}
-                              className="px-2 py-1 text-[11px] font-bold text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/30 rounded-md transition-colors"
-                            >
-                              Liberar POP
-                            </button>
-                            <button
-                              onClick={() => handleOpenEditColaborador(col)}
-                              className="text-slate-400 hover:text-blue-500 p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded transition-colors"
-                              title="Editar Colaborador"
-                            >
-                              <Pencil className="w-3.5 h-3.5" />
-                            </button>
-                            <button
-                              onClick={() => handleDeleteColaborador(col.id)}
-                              className="text-slate-400 hover:text-rose-500 p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded transition-colors"
-                              title="Excluir Colaborador"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
+                            {canEdit && (!canModifyItem || canModifyItem(col.setor)) && (
+                              <button
+                                onClick={() => {
+                                  setSignForm({ colaboradorId: col.id, documentoId: '' });
+                                  setIsSignModalOpen(true);
+                                }}
+                                className="px-2 py-1 text-[11px] font-bold text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/30 rounded-md transition-colors cursor-pointer"
+                              >
+                                Liberar POP
+                              </button>
+                            )}
+                            {canEdit && (!canModifyItem || canModifyItem(col.setor)) && (
+                              <button
+                                onClick={() => handleOpenEditColaborador(col)}
+                                className="text-slate-400 hover:text-blue-500 p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded transition-colors cursor-pointer"
+                                title="Editar Colaborador"
+                              >
+                                <Pencil className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                            {canDelete && (!canDeleteItem || canDeleteItem(col.setor)) && (
+                              <button
+                                onClick={() => handleDeleteColaborador(col.id)}
+                                className="text-slate-400 hover:text-rose-500 p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded transition-colors cursor-pointer"
+                                title="Excluir Colaborador"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -1019,20 +1042,24 @@ export const Treinamentos: React.FC<TreinamentosProps> = ({
                             }`}>
                               {tre.status.toUpperCase()}
                             </span>
-                            <button
-                              onClick={() => handleOpenEditTraining(tre)}
-                              className="text-slate-400 hover:text-blue-500 p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded transition-colors"
-                              title="Editar Treinamento"
-                            >
-                              <Pencil className="w-3.5 h-3.5" />
-                            </button>
-                            <button
-                              onClick={() => handleDeleteTreinamento(tre.id)}
-                              className="text-slate-400 hover:text-rose-500 p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded transition-colors"
-                              title="Excluir Treinamento"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
+                            {canEdit && (!canModifyItem || canModifyItem(tre.setor)) && (
+                              <button
+                                onClick={() => handleOpenEditTraining(tre)}
+                                className="text-slate-400 hover:text-blue-500 p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded transition-colors cursor-pointer"
+                                title="Editar Treinamento"
+                              >
+                                <Pencil className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                            {canDelete && (!canDeleteItem || canDeleteItem(tre.setor)) && (
+                              <button
+                                onClick={() => handleDeleteTreinamento(tre.id)}
+                                className="text-slate-400 hover:text-rose-500 p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded transition-colors cursor-pointer"
+                                title="Excluir Treinamento"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
                           </div>
                           
                           <button

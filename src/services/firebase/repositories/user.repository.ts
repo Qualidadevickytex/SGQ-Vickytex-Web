@@ -5,7 +5,9 @@
 
 import { UserAccount } from '../../../types/user';
 import { BaseRepository } from './base.repository';
+import { ApiResponse } from '../../api.types';
 import { INITIAL_USER_ACCOUNTS } from '../../../utils/mockData';
+import { subscribeToCollection, getAllDocs } from '../../../firebase/firestore';
 
 class UserRepositoryClass extends BaseRepository<UserAccount> {
   protected collectionName = 'users';
@@ -59,6 +61,78 @@ class UserRepositoryClass extends BaseRepository<UserAccount> {
     }
 
     return payload;
+  }
+
+  async findAll(): Promise<ApiResponse<UserAccount[]>> {
+    const timestamp = new Date().toISOString();
+    try {
+      const docs = await getAllDocs<any>(this.collectionName);
+      if (Array.isArray(docs)) {
+        const mapped = docs.map((rec: any) => this.mapRecord(rec));
+        const seenIds = new Set<string>();
+        const seenEmails = new Set<string>();
+        const unique: UserAccount[] = [];
+
+        for (const u of mapped) {
+          if (!u || !u.id) continue;
+          const emailKey = (u.email || '').toLowerCase().trim();
+          if (seenIds.has(u.id)) continue;
+          if (emailKey && seenEmails.has(emailKey)) continue;
+
+          seenIds.add(u.id);
+          if (emailKey) seenEmails.add(emailKey);
+          unique.push(u);
+        }
+
+        return { success: true, data: unique, timestamp };
+      }
+    } catch (dbErr: any) {
+      console.error(`[UserRepository] Error fetching users collection:`, dbErr);
+    }
+    return { success: true, data: this.getLocalData(), timestamp };
+  }
+
+  async create(data: Partial<UserAccount>): Promise<ApiResponse<UserAccount>> {
+    const emailKey = (data.email || '').toLowerCase().trim();
+    if (emailKey) {
+      const allRes = await this.findAll();
+      if (allRes.success && Array.isArray(allRes.data)) {
+        const existing = allRes.data.find(
+          (u) => (u.email || '').toLowerCase().trim() === emailKey || (data.id && u.id === data.id)
+        );
+        if (existing) {
+          // If already exists with same email or id, update instead of duplicating
+          return this.update(existing.id, data);
+        }
+      }
+    }
+    return super.create(data);
+  }
+
+  subscribe(callback: (items: UserAccount[]) => void, onError?: (error: Error) => void): () => void {
+    return subscribeToCollection<any>(
+      this.collectionName,
+      (docs) => {
+        const mapped = docs.map((rec) => this.mapRecord(rec));
+        const seenIds = new Set<string>();
+        const seenEmails = new Set<string>();
+        const unique: UserAccount[] = [];
+
+        for (const u of mapped) {
+          if (!u || !u.id) continue;
+          const emailKey = (u.email || '').toLowerCase().trim();
+          if (seenIds.has(u.id)) continue;
+          if (emailKey && seenEmails.has(emailKey)) continue;
+
+          seenIds.add(u.id);
+          if (emailKey) seenEmails.add(emailKey);
+          unique.push(u);
+        }
+
+        callback(unique);
+      },
+      onError
+    );
   }
 
   protected getSearchFilter(query: string): string {

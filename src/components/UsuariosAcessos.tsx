@@ -144,6 +144,7 @@ export const UsuariosAcessos: React.FC<UsuariosAcessosProps> = ({
 
   // Modal / Form States
   const [isFormOpen, setIsFormOpen] = useState(false);
+  const [isSubmittingUser, setIsSubmittingUser] = useState(false);
   const [editingUserId, setEditingUserId] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     name: '',
@@ -331,64 +332,95 @@ export const UsuariosAcessos: React.FC<UsuariosAcessosProps> = ({
   };
 
   // Handle User Save (Add/Edit)
-  const handleSaveUser = (e: React.FormEvent) => {
+  const handleSaveUser = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (editingUserId) {
-      if (!canEditUser) {
-        showToast('Você não possui permissão para editar colaboradores.', 'error');
-        return;
-      }
-      const existingUser = users.find(u => u.id === editingUserId);
-      const finalPassword = formData.password.trim() !== '' 
-        ? formData.password.trim() 
-        : (existingUser?.passwordHash || 'vickytex123');
+    if (isSubmittingUser) return;
 
-      const updatedUser: UserAccount = {
-        id: editingUserId,
-        name: formData.name,
-        email: formData.email,
-        role: formData.role,
-        sector: formData.sector,
-        photoURL: formData.photoURL,
-        status: formData.status,
-        passwordHash: finalPassword,
-        telefone: formData.telefone
-      };
-      onUpdateUser(updatedUser);
-      onAddLog('Usuário Editado', `Modificações salvas para o colaborador ${formData.name} (${formData.email}).`);
-      
-      // Sincroniza a barra lateral caso tenha editado o próprio perfil logado através da lista de usuários
-      if (formData.email === currentLoggedUser?.email) {
-        refreshUser({
-          name: formData.name,
-          email: formData.email,
+    const emailTrimmed = formData.email.trim().toLowerCase();
+    const nameTrimmed = formData.name.trim();
+
+    if (!nameTrimmed || !emailTrimmed) {
+      showToast('Preencha o nome e o e-mail do colaborador.', 'error');
+      return;
+    }
+
+    // Check duplicate email
+    const emailInUse = users.some(
+      (u) => u.id !== editingUserId && (u.email || '').trim().toLowerCase() === emailTrimmed
+    );
+    if (emailInUse) {
+      showToast(`Já existe um colaborador cadastrado com o e-mail "${formData.email}".`, 'error');
+      return;
+    }
+
+    setIsSubmittingUser(true);
+
+    try {
+      if (editingUserId) {
+        if (!canEditUser) {
+          showToast('Você não possui permissão para editar colaboradores.', 'error');
+          setIsSubmittingUser(false);
+          return;
+        }
+        const existingUser = users.find(u => u.id === editingUserId);
+        const finalPassword = formData.password.trim() !== '' 
+          ? formData.password.trim() 
+          : (existingUser?.passwordHash || 'vickytex123');
+
+        const updatedUser: UserAccount = {
+          id: editingUserId,
+          name: nameTrimmed,
+          email: formData.email.trim(),
           role: formData.role,
           sector: formData.sector,
-          photoURL: formData.photoURL
-        });
+          photoURL: formData.photoURL,
+          status: formData.status,
+          passwordHash: finalPassword,
+          telefone: formData.telefone?.trim()
+        };
+        await onUpdateUser(updatedUser);
+        onAddLog('Usuário Editado', `Modificações salvas para o colaborador ${formData.name} (${formData.email}).`);
+        
+        // Sincroniza a barra lateral caso tenha editado o próprio perfil logado através da lista de usuários
+        if (formData.email.trim().toLowerCase() === currentLoggedUser?.email?.toLowerCase()) {
+          refreshUser({
+            name: nameTrimmed,
+            email: formData.email.trim(),
+            role: formData.role,
+            sector: formData.sector,
+            photoURL: formData.photoURL
+          });
+        }
+        showToast('Colaborador atualizado com sucesso!', 'success');
+      } else {
+        if (!canAddUser) {
+          showToast('Você não possui permissão para cadastrar novos colaboradores.', 'error');
+          setIsSubmittingUser(false);
+          return;
+        }
+        const finalPassword = formData.password.trim() !== '' ? formData.password.trim() : 'vickytex123';
+        const newUser: UserAccount = {
+          id: `user-${Date.now()}`,
+          name: nameTrimmed,
+          email: formData.email.trim(),
+          role: formData.role,
+          sector: formData.sector,
+          photoURL: formData.photoURL,
+          status: formData.status,
+          passwordHash: finalPassword,
+          telefone: formData.telefone?.trim(),
+          lastLogin: 'Nunca'
+        };
+        await onAddUser(newUser);
+        onAddLog('Novo Usuário Criado', `Conta criada para o colaborador ${formData.name} no cargo de ${formData.role}.`);
+        showToast('Colaborador cadastrado com sucesso!', 'success');
       }
-    } else {
-      if (!canAddUser) {
-        showToast('Você não possui permissão para cadastrar novos colaboradores.', 'error');
-        return;
-      }
-      const finalPassword = formData.password.trim() !== '' ? formData.password.trim() : 'vickytex123';
-      const newUser: UserAccount = {
-        id: `user-${Date.now()}`,
-        name: formData.name,
-        email: formData.email,
-        role: formData.role,
-        sector: formData.sector,
-        photoURL: formData.photoURL,
-        status: formData.status,
-        passwordHash: finalPassword,
-        telefone: formData.telefone,
-        lastLogin: 'Nunca'
-      };
-      onAddUser(newUser);
-      onAddLog('Novo Usuário Criado', `Conta criada para o colaborador ${formData.name} no cargo de ${formData.role}.`);
+      setIsFormOpen(false);
+    } catch (err: any) {
+      showToast('Erro ao salvar colaborador. Tente novamente.', 'error');
+    } finally {
+      setIsSubmittingUser(false);
     }
-    setIsFormOpen(false);
   };
 
   // Toggle module permission for a specific role
@@ -2103,9 +2135,13 @@ export const UsuariosAcessos: React.FC<UsuariosAcessosProps> = ({
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold transition-colors shadow-xs"
+                  disabled={isSubmittingUser}
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg text-xs font-bold transition-colors shadow-xs flex items-center gap-2"
                 >
-                  {editingUserId ? 'Salvar Modificações' : 'Cadastrar Conta'}
+                  {isSubmittingUser && (
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                  )}
+                  {editingUserId ? (isSubmittingUser ? 'Salvando...' : 'Salvar Modificações') : (isSubmittingUser ? 'Cadastrando...' : 'Cadastrar Conta')}
                 </button>
               </div>
 

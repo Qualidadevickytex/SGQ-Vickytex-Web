@@ -562,8 +562,14 @@ export const PlanosAcaoComponent: React.FC<PlanosAcaoProps> = ({
     }
   };
 
-  // Permissões
-  const canModify = user?.role === 'Qualidade' || user?.role === 'Gestor' || user?.role === 'Administrador' || user?.role === 'Supervisor';
+  // Permissões granulares do módulo de Planos de Ação (ISO 10.2)
+  const {
+    canCreate,
+    canEdit,
+    canDelete,
+    canModifyItem,
+    canDeleteItem
+  } = useModulePermission('planos');
 
   return (
     <div className="space-y-6">
@@ -592,10 +598,10 @@ export const PlanosAcaoComponent: React.FC<PlanosAcaoProps> = ({
             Guia 5W2H
           </button>
           
-          {canModify && (
+          {canCreate && (
             <button
               onClick={handleOpenNewPlano}
-              className="px-3.5 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg flex items-center gap-1.5 transition-all shadow-xs"
+              className="px-3.5 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg flex items-center gap-1.5 transition-all shadow-xs cursor-pointer"
             >
               <Plus className="w-4 h-4" />
               Novo Plano 5W2H
@@ -698,10 +704,10 @@ export const PlanosAcaoComponent: React.FC<PlanosAcaoProps> = ({
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-md mx-auto">
             Não encontramos planos de ação correspondentes aos seus termos de busca ou filtros selecionados.
           </p>
-          {canModify && (
+          {canCreate && (
             <button
               onClick={handleOpenNewPlano}
-              className="mt-4 px-3 py-1.5 bg-blue-600 text-white font-bold text-xs rounded-lg shadow-xs hover:bg-blue-700 transition-colors"
+              className="mt-4 px-3 py-1.5 bg-blue-600 text-white font-bold text-xs rounded-lg shadow-xs hover:bg-blue-700 transition-colors cursor-pointer"
             >
               Criar Primeiro Plano
             </button>
@@ -748,10 +754,10 @@ export const PlanosAcaoComponent: React.FC<PlanosAcaoProps> = ({
                     </button>
 
                     {/* Editar button */}
-                    {canModify && (
+                    {canEdit && (!canModifyItem || canModifyItem(plano.onde)) && (
                       <button
                         onClick={() => handleOpenEditPlano(plano)}
-                        className="p-1.5 hover:bg-slate-150 dark:hover:bg-slate-800 rounded text-slate-400 hover:text-blue-500 transition-colors"
+                        className="p-1.5 hover:bg-slate-150 dark:hover:bg-slate-800 rounded text-slate-400 hover:text-blue-500 transition-colors cursor-pointer"
                         title="Editar Plano de Ação"
                       >
                         <Pencil className="w-4 h-4" />
@@ -759,10 +765,10 @@ export const PlanosAcaoComponent: React.FC<PlanosAcaoProps> = ({
                     )}
 
                     {/* Excluir button */}
-                    {canModify && (
+                    {canDelete && (!canDeleteItem || canDeleteItem(plano.onde)) && (
                       <button
                         onClick={() => handleDeletePlanoClick(plano)}
-                        className="p-1.5 hover:bg-slate-150 dark:hover:bg-slate-800 rounded text-slate-400 hover:text-rose-500 transition-colors"
+                        className="p-1.5 hover:bg-slate-150 dark:hover:bg-slate-800 rounded text-slate-400 hover:text-rose-500 transition-colors cursor-pointer"
                         title="Excluir Plano de Ação"
                       >
                         <Trash2 className="w-4 h-4" />

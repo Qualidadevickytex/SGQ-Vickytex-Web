@@ -15,6 +15,7 @@ import {
 import { Auditoria5S, SectorType, PlanoAcao } from '../types';
 import { PersonalizacaoGeral } from '../utils/mockData';
 import { useAuth } from '../contexts/AuthContext';
+import { useModulePermission } from '../utils/permissionManager';
 
 // Import our modular 5S Submodules
 import { FiveSDashboard } from './fiveS/FiveSDashboard';
@@ -60,7 +61,14 @@ export const Auditorias5SComponent: React.FC<Auditorias5SProps> = ({
   personalizacao
 }) => {
   const { user } = useAuth();
-  const canModify = user?.role === 'Qualidade' || user?.role === 'Gestor' || user?.role === 'Supervisor' || user?.role === 'Administrador';
+  const {
+    canCreate,
+    canEdit,
+    canDelete,
+    canModifyItem,
+    canDeleteItem
+  } = useModulePermission('5s');
+  const canModify = canEdit || canCreate;
 
   // State of current menu tab
   const [menu, setMenu] = useState<'indicadores' | 'auditorias' | 'planos' | 'configuracao'>('indicadores');
