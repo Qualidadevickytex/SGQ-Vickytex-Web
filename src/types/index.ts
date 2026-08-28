@@ -21,7 +21,7 @@ export * from './ceo';
 
 // Importações internas para manter compatibilidade retroativa
 import { SectorType } from './department';
-import { UserRole } from './role';
+import { UserRole, SystemModuleId } from './role';
 
 export interface ActivityLog {
   id: string;
@@ -87,7 +87,7 @@ export interface RiscoOportunidade {
 
 export interface RolePermission {
   role: UserRole;
-  allowedSections: ('dashboard' | 'documentos' | 'auditorias' | 'riscos' | '5s' | 'treinamentos' | 'calibracao' | 'planos' | 'configuracoes' | 'usuarios' | 'integracao' | 'database' | 'registros' | 'fornecedores' | 'indicadores' | 'ceo')[];
+  allowedSections: SystemModuleId[];
 }
 
 export interface Registro {

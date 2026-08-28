@@ -106,9 +106,15 @@ export const SYSTEM_MODULES: ModuleDefinition[] = [
   },
   { 
     id: 'usuarios', 
-    label: 'Matriz de Acessos & Usuários (5.3)', 
+    label: 'Usuários do Sistema (Contas)', 
     category: 'Suporte & Sistema',
-    description: 'Gestão de colaboradores, perfis técnicos e direitos de acesso'
+    description: 'Cadastro de colaboradores, credenciais e ativação de contas'
+  },
+  { 
+    id: 'permissoes', 
+    label: 'Matriz de Acessos & Alçadas (5.3)', 
+    category: 'Suporte & Sistema',
+    description: 'Gestão de direitos de acesso [V, C, E, X], escopo de setor e perfis técnicos'
   },
   { 
     id: 'configuracoes', 
@@ -149,6 +155,7 @@ export const DEFAULT_ROLE_CRUD_PERMISSIONS: Record<UserRole, Record<SystemModule
     treinamentos: { ver: true, criar: true, editar: true, excluir: true, escopoSetor: 'todos' },
     calibracao: { ver: true, criar: true, editar: true, excluir: true, escopoSetor: 'todos' },
     usuarios: { ver: true, criar: true, editar: true, excluir: true, escopoSetor: 'todos' },
+    permissoes: { ver: true, criar: true, editar: true, excluir: true, escopoSetor: 'todos' },
     configuracoes: { ver: true, criar: true, editar: true, excluir: true, escopoSetor: 'todos' },
     integracao: { ver: true, criar: true, editar: true, excluir: true, escopoSetor: 'todos' },
     database: { ver: true, criar: true, editar: true, excluir: true, escopoSetor: 'todos' }
@@ -168,6 +175,7 @@ export const DEFAULT_ROLE_CRUD_PERMISSIONS: Record<UserRole, Record<SystemModule
     treinamentos: { ver: true, criar: true, editar: true, excluir: true, escopoSetor: 'todos' },
     calibracao: { ver: true, criar: true, editar: true, excluir: true, escopoSetor: 'todos' },
     usuarios: { ver: true, criar: true, editar: true, excluir: true, escopoSetor: 'todos' },
+    permissoes: { ver: true, criar: true, editar: true, excluir: true, escopoSetor: 'todos' },
     configuracoes: { ver: true, criar: true, editar: true, excluir: true, escopoSetor: 'todos' },
     integracao: { ver: true, criar: true, editar: true, excluir: true, escopoSetor: 'todos' },
     database: { ver: true, criar: true, editar: true, excluir: true, escopoSetor: 'todos' }
@@ -187,6 +195,7 @@ export const DEFAULT_ROLE_CRUD_PERMISSIONS: Record<UserRole, Record<SystemModule
     treinamentos: { ver: true, criar: true, editar: true, excluir: false, escopoSetor: 'todos' },
     calibracao: { ver: true, criar: true, editar: true, excluir: false, escopoSetor: 'todos' },
     usuarios: { ver: true, criar: false, editar: false, excluir: false, escopoSetor: 'todos' },
+    permissoes: { ver: false, criar: false, editar: false, excluir: false, escopoSetor: 'todos' },
     configuracoes: { ver: true, criar: false, editar: false, excluir: false, escopoSetor: 'todos' },
     integracao: { ver: true, criar: false, editar: false, excluir: false, escopoSetor: 'todos' },
     database: { ver: false, criar: false, editar: false, excluir: false, escopoSetor: 'todos' }
@@ -206,6 +215,7 @@ export const DEFAULT_ROLE_CRUD_PERMISSIONS: Record<UserRole, Record<SystemModule
     treinamentos: { ver: true, criar: true, editar: true, excluir: false, escopoSetor: 'setor_proprio' },
     calibracao: { ver: true, criar: false, editar: true, excluir: false, escopoSetor: 'setor_proprio' },
     usuarios: { ver: false, criar: false, editar: false, excluir: false, escopoSetor: 'setor_proprio' },
+    permissoes: { ver: false, criar: false, editar: false, excluir: false, escopoSetor: 'setor_proprio' },
     configuracoes: { ver: false, criar: false, editar: false, excluir: false, escopoSetor: 'setor_proprio' },
     integracao: { ver: false, criar: false, editar: false, excluir: false, escopoSetor: 'setor_proprio' },
     database: { ver: false, criar: false, editar: false, excluir: false, escopoSetor: 'setor_proprio' }
@@ -225,6 +235,7 @@ export const DEFAULT_ROLE_CRUD_PERMISSIONS: Record<UserRole, Record<SystemModule
     treinamentos: { ver: true, criar: false, editar: false, excluir: false, escopoSetor: 'todos' },
     calibracao: { ver: true, criar: false, editar: false, excluir: false, escopoSetor: 'todos' },
     usuarios: { ver: false, criar: false, editar: false, excluir: false, escopoSetor: 'todos' },
+    permissoes: { ver: true, criar: false, editar: false, excluir: false, escopoSetor: 'todos' },
     configuracoes: { ver: false, criar: false, editar: false, excluir: false, escopoSetor: 'todos' },
     integracao: { ver: false, criar: false, editar: false, excluir: false, escopoSetor: 'todos' },
     database: { ver: false, criar: false, editar: false, excluir: false, escopoSetor: 'todos' }
@@ -244,6 +255,7 @@ export const DEFAULT_ROLE_CRUD_PERMISSIONS: Record<UserRole, Record<SystemModule
     treinamentos: { ver: true, criar: false, editar: false, excluir: false, escopoSetor: 'setor_proprio' },
     calibracao: { ver: false, criar: false, editar: false, excluir: false, escopoSetor: 'setor_proprio' },
     usuarios: { ver: false, criar: false, editar: false, excluir: false, escopoSetor: 'setor_proprio' },
+    permissoes: { ver: false, criar: false, editar: false, excluir: false, escopoSetor: 'setor_proprio' },
     configuracoes: { ver: false, criar: false, editar: false, excluir: false, escopoSetor: 'setor_proprio' },
     integracao: { ver: false, criar: false, editar: false, excluir: false, escopoSetor: 'setor_proprio' },
     database: { ver: false, criar: false, editar: false, excluir: false, escopoSetor: 'setor_proprio' }
@@ -263,6 +275,7 @@ export const DEFAULT_ROLE_CRUD_PERMISSIONS: Record<UserRole, Record<SystemModule
     treinamentos: { ver: false, criar: false, editar: false, excluir: false, escopoSetor: 'todos' },
     calibracao: { ver: false, criar: false, editar: false, excluir: false, escopoSetor: 'todos' },
     usuarios: { ver: false, criar: false, editar: false, excluir: false, escopoSetor: 'todos' },
+    permissoes: { ver: false, criar: false, editar: false, excluir: false, escopoSetor: 'todos' },
     configuracoes: { ver: false, criar: false, editar: false, excluir: false, escopoSetor: 'todos' },
     integracao: { ver: false, criar: false, editar: false, excluir: false, escopoSetor: 'todos' },
     database: { ver: false, criar: false, editar: false, excluir: false, escopoSetor: 'todos' }

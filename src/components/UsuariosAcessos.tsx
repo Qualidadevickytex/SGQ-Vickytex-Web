@@ -88,7 +88,8 @@ const SECTION_METADATA = [
   { id: '5s' as const, label: 'Programa 5S (Lean)', icon: Sparkles },
   { id: 'treinamentos' as const, label: 'Treinamentos (ISO 7.2)', icon: GraduationCap },
   { id: 'calibracao' as const, label: 'Calibração (ISO 7.1.5)', icon: Wrench },
-  { id: 'usuarios' as const, label: 'Perfis & Usuários', icon: Users },
+  { id: 'usuarios' as const, label: 'Usuários do Sistema (Contas)', icon: Users },
+  { id: 'permissoes' as const, label: 'Matriz de Acessos & Alçadas (5.3)', icon: ShieldCheck },
   { id: 'configuracoes' as const, label: 'Configurações (Parâmetros)', icon: Sliders },
   { id: 'integracao' as const, label: 'Painel Google Workspace', icon: Settings },
   { id: 'database' as const, label: 'Database Live View', icon: Database }
@@ -268,12 +269,22 @@ export const UsuariosAcessos: React.FC<UsuariosAcessosProps> = ({
     setTimeout(() => setPassSuccess(''), 4000);
   };
 
-  // Permissões dinâmicas granulares para o módulo de usuários
+  // Permissões dinâmicas granulares para o módulo de usuários e matriz de acessos
   const isAdminOrQuality = !currentLoggedUser || currentLoggedUser.role === 'Administrador' || currentLoggedUser.role === 'Qualidade';
+
+  const canViewUsersTab = Boolean(
+    isAdminOrQuality || 
+    canUserPerform(currentLoggedUser, 'usuarios', 'ver', undefined, permissions)
+  );
+
+  const canViewMatrixTab = Boolean(
+    isAdminOrQuality || 
+    canUserPerform(currentLoggedUser, 'permissoes', 'ver', undefined, permissions)
+  );
 
   const canManageAccessMatrix = Boolean(
     isAdminOrQuality || 
-    canUserPerform(currentLoggedUser, 'usuarios', 'editar', undefined, permissions)
+    canUserPerform(currentLoggedUser, 'permissoes', 'editar', undefined, permissions)
   );
 
   const canAddUser = Boolean(
@@ -290,6 +301,15 @@ export const UsuariosAcessos: React.FC<UsuariosAcessosProps> = ({
     isAdminOrQuality || 
     canUserPerform(currentLoggedUser, 'usuarios', 'excluir', undefined, permissions)
   );
+
+  // Redireciona a aba ativa caso o usuário logado não tenha permissão de visualização na aba selecionada
+  useEffect(() => {
+    if (activeTab === 'usuarios' && !canViewUsersTab) {
+      setActiveTab(canViewMatrixTab ? 'permissoes' : 'perfil');
+    } else if (activeTab === 'permissoes' && !canViewMatrixTab) {
+      setActiveTab(canViewUsersTab ? 'usuarios' : 'perfil');
+    }
+  }, [activeTab, canViewUsersTab, canViewMatrixTab]);
 
   // Handle opening form for adding a user
   const handleOpenAddForm = () => {
@@ -376,7 +396,9 @@ export const UsuariosAcessos: React.FC<UsuariosAcessosProps> = ({
           photoURL: formData.photoURL,
           status: formData.status,
           passwordHash: finalPassword,
-          telefone: formData.telefone?.trim()
+          telefone: formData.telefone?.trim(),
+          customPermissions: existingUser?.customPermissions,
+          lastLogin: existingUser?.lastLogin
         };
         await onUpdateUser(updatedUser);
         onAddLog('Usuário Editado', `Modificações salvas para o colaborador ${formData.name} (${formData.email}).`);
@@ -781,9 +803,15 @@ export const UsuariosAcessos: React.FC<UsuariosAcessosProps> = ({
               <Users className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-xl font-extrabold text-slate-800 dark:text-slate-100">Perfis, Usuários & Acessos</h2>
+              <div className="flex items-center space-x-2">
+                <h2 className="text-xl font-extrabold text-slate-800 dark:text-slate-100">Perfis, Usuários & Acessos</h2>
+                <span className="inline-flex items-center space-x-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                  <span>Tempo Real (Firestore)</span>
+                </span>
+              </div>
               <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
-                Gestão corporativa de credenciais, credenciamento técnico e segurança de dados de acordo com a ISO 9001:2015.
+                Gestão corporativa de credenciais, alçadas [V, C, E, X] por colaborador & setor e segurança ISO 9001:2015.
               </p>
             </div>
           </div>
@@ -813,32 +841,54 @@ export const UsuariosAcessos: React.FC<UsuariosAcessosProps> = ({
           <span>Meu Perfil & Senha</span>
         </button>
 
-        <button
-          onClick={() => setActiveTab('usuarios')}
-          className={`px-5 py-3 text-xs font-bold border-b-2 transition-all flex items-center space-x-2 ${
-            activeTab === 'usuarios' 
-              ? 'border-blue-600 text-blue-600 dark:text-blue-400 bg-white/50 dark:bg-slate-900/40 rounded-t-lg' 
-              : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
-          }`}
-        >
-          <Users className="w-3.5 h-3.5" />
-          <span>Usuários do Sistema</span>
-          <span className="text-[10px] bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 px-1.5 py-0.5 rounded-full font-mono font-bold">
-            {users.length}
-          </span>
-        </button>
+        {canViewUsersTab ? (
+          <button
+            onClick={() => setActiveTab('usuarios')}
+            className={`px-5 py-3 text-xs font-bold border-b-2 transition-all flex items-center space-x-2 ${
+              activeTab === 'usuarios' 
+                ? 'border-blue-600 text-blue-600 dark:text-blue-400 bg-white/50 dark:bg-slate-900/40 rounded-t-lg' 
+                : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
+            }`}
+          >
+            <Users className="w-3.5 h-3.5" />
+            <span>Usuários do Sistema</span>
+            <span className="text-[10px] bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 px-1.5 py-0.5 rounded-full font-mono font-bold">
+              {users.length}
+            </span>
+          </button>
+        ) : (
+          <div 
+            className="px-5 py-3 text-xs font-medium text-slate-400 dark:text-slate-600 flex items-center space-x-2 cursor-not-allowed opacity-60"
+            title="Acesso Restrito: Seu perfil ou setor não possui permissão de leitura para 'Usuários do Sistema'."
+          >
+            <Users className="w-3.5 h-3.5" />
+            <span>Usuários do Sistema</span>
+            <span className="text-[9px] bg-slate-100 dark:bg-slate-800 text-slate-400 px-1.5 py-0.5 rounded-md font-mono font-bold">Restrito</span>
+          </div>
+        )}
 
-        <button
-          onClick={() => setActiveTab('permissoes')}
-          className={`px-5 py-3 text-xs font-bold border-b-2 transition-all flex items-center space-x-2 ${
-            activeTab === 'permissoes' 
-              ? 'border-blue-600 text-blue-600 dark:text-blue-400 bg-white/50 dark:bg-slate-900/40 rounded-t-lg' 
-              : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
-          }`}
-        >
-          <ShieldCheck className="w-3.5 h-3.5" />
-          <span>Matriz de Acessos</span>
-        </button>
+        {canViewMatrixTab ? (
+          <button
+            onClick={() => setActiveTab('permissoes')}
+            className={`px-5 py-3 text-xs font-bold border-b-2 transition-all flex items-center space-x-2 ${
+              activeTab === 'permissoes' 
+                ? 'border-blue-600 text-blue-600 dark:text-blue-400 bg-white/50 dark:bg-slate-900/40 rounded-t-lg' 
+                : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
+            }`}
+          >
+            <ShieldCheck className="w-3.5 h-3.5" />
+            <span>Matriz de Acessos</span>
+          </button>
+        ) : (
+          <div 
+            className="px-5 py-3 text-xs font-medium text-slate-400 dark:text-slate-600 flex items-center space-x-2 cursor-not-allowed opacity-60"
+            title="Acesso Restrito: Seu perfil ou setor não possui permissão de leitura para 'Matriz de Acessos'."
+          >
+            <ShieldCheck className="w-3.5 h-3.5" />
+            <span>Matriz de Acessos</span>
+            <span className="text-[9px] bg-slate-100 dark:bg-slate-800 text-slate-400 px-1.5 py-0.5 rounded-md font-mono font-bold">Restrito</span>
+          </div>
+        )}
       </div>
 
       {/* Conteúdo das Tabs */}
@@ -1073,7 +1123,7 @@ export const UsuariosAcessos: React.FC<UsuariosAcessosProps> = ({
         )}
 
         {/* TAB 2: CONTROLE DE USUÁRIOS (CRUD) */}
-        {activeTab === 'usuarios' && (
+        {activeTab === 'usuarios' && canViewUsersTab && (
           <div className="space-y-4">
             
             {/* Barra de Filtros e Busca */}
@@ -1240,7 +1290,7 @@ export const UsuariosAcessos: React.FC<UsuariosAcessosProps> = ({
         )}
 
         {/* TAB 3: MATRIZ DE ACESSOS */}
-        {activeTab === 'permissoes' && (
+        {activeTab === 'permissoes' && canViewMatrixTab && (
           <div className="space-y-6">
             
             {/* Feedback Toast */}

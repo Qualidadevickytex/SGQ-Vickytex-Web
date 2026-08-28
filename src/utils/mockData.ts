@@ -874,7 +874,7 @@ export const INITIAL_USER_ACCOUNTS: UserAccount[] = [
 export const INITIAL_ROLE_PERMISSIONS: RolePermission[] = [
   {
     role: 'Administrador',
-    allowedSections: ['dashboard', 'documentos', 'auditorias', 'riscos', '5s', 'treinamentos', 'calibracao', 'planos', 'configuracoes', 'usuarios', 'integracao', 'database', 'registros', 'fornecedores', 'ceo', 'indicadores']
+    allowedSections: ['dashboard', 'documentos', 'auditorias', 'riscos', '5s', 'treinamentos', 'calibracao', 'planos', 'configuracoes', 'usuarios', 'permissoes', 'integracao', 'database', 'registros', 'fornecedores', 'ceo', 'indicadores']
   },
   {
     role: 'Gestor',
@@ -882,7 +882,7 @@ export const INITIAL_ROLE_PERMISSIONS: RolePermission[] = [
   },
   {
     role: 'Qualidade',
-    allowedSections: ['dashboard', 'documentos', 'auditorias', 'riscos', '5s', 'treinamentos', 'calibracao', 'planos', 'configuracoes', 'usuarios', 'integracao', 'registros', 'fornecedores', 'ceo', 'indicadores']
+    allowedSections: ['dashboard', 'documentos', 'auditorias', 'riscos', '5s', 'treinamentos', 'calibracao', 'planos', 'configuracoes', 'usuarios', 'permissoes', 'integracao', 'registros', 'fornecedores', 'ceo', 'indicadores']
   },
   {
     role: 'Supervisor',
@@ -894,7 +894,7 @@ export const INITIAL_ROLE_PERMISSIONS: RolePermission[] = [
   },
   {
     role: 'Auditor',
-    allowedSections: ['dashboard', 'documentos', 'auditorias', 'riscos', '5s', 'planos', 'registros', 'fornecedores', 'ceo', 'indicadores']
+    allowedSections: ['dashboard', 'documentos', 'auditorias', 'riscos', '5s', 'planos', 'permissoes', 'registros', 'fornecedores', 'ceo', 'indicadores']
   },
   {
     role: 'Visitante',

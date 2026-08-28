@@ -64,11 +64,16 @@ export const MainLayout: React.FC<MainLayoutProps> = ({
     const allModuleKeys: SystemModuleId[] = [
       'dashboard', 'documentos', 'indicadores', 'ceo', 'registros', 'fornecedores', 
       'auditorias', 'riscos', 'planos', '5s', 'treinamentos', 'calibracao', 
-      'usuarios', 'configuracoes', 'integracao', 'database'
+      'usuarios', 'permissoes', 'configuracoes', 'integracao', 'database'
     ];
 
     // Verificar se o usuário possui permissão de leitura ('ver') no módulo
     return allModuleKeys.filter(modId => {
+      if (modId === 'usuarios') {
+        return canUserPerform(user, 'usuarios', 'ver', undefined, permissions) ||
+               canUserPerform(user, 'permissoes', 'ver', undefined, permissions) ||
+               user.role === 'Administrador' || user.role === 'Qualidade';
+      }
       return canUserPerform(user, modId, 'ver', undefined, permissions);
     });
   }, [user, permissions]);

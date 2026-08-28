@@ -38,7 +38,9 @@ class UserRepositoryClass extends BaseRepository<UserAccount> {
       passwordHash: rec.passwordHash || rec.password_hash || rec.password || 'vickytex123',
       lastLogin: rec.last_login || rec.lastLogin,
       telefone: rec.telefone,
-      customPermissions: rec.customPermissions || rec.custom_permissions || undefined
+      customPermissions: (rec.customPermissions && typeof rec.customPermissions === 'object')
+        ? rec.customPermissions
+        : ((rec.custom_permissions && typeof rec.custom_permissions === 'object') ? rec.custom_permissions : undefined)
     };
   }
 
@@ -52,12 +54,14 @@ class UserRepositoryClass extends BaseRepository<UserAccount> {
       passwordHash: data.passwordHash || '',
       password_hash: data.passwordHash || '',
       photo_url: data.photoURL,
-      telefone: data.telefone
+      telefone: data.telefone,
+      customPermissions: data.customPermissions ?? null,
+      custom_permissions: data.customPermissions ?? null
     };
 
-    if (data.customPermissions !== undefined) {
-      payload.customPermissions = data.customPermissions;
-      payload.custom_permissions = data.customPermissions;
+    if (data.lastLogin) {
+      payload.lastLogin = data.lastLogin;
+      payload.last_login = data.lastLogin;
     }
 
     return payload;

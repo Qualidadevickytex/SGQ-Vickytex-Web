@@ -43,6 +43,7 @@ export type SystemModuleId =
   | 'treinamentos'
   | 'calibracao'
   | 'usuarios'
+  | 'permissoes'
   | 'configuracoes'
   | 'integracao'
   | 'database';
