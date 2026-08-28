@@ -636,7 +636,12 @@ export const UsuariosAcessos: React.FC<UsuariosAcessosProps> = ({
       `Permissões de ${selectedUserForMatrix.name} restauradas para a herança padrão do perfil de ${selectedUserForMatrix.role}.`
     );
 
-    if (selectedUserForMatrix.email === currentLoggedUser?.email) {
+    const isCurrentLoggedUser = 
+      (selectedUserForMatrix.id && currentLoggedUser?.id && selectedUserForMatrix.id === currentLoggedUser.id) ||
+      (selectedUserForMatrix.email && currentLoggedUser?.email && 
+       selectedUserForMatrix.email.toLowerCase().trim() === currentLoggedUser.email.toLowerCase().trim());
+
+    if (isCurrentLoggedUser) {
       refreshUser({
         ...currentLoggedUser,
         customPermissions: undefined
@@ -676,7 +681,12 @@ export const UsuariosAcessos: React.FC<UsuariosAcessosProps> = ({
       `Liberado acesso total (V+C+E+X / Global) em todos os módulos para ${selectedUserForMatrix.name}.`
     );
 
-    if (selectedUserForMatrix.email === currentLoggedUser?.email) {
+    const isCurrentLoggedUser = 
+      (selectedUserForMatrix.id && currentLoggedUser?.id && selectedUserForMatrix.id === currentLoggedUser.id) ||
+      (selectedUserForMatrix.email && currentLoggedUser?.email && 
+       selectedUserForMatrix.email.toLowerCase().trim() === currentLoggedUser.email.toLowerCase().trim());
+
+    if (isCurrentLoggedUser) {
       refreshUser({
         ...currentLoggedUser,
         customPermissions: allGranted
@@ -716,7 +726,12 @@ export const UsuariosAcessos: React.FC<UsuariosAcessosProps> = ({
       `Definido modo somente leitura (apenas Visualizar) em todos os módulos para ${selectedUserForMatrix.name}.`
     );
 
-    if (selectedUserForMatrix.email === currentLoggedUser?.email) {
+    const isCurrentLoggedUser = 
+      (selectedUserForMatrix.id && currentLoggedUser?.id && selectedUserForMatrix.id === currentLoggedUser.id) ||
+      (selectedUserForMatrix.email && currentLoggedUser?.email && 
+       selectedUserForMatrix.email.toLowerCase().trim() === currentLoggedUser.email.toLowerCase().trim());
+
+    if (isCurrentLoggedUser) {
       refreshUser({
         ...currentLoggedUser,
         customPermissions: readOnlyAll
@@ -756,7 +771,12 @@ export const UsuariosAcessos: React.FC<UsuariosAcessosProps> = ({
       `Todos os módulos do usuário ${selectedUserForMatrix.name} foram configurados para o escopo: [${scope === 'todos' ? 'Global (Todos os Setores)' : `Apenas Setor Próprio (${selectedUserForMatrix.sector})`}].`
     );
 
-    if (selectedUserForMatrix.email === currentLoggedUser?.email) {
+    const isCurrentLoggedUser = 
+      (selectedUserForMatrix.id && currentLoggedUser?.id && selectedUserForMatrix.id === currentLoggedUser.id) ||
+      (selectedUserForMatrix.email && currentLoggedUser?.email && 
+       selectedUserForMatrix.email.toLowerCase().trim() === currentLoggedUser.email.toLowerCase().trim());
+
+    if (isCurrentLoggedUser) {
       refreshUser({
         ...currentLoggedUser,
         customPermissions: updatedCustom

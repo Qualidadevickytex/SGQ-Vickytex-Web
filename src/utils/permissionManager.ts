@@ -304,7 +304,14 @@ export function getEffectiveModulePermission(
   customPermissions?: Record<string, ModuleCrudPermission>,
   dynamicRolePermissions?: RolePermission[]
 ): ModuleCrudPermission {
-  // Administrador possui acesso irrestrito e total a todos os módulos, sem exceções
+  // 1. Se o usuário possui regra customizada individual (da aba Por Colaborador & Setor), ela possui prioridade absoluta sobre o cargo
+  if (customPermissions && customPermissions[moduleId]) {
+    return {
+      ...customPermissions[moduleId]
+    };
+  }
+
+  // 2. Administrador possui acesso irrestrito e total por padrão do cargo
   if (role === 'Administrador') {
     return {
       ver: true,
@@ -324,7 +331,7 @@ export function getEffectiveModulePermission(
     escopoSetor: 'setor_proprio' as SectorScope
   };
 
-  // Se houver configuração dinâmica do perfil técnico (da aba Perfis Técnicos)
+  // 3. Se houver configuração dinâmica do perfil técnico (da aba Perfis Técnicos)
   let roleEffectivePerm = { ...basePerm };
   if (dynamicRolePermissions && dynamicRolePermissions.length > 0) {
     const roleConfig = dynamicRolePermissions.find(p => p.role === role);
@@ -348,20 +355,12 @@ export function getEffectiveModulePermission(
     }
   }
 
-  // Se o usuário possui regra customizada individual (da aba Por Colaborador & Setor), ela tem prioridade
-  if (customPermissions && customPermissions[moduleId]) {
-    return {
-      ...roleEffectivePerm,
-      ...customPermissions[moduleId]
-    };
-  }
-
   return roleEffectivePerm;
 }
 
 /**
  * Verifica se o usuário tem permissão para realizar uma ação (Ver, Criar, Editar, Excluir)
- * levando em consideração o Perfil Técnico, as Customizações do Usuário, as Permissões Dinâmicas e o Setor do Item.
+ * levando em consideração as Customizações Individuais do Usuário, Perfil Técnico, Permissões Dinâmicas e Escopo de Setor.
  */
 export function canUserPerform(
   user: {
@@ -376,14 +375,10 @@ export function canUserPerform(
 ): boolean {
   if (!user) return false;
 
-  // Administrador possui acesso e autorização irrestrita em todos os módulos e setores
-  if (user.role === 'Administrador') {
-    return true;
-  }
-
   const role = user.role || 'Colaborador';
   const rolePerms = dynamicRolePermissions || cachedDynamicRolePermissions;
   
+  // Customizações individuais do usuário têm prioridade via getEffectiveModulePermission
   const effective = getEffectiveModulePermission(role, moduleId, user.customPermissions, rolePerms);
   const actionAllowed = effective[action];
 
@@ -391,7 +386,7 @@ export function canUserPerform(
     return false;
   }
 
-  // Se a ação é permitida e o escopo é 'todos', autorização total
+  // Se a ação é permitida e o escopo é 'todos', autorização global concedida
   if (effective.escopoSetor === 'todos') {
     return true;
   }
