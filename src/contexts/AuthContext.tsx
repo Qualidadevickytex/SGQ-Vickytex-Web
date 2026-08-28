@@ -313,17 +313,53 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const switchProfile = async (role: UserRole) => {
     if (!user) return;
     const previousRole = user.role;
-    const updated = { ...user, role };
+    const preset = PRESET_USERS[role] || PRESET_USERS.Colaborador;
+
+    let targetCustomPermissions = user.customPermissions;
+    let targetSector = preset.sector || user.sector || 'Qualidade';
+    let targetName = preset.name || user.name;
+    let targetEmail = preset.email || user.email;
+    let targetPhoto = preset.photoURL || user.photoURL;
+
+    try {
+      const userRes = await UserRepository.findAll();
+      if (userRes.success && userRes.data) {
+        const found = userRes.data.find(
+          (u) => u.role === role || u.email.toLowerCase() === preset.email.toLowerCase()
+        );
+        if (found) {
+          targetCustomPermissions = found.customPermissions;
+          targetSector = (found.sector as SectorType) || targetSector;
+          targetName = found.name || targetName;
+          targetEmail = found.email || targetEmail;
+          targetPhoto = found.photoURL || targetPhoto;
+        }
+      }
+    } catch (e) {
+      console.warn('[AuthContext] Error fetching profile for role switch:', e);
+    }
+
+    const updated: UserProfile = {
+      ...user,
+      name: targetName,
+      email: targetEmail,
+      role,
+      sector: targetSector,
+      photoURL: targetPhoto,
+      customPermissions: targetCustomPermissions
+    };
     setUser(updated);
 
     try {
-      await UserRepository.update(user.id, { role });
+      if (user.id) {
+        await UserRepository.update(user.id, { role, sector: targetSector });
+      }
     } catch (e) {
       console.warn('[AuthContext] Failed to update role in Firestore:', e);
     }
 
     await AuditService.update(
-      user,
+      updated,
       'Autenticação',
       'Perfil',
       `Perfil alterado de ${previousRole} para ${role}`

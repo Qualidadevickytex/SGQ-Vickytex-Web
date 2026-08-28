@@ -169,8 +169,11 @@ export const UsuariosAcessos: React.FC<UsuariosAcessosProps> = ({
   const [passSuccess, setPassSuccess] = useState('');
 
   // Find corresponding UserAccount for current logged in user
-  const matchingAccount = users.find(u => u.email === currentLoggedUser?.email) || {
-    id: 'current',
+  const matchingAccount = users.find(u => 
+    (u.id && currentLoggedUser?.id && u.id === currentLoggedUser.id) ||
+    (u.email && currentLoggedUser?.email && u.email.toLowerCase().trim() === currentLoggedUser.email.toLowerCase().trim())
+  ) || {
+    id: currentLoggedUser?.id || 'current',
     name: currentLoggedUser?.name || '',
     email: currentLoggedUser?.email || '',
     role: currentLoggedUser?.role || 'Qualidade',
@@ -178,7 +181,8 @@ export const UsuariosAcessos: React.FC<UsuariosAcessosProps> = ({
     photoURL: currentLoggedUser?.photoURL,
     status: 'Ativo' as const,
     passwordHash: 'vickytex123',
-    telefone: '(11) 98765-4321'
+    telefone: '(11) 98765-4321',
+    customPermissions: currentLoggedUser?.customPermissions
   };
 
   const [profileName, setProfileName] = useState(matchingAccount.name);
@@ -550,7 +554,12 @@ export const UsuariosAcessos: React.FC<UsuariosAcessosProps> = ({
       `Ação [${action.toUpperCase()}] ${newActionState ? 'concedida' : 'revogada'} no módulo ${moduleId} para o usuário ${selectedUserForMatrix.name} (${selectedUserForMatrix.email}).`
     );
 
-    if (selectedUserForMatrix.email === currentLoggedUser?.email) {
+    const isCurrentLoggedUser = 
+      (selectedUserForMatrix.id && currentLoggedUser?.id && selectedUserForMatrix.id === currentLoggedUser.id) ||
+      (selectedUserForMatrix.email && currentLoggedUser?.email && 
+       selectedUserForMatrix.email.toLowerCase().trim() === currentLoggedUser.email.toLowerCase().trim());
+
+    if (isCurrentLoggedUser) {
       refreshUser({
         ...currentLoggedUser,
         customPermissions: updatedCustom
@@ -593,7 +602,12 @@ export const UsuariosAcessos: React.FC<UsuariosAcessosProps> = ({
       `Escopo do módulo ${moduleId} alterado para [${newScope === 'todos' ? 'Todos os Setores (Global)' : `Setor Próprio (${selectedUserForMatrix.sector})`}] para ${selectedUserForMatrix.name}.`
     );
 
-    if (selectedUserForMatrix.email === currentLoggedUser?.email) {
+    const isCurrentLoggedUser = 
+      (selectedUserForMatrix.id && currentLoggedUser?.id && selectedUserForMatrix.id === currentLoggedUser.id) ||
+      (selectedUserForMatrix.email && currentLoggedUser?.email && 
+       selectedUserForMatrix.email.toLowerCase().trim() === currentLoggedUser.email.toLowerCase().trim());
+
+    if (isCurrentLoggedUser) {
       refreshUser({
         ...currentLoggedUser,
         customPermissions: updatedCustom
