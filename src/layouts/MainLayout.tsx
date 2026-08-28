@@ -25,6 +25,7 @@ import {
   Sliders,
   ShieldAlert,
   Users,
+  Key,
   Truck,
   Activity,
   Award
@@ -78,6 +79,10 @@ export const MainLayout: React.FC<MainLayoutProps> = ({
     });
   }, [user, permissions]);
 
+  const canAccessUsers = canUserPerform(user, 'usuarios', 'ver', undefined, permissions);
+  const canAccessMatrix = canUserPerform(user, 'permissoes', 'ver', undefined, permissions);
+  const canAccessProfile = canUserPerform(user, 'perfil', 'ver', undefined, permissions);
+
   const MENU_ITEMS = [
     { id: 'dashboard' as const, label: 'Painel Geral', icon: LayoutDashboard },
     { id: 'documentos' as const, label: 'Lista Mestra', icon: FileText },
@@ -91,7 +96,11 @@ export const MainLayout: React.FC<MainLayoutProps> = ({
     { id: '5s' as const, label: 'Programa 5S (Lean)', icon: Sparkles },
     { id: 'treinamentos' as const, label: 'Treinamentos (ISO 7.2)', icon: GraduationCap },
     { id: 'calibracao' as const, label: 'Calibração (ISO 7.1.5)', icon: Wrench },
-    { id: 'usuarios' as const, label: 'Perfis & Usuários', icon: Users },
+    { 
+      id: 'usuarios' as const, 
+      label: (canAccessUsers || canAccessMatrix) ? 'Perfis & Usuários' : 'Meu Perfil & Senha', 
+      icon: (canAccessUsers || canAccessMatrix) ? Users : Key 
+    },
     { id: 'configuracoes' as const, label: 'Configurações (Parâmetros)', icon: Sliders },
     { id: 'integracao' as const, label: 'Painel Google Workspace', icon: Settings },
     { id: 'database' as const, label: 'Database Live View', icon: Database }
@@ -142,21 +151,26 @@ export const MainLayout: React.FC<MainLayoutProps> = ({
 
         {/* Footer Sidebar with Active Profile details */}
         <div id="sidebar-footer" className="p-4 border-t border-white/10 space-y-3">
-          <div className="bg-white/5 rounded-xl p-3">
+          <button 
+            id="sidebar-profile-card-btn"
+            onClick={() => setActiveSection('usuarios')}
+            className="w-full bg-white/5 hover:bg-white/10 rounded-xl p-3 text-left transition-all group cursor-pointer border border-white/10 hover:border-white/20"
+            title="Abrir Meu Perfil & Senha"
+          >
             <div className="flex items-center space-x-2.5">
               <img 
                 src={user?.photoURL || 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150'} 
                 alt="Foto" 
-                className="w-8 h-8 rounded-full border border-white/25 shrink-0 object-cover" 
+                className="w-8 h-8 rounded-full border border-white/25 shrink-0 object-cover group-hover:scale-105 transition-transform" 
               />
-              <div className="min-w-0">
-                <p className="text-[11px] font-bold text-white truncate leading-tight">{user?.name}</p>
+              <div className="min-w-0 flex-1">
+                <p className="text-[11px] font-bold text-white truncate leading-tight group-hover:text-blue-200 transition-colors">{user?.name}</p>
                 <span className="text-[9px] bg-blue-500/30 text-blue-100 font-bold px-1.5 py-0.5 rounded-sm font-mono mt-0.5 inline-block">
                   {user?.role ? user.role.toUpperCase() : 'USUÁRIO'}
                 </span>
               </div>
             </div>
-          </div>
+          </button>
 
           <button 
             onClick={logout}
@@ -212,7 +226,12 @@ export const MainLayout: React.FC<MainLayoutProps> = ({
             </button>
 
             {/* Mini User Icon Trigger (Desktop only shows text) */}
-            <div className="flex items-center space-x-2 border-l border-slate-200 dark:border-slate-800 pl-4">
+            <button 
+              id="top-navbar-user-btn"
+              onClick={() => setActiveSection('usuarios')}
+              className="flex items-center space-x-2 border-l border-slate-200 dark:border-slate-800 pl-4 hover:opacity-80 transition-opacity cursor-pointer text-left"
+              title="Abrir Meu Perfil & Senha"
+            >
               <img 
                 src={user?.photoURL || 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150'} 
                 alt="Foto" 
@@ -221,7 +240,7 @@ export const MainLayout: React.FC<MainLayoutProps> = ({
               <span className="hidden md:inline-block text-xs font-bold text-slate-700 dark:text-slate-200">
                 {user?.name.split(' ')[0]}
               </span>
-            </div>
+            </button>
 
           </div>
         </header>
@@ -285,17 +304,25 @@ export const MainLayout: React.FC<MainLayoutProps> = ({
 
             {/* Profile Switching and Exit inside mobile Drawer */}
             <div className="border-t border-white/10 pt-4 space-y-4">
-              <div className="flex items-center space-x-2">
+              <button 
+                id="mobile-profile-card-btn"
+                onClick={() => {
+                  setActiveSection('usuarios');
+                  setIsSidebarOpen(false);
+                }}
+                className="w-full flex items-center space-x-2.5 p-2 rounded-lg bg-white/5 hover:bg-white/10 text-left transition-colors cursor-pointer border border-white/10"
+                title="Abrir Meu Perfil & Senha"
+              >
                 <img 
                   src={user?.photoURL || 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150'} 
                   alt="Foto" 
                   className="w-8 h-8 rounded-full border border-white/20 shrink-0" 
                 />
-                <div className="min-w-0">
-                  <p className="text-xs font-bold leading-none">{user?.name}</p>
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-bold leading-none text-white truncate">{user?.name}</p>
                   <span className="text-[9px] text-blue-200 font-mono mt-0.5 block">{user?.role ? user.role.toUpperCase() : 'USUÁRIO'}</span>
                 </div>
-              </div>
+              </button>
 
               <button 
                 onClick={logout}
