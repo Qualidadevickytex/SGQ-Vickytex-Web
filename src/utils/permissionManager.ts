@@ -304,6 +304,17 @@ export function getEffectiveModulePermission(
   customPermissions?: Record<string, ModuleCrudPermission>,
   dynamicRolePermissions?: RolePermission[]
 ): ModuleCrudPermission {
+  // Administrador possui acesso irrestrito e total a todos os módulos, sem exceções
+  if (role === 'Administrador') {
+    return {
+      ver: true,
+      criar: true,
+      editar: true,
+      excluir: true,
+      escopoSetor: 'todos'
+    };
+  }
+
   const roleDefaults = DEFAULT_ROLE_CRUD_PERMISSIONS[role] || DEFAULT_ROLE_CRUD_PERMISSIONS['Colaborador'];
   const basePerm = (roleDefaults as any)[moduleId] || {
     ver: false,
@@ -363,6 +374,11 @@ export function canUserPerform(
   dynamicRolePermissions?: RolePermission[]
 ): boolean {
   if (!user) return false;
+
+  // Administrador possui acesso e autorização irrestrita em todos os módulos e setores
+  if (user.role === 'Administrador') {
+    return true;
+  }
 
   const role = user.role || 'Colaborador';
   const rolePerms = dynamicRolePermissions || cachedDynamicRolePermissions;
