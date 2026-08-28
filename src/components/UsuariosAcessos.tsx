@@ -88,6 +88,7 @@ const SECTION_METADATA = [
   { id: '5s' as const, label: 'Programa 5S (Lean)', icon: Sparkles },
   { id: 'treinamentos' as const, label: 'Treinamentos (ISO 7.2)', icon: GraduationCap },
   { id: 'calibracao' as const, label: 'Calibração (ISO 7.1.5)', icon: Wrench },
+  { id: 'perfil' as const, label: 'Meu Perfil & Senha', icon: Key },
   { id: 'usuarios' as const, label: 'Usuários do Sistema (Contas)', icon: Users },
   { id: 'permissoes' as const, label: 'Matriz de Acessos & Alçadas (5.3)', icon: ShieldCheck },
   { id: 'configuracoes' as const, label: 'Configurações (Parâmetros)', icon: Sliders },
@@ -199,6 +200,10 @@ export const UsuariosAcessos: React.FC<UsuariosAcessosProps> = ({
   // Handle Current User Profile Update
   const handleUpdateProfile = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!canEditProfile) {
+      showToast('Você não possui permissão para editar dados do perfil.', 'error');
+      return;
+    }
     const updatedAccount: UserAccount = {
       ...matchingAccount,
       name: profileName,
@@ -226,6 +231,10 @@ export const UsuariosAcessos: React.FC<UsuariosAcessosProps> = ({
   // Handle Current User Password Change
   const handleUpdatePassword = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!canEditProfile) {
+      setPassError('Você não possui permissão para redefinir senhas no seu perfil.');
+      return;
+    }
     setPassError('');
     setPassSuccess('');
 
@@ -269,8 +278,18 @@ export const UsuariosAcessos: React.FC<UsuariosAcessosProps> = ({
     setTimeout(() => setPassSuccess(''), 4000);
   };
 
-  // Permissões dinâmicas granulares para o módulo de usuários e matriz de acessos
+  // Permissões dinâmicas granulares para o módulo de usuários, perfil e matriz de acessos
   const isAdminOrQuality = !currentLoggedUser || currentLoggedUser.role === 'Administrador' || currentLoggedUser.role === 'Qualidade';
+
+  const canViewProfileTab = Boolean(
+    isAdminOrQuality || 
+    canUserPerform(currentLoggedUser, 'perfil', 'ver', undefined, permissions)
+  );
+
+  const canEditProfile = Boolean(
+    isAdminOrQuality || 
+    canUserPerform(currentLoggedUser, 'perfil', 'editar', undefined, permissions)
+  );
 
   const canViewUsersTab = Boolean(
     isAdminOrQuality || 
@@ -304,12 +323,17 @@ export const UsuariosAcessos: React.FC<UsuariosAcessosProps> = ({
 
   // Redireciona a aba ativa caso o usuário logado não tenha permissão de visualização na aba selecionada
   useEffect(() => {
-    if (activeTab === 'usuarios' && !canViewUsersTab) {
-      setActiveTab(canViewMatrixTab ? 'permissoes' : 'perfil');
+    if (activeTab === 'perfil' && !canViewProfileTab) {
+      if (canViewUsersTab) setActiveTab('usuarios');
+      else if (canViewMatrixTab) setActiveTab('permissoes');
+    } else if (activeTab === 'usuarios' && !canViewUsersTab) {
+      if (canViewMatrixTab) setActiveTab('permissoes');
+      else if (canViewProfileTab) setActiveTab('perfil');
     } else if (activeTab === 'permissoes' && !canViewMatrixTab) {
-      setActiveTab(canViewUsersTab ? 'usuarios' : 'perfil');
+      if (canViewUsersTab) setActiveTab('usuarios');
+      else if (canViewProfileTab) setActiveTab('perfil');
     }
-  }, [activeTab, canViewUsersTab, canViewMatrixTab]);
+  }, [activeTab, canViewProfileTab, canViewUsersTab, canViewMatrixTab]);
 
   // Handle opening form for adding a user
   const handleOpenAddForm = () => {
@@ -829,17 +853,28 @@ export const UsuariosAcessos: React.FC<UsuariosAcessosProps> = ({
 
       {/* Tabs de Seleção */}
       <div id="usuarios-tabs" className="flex border-b border-slate-200 dark:border-slate-800">
-        <button
-          onClick={() => setActiveTab('perfil')}
-          className={`px-5 py-3 text-xs font-bold border-b-2 transition-all flex items-center space-x-2 ${
-            activeTab === 'perfil' 
-              ? 'border-blue-600 text-blue-600 dark:text-blue-400 bg-white/50 dark:bg-slate-900/40 rounded-t-lg' 
-              : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
-          }`}
-        >
-          <Key className="w-3.5 h-3.5" />
-          <span>Meu Perfil & Senha</span>
-        </button>
+        {canViewProfileTab ? (
+          <button
+            onClick={() => setActiveTab('perfil')}
+            className={`px-5 py-3 text-xs font-bold border-b-2 transition-all flex items-center space-x-2 ${
+              activeTab === 'perfil' 
+                ? 'border-blue-600 text-blue-600 dark:text-blue-400 bg-white/50 dark:bg-slate-900/40 rounded-t-lg' 
+                : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
+            }`}
+          >
+            <Key className="w-3.5 h-3.5" />
+            <span>Meu Perfil & Senha</span>
+          </button>
+        ) : (
+          <div 
+            className="px-5 py-3 text-xs font-medium text-slate-400 dark:text-slate-600 flex items-center space-x-2 cursor-not-allowed opacity-60"
+            title="Acesso Restrito: Seu perfil ou setor não possui permissão de leitura para 'Meu Perfil & Senha'."
+          >
+            <Key className="w-3.5 h-3.5" />
+            <span>Meu Perfil & Senha</span>
+            <span className="text-[9px] bg-slate-100 dark:bg-slate-800 text-slate-400 px-1.5 py-0.5 rounded-md font-mono font-bold">Restrito</span>
+          </div>
+        )}
 
         {canViewUsersTab ? (
           <button
@@ -894,16 +929,34 @@ export const UsuariosAcessos: React.FC<UsuariosAcessosProps> = ({
       {/* Conteúdo das Tabs */}
       <div id="usuarios-tab-content">
         
+        {/* Se nenhuma aba for permitida para visualização */}
+        {!canViewProfileTab && !canViewUsersTab && !canViewMatrixTab && (
+          <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-12 text-center space-y-3">
+            <ShieldAlert className="w-12 h-12 text-amber-500 mx-auto" />
+            <h3 className="text-base font-bold text-slate-800 dark:text-slate-100">Módulo Restrito</h3>
+            <p className="text-xs text-slate-500 max-w-md mx-auto">
+              Seu perfil não possui permissão de acesso a nenhuma das áreas de controle de usuários ou perfil. Solicite liberação à Gerência ou Qualidade.
+            </p>
+          </div>
+        )}
+
         {/* TAB 1: MEU PERFIL */}
-        {activeTab === 'perfil' && (
+        {activeTab === 'perfil' && canViewProfileTab && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             
             {/* Esquerda: Detalhes do Perfil */}
             <div className="lg:col-span-2 space-y-6">
               <form onSubmit={handleUpdateProfile} className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-6 space-y-5 shadow-xs">
-                <div className="flex items-center space-x-2 border-b border-slate-100 dark:border-slate-800/80 pb-3">
-                  <Users className="w-4 h-4 text-blue-600" />
-                  <h3 className="text-sm font-extrabold text-slate-800 dark:text-slate-100">Informações Cadastrais (Gerais)</h3>
+                <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800/80 pb-3">
+                  <div className="flex items-center space-x-2">
+                    <Users className="w-4 h-4 text-blue-600" />
+                    <h3 className="text-sm font-extrabold text-slate-800 dark:text-slate-100">Informações Cadastrais (Gerais)</h3>
+                  </div>
+                  {!canEditProfile && (
+                    <span className="text-[10px] font-bold bg-amber-50 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400 border border-amber-200 dark:border-amber-800 px-2 py-0.5 rounded-md">
+                      Modo Somente Leitura
+                    </span>
+                  )}
                 </div>
 
                 {profileSuccess && (
@@ -925,30 +978,32 @@ export const UsuariosAcessos: React.FC<UsuariosAcessosProps> = ({
                         alt="Avatar Selecionado" 
                         className="w-20 h-20 rounded-full border-4 border-blue-600/30 dark:border-blue-500/20 shadow-md object-cover" 
                       />
-                      <label className="absolute bottom-0 right-0 bg-blue-600 hover:bg-blue-700 text-white p-1.5 rounded-full cursor-pointer shadow-md transition-colors" title="Fazer upload de foto do computador">
-                        <Upload className="w-3.5 h-3.5" />
-                        <input 
-                          type="file" 
-                          accept="image/*" 
-                          className="hidden" 
-                          onChange={(e) => {
-                            const file = e.target.files?.[0];
-                            if (file) {
-                              if (file.size > 2 * 1024 * 1024) {
-                                alert('A imagem selecionada é muito grande! Escolha uma imagem de até 2MB.');
-                                return;
-                              }
-                              const reader = new FileReader();
-                              reader.onload = (event) => {
-                                if (event.target?.result) {
-                                  setProfileAvatar(event.target.result as string);
+                      {canEditProfile && (
+                        <label className="absolute bottom-0 right-0 bg-blue-600 hover:bg-blue-700 text-white p-1.5 rounded-full cursor-pointer shadow-md transition-colors" title="Fazer upload de foto do computador">
+                          <Upload className="w-3.5 h-3.5" />
+                          <input 
+                            type="file" 
+                            accept="image/*" 
+                            className="hidden" 
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file) {
+                                if (file.size > 2 * 1024 * 1024) {
+                                  alert('A imagem selecionada é muito grande! Escolha uma imagem de até 2MB.');
+                                  return;
                                 }
-                              };
-                              reader.readAsDataURL(file);
-                            }
-                          }}
-                        />
-                      </label>
+                                const reader = new FileReader();
+                                reader.onload = (event) => {
+                                  if (event.target?.result) {
+                                    setProfileAvatar(event.target.result as string);
+                                  }
+                                };
+                                reader.readAsDataURL(file);
+                              }
+                            }}
+                          />
+                        </label>
+                      )}
                     </div>
 
                     <div className="flex-1 space-y-3">
@@ -959,10 +1014,11 @@ export const UsuariosAcessos: React.FC<UsuariosAcessosProps> = ({
                             <button
                               key={idx}
                               type="button"
+                              disabled={!canEditProfile}
                               onClick={() => setProfileAvatar(avatar)}
                               className={`w-8 h-8 rounded-full overflow-hidden border-2 transition-all ${
                                 profileAvatar === avatar ? 'border-blue-500 ring-2 ring-blue-500/30 scale-110' : 'border-slate-200 dark:border-slate-800 opacity-60 hover:opacity-100'
-                              }`}
+                              } ${!canEditProfile ? 'cursor-not-allowed opacity-40' : ''}`}
                             >
                               <img src={avatar} alt={`Avatar #${idx + 1}`} className="w-full h-full object-cover" />
                             </button>
@@ -975,10 +1031,11 @@ export const UsuariosAcessos: React.FC<UsuariosAcessosProps> = ({
                         <div className="flex gap-2">
                           <input
                             type="url"
+                            disabled={!canEditProfile}
                             value={profileAvatar.startsWith('data:') ? '' : profileAvatar}
                             onChange={(e) => setProfileAvatar(e.target.value.trim())}
                             placeholder="https://exemplo.com/suafoto.jpg"
-                            className="flex-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-2 text-xs text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-blue-500 focus:outline-hidden"
+                            className="flex-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-2 text-xs text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-blue-500 focus:outline-hidden disabled:bg-slate-100 dark:disabled:bg-slate-800/50 disabled:cursor-not-allowed"
                           />
                           {profileAvatar.startsWith('data:') && (
                             <span className="text-[9px] bg-blue-500/10 text-blue-600 dark:text-blue-400 px-2 py-1.5 rounded-lg border border-blue-500/20 font-bold self-center">
@@ -997,9 +1054,10 @@ export const UsuariosAcessos: React.FC<UsuariosAcessosProps> = ({
                     <input
                       type="text"
                       required
+                      disabled={!canEditProfile}
                       value={profileName}
                       onChange={(e) => setProfileName(e.target.value)}
-                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-2.5 text-xs text-slate-800 dark:text-slate-100 font-medium focus:ring-2 focus:ring-blue-500 focus:outline-hidden"
+                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-2.5 text-xs text-slate-800 dark:text-slate-100 font-medium focus:ring-2 focus:ring-blue-500 focus:outline-hidden disabled:bg-slate-100 dark:disabled:bg-slate-800/50 disabled:cursor-not-allowed"
                     />
                   </div>
 
@@ -1008,9 +1066,10 @@ export const UsuariosAcessos: React.FC<UsuariosAcessosProps> = ({
                     <input
                       type="email"
                       required
+                      disabled={!canEditProfile}
                       value={profileEmail}
                       onChange={(e) => setProfileEmail(e.target.value)}
-                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-2.5 text-xs text-slate-800 dark:text-slate-100 font-medium focus:ring-2 focus:ring-blue-500 focus:outline-hidden"
+                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-2.5 text-xs text-slate-800 dark:text-slate-100 font-medium focus:ring-2 focus:ring-blue-500 focus:outline-hidden disabled:bg-slate-100 dark:disabled:bg-slate-800/50 disabled:cursor-not-allowed"
                     />
                   </div>
 
@@ -1019,18 +1078,20 @@ export const UsuariosAcessos: React.FC<UsuariosAcessosProps> = ({
                     <input
                       type="text"
                       placeholder="(11) 99999-9999"
+                      disabled={!canEditProfile}
                       value={profilePhone}
                       onChange={(e) => setProfilePhone(e.target.value)}
-                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-2.5 text-xs text-slate-800 dark:text-slate-100 font-medium focus:ring-2 focus:ring-blue-500 focus:outline-hidden"
+                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-2.5 text-xs text-slate-800 dark:text-slate-100 font-medium focus:ring-2 focus:ring-blue-500 focus:outline-hidden disabled:bg-slate-100 dark:disabled:bg-slate-800/50 disabled:cursor-not-allowed"
                     />
                   </div>
 
                   <div className="space-y-1">
                     <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400">Setor Padrão</label>
                     <select
+                      disabled={!canEditProfile}
                       value={profileSector}
                       onChange={(e) => setProfileSector(e.target.value)}
-                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-2.5 text-xs text-slate-800 dark:text-slate-100 font-medium focus:ring-2 focus:ring-blue-500 focus:outline-hidden"
+                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-2.5 text-xs text-slate-800 dark:text-slate-100 font-medium focus:ring-2 focus:ring-blue-500 focus:outline-hidden disabled:bg-slate-100 dark:disabled:bg-slate-800/50 disabled:cursor-not-allowed"
                     >
                       {sectorsList.map(sec => (
                         <option key={sec} value={sec}>{sec}</option>
@@ -1042,7 +1103,8 @@ export const UsuariosAcessos: React.FC<UsuariosAcessosProps> = ({
                 <div className="flex justify-end pt-2">
                   <button
                     type="submit"
-                    className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-4 py-2 rounded-lg flex items-center space-x-1.5 transition-colors shadow-xs"
+                    disabled={!canEditProfile}
+                    className="bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 dark:disabled:bg-slate-800 disabled:text-slate-500 disabled:cursor-not-allowed text-white text-xs font-bold px-4 py-2 rounded-lg flex items-center space-x-1.5 transition-colors shadow-xs"
                   >
                     <Save className="w-3.5 h-3.5" />
                     <span>Salvar Dados Cadastrais</span>
@@ -1054,9 +1116,16 @@ export const UsuariosAcessos: React.FC<UsuariosAcessosProps> = ({
             {/* Direita: Alteração de Senha */}
             <div className="space-y-6">
               <form onSubmit={handleUpdatePassword} className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-6 space-y-4 shadow-xs">
-                <div className="flex items-center space-x-2 border-b border-slate-100 dark:border-slate-800/80 pb-3">
-                  <Key className="w-4 h-4 text-amber-500" />
-                  <h3 className="text-sm font-extrabold text-slate-800 dark:text-slate-100">Atualização de Senha</h3>
+                <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800/80 pb-3">
+                  <div className="flex items-center space-x-2">
+                    <Key className="w-4 h-4 text-amber-500" />
+                    <h3 className="text-sm font-extrabold text-slate-800 dark:text-slate-100">Atualização de Senha</h3>
+                  </div>
+                  {!canEditProfile && (
+                    <span className="text-[9px] font-bold bg-amber-50 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400 border border-amber-200 dark:border-amber-800 px-1.5 py-0.5 rounded-md">
+                      Bloqueado
+                    </span>
+                  )}
                 </div>
 
                 {passError && (
@@ -1078,10 +1147,11 @@ export const UsuariosAcessos: React.FC<UsuariosAcessosProps> = ({
                   <input
                     type="password"
                     required
+                    disabled={!canEditProfile}
                     value={currPass}
                     onChange={(e) => setCurrPass(e.target.value)}
                     placeholder="Digite a senha atual"
-                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-2.5 text-xs text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-blue-500 focus:outline-hidden"
+                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-2.5 text-xs text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-blue-500 focus:outline-hidden disabled:bg-slate-100 dark:disabled:bg-slate-800/50 disabled:cursor-not-allowed"
                   />
                 </div>
 
@@ -1090,10 +1160,11 @@ export const UsuariosAcessos: React.FC<UsuariosAcessosProps> = ({
                   <input
                     type="password"
                     required
+                    disabled={!canEditProfile}
                     value={newPass}
                     onChange={(e) => setNewPass(e.target.value)}
                     placeholder="Mínimo de 4 dígitos"
-                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-2.5 text-xs text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-blue-500 focus:outline-hidden"
+                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-2.5 text-xs text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-blue-500 focus:outline-hidden disabled:bg-slate-100 dark:disabled:bg-slate-800/50 disabled:cursor-not-allowed"
                   />
                 </div>
 
@@ -1102,16 +1173,18 @@ export const UsuariosAcessos: React.FC<UsuariosAcessosProps> = ({
                   <input
                     type="password"
                     required
+                    disabled={!canEditProfile}
                     value={confirmPass}
                     onChange={(e) => setConfirmPass(e.target.value)}
                     placeholder="Repita a nova senha"
-                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-2.5 text-xs text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-blue-500 focus:outline-hidden"
+                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-2.5 text-xs text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-blue-500 focus:outline-hidden disabled:bg-slate-100 dark:disabled:bg-slate-800/50 disabled:cursor-not-allowed"
                   />
                 </div>
 
                 <button
                   type="submit"
-                  className="w-full bg-amber-500 hover:bg-amber-600 text-slate-950 text-xs font-extrabold py-2.5 rounded-lg flex items-center justify-center space-x-1.5 transition-colors shadow-xs"
+                  disabled={!canEditProfile}
+                  className="w-full bg-amber-500 hover:bg-amber-600 disabled:bg-slate-300 dark:disabled:bg-slate-800 disabled:text-slate-500 disabled:cursor-not-allowed text-slate-950 text-xs font-extrabold py-2.5 rounded-lg flex items-center justify-center space-x-1.5 transition-colors shadow-xs"
                 >
                   <Lock className="w-3.5 h-3.5" />
                   <span>Redefinir Senha de Acesso</span>

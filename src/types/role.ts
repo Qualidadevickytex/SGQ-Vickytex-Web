@@ -42,6 +42,7 @@ export type SystemModuleId =
   | '5s'
   | 'treinamentos'
   | 'calibracao'
+  | 'perfil'
   | 'usuarios'
   | 'permissoes'
   | 'configuracoes'

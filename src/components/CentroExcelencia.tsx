@@ -32,6 +32,7 @@ import { SugestoesCEO } from './ceo/SugestoesCEO';
 import { ProjetoFormCEO } from './ceo/ProjetoFormCEO';
 import { ProjetoViewCEO } from './ceo/ProjetoViewCEO';
 import { GamificacaoCEO } from './ceo/GamificacaoCEO';
+import { useModulePermission } from '../utils/permissionManager';
 
 interface CentroExcelenciaProps {
   personalizacao?: any;
@@ -48,6 +49,13 @@ export const CentroExcelencia: React.FC<CentroExcelenciaProps> = ({
 }) => {
   const { user } = useAuth();
   const systemSectors = useSectors() as SectorType[];
+  const { 
+    canCreate, 
+    canEdit, 
+    canDelete, 
+    canModifyItem, 
+    canDeleteItem 
+  } = useModulePermission('ceo');
   const { 
     projects, 
     suggestions, 
@@ -335,16 +343,18 @@ export const CentroExcelencia: React.FC<CentroExcelenciaProps> = ({
                     </select>
 
                     {/* Restricted trigger by Quality roles */}
-                    <button
-                      onClick={() => {
-                        setEditingProject(undefined);
-                        setIsFormOpen(true);
-                      }}
-                      className="inline-flex items-center space-x-1 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl text-xs transition-colors shadow-xs"
-                    >
-                      <Plus className="w-4 h-4" />
-                      <span>Novo Projeto CEO</span>
-                    </button>
+                    {canCreate && (
+                      <button
+                        onClick={() => {
+                          setEditingProject(undefined);
+                          setIsFormOpen(true);
+                        }}
+                        className="inline-flex items-center space-x-1 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl text-xs transition-colors shadow-xs"
+                      >
+                        <Plus className="w-4 h-4" />
+                        <span>Novo Projeto CEO</span>
+                      </button>
+                    )}
                   </div>
                 </div>
 
@@ -366,58 +376,66 @@ export const CentroExcelencia: React.FC<CentroExcelenciaProps> = ({
                       </thead>
                       <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80">
                         {filteredProjects.length > 0 ? (
-                          filteredProjects.map((proj) => (
-                            <tr 
-                              key={proj.id} 
-                              onClick={() => setSelectedProjectId(proj.id)}
-                              className="text-slate-600 dark:text-slate-300 hover:bg-slate-50/60 dark:hover:bg-slate-800/20 cursor-pointer transition-colors"
-                            >
-                              <td className="py-3.5 px-4 font-mono font-bold text-blue-600 dark:text-blue-400">{proj.codigo}</td>
-                              <td className="py-3.5 px-4">
-                                <div>
-                                  <div className="font-bold text-slate-800 dark:text-slate-200">{proj.titulo}</div>
-                                  <span className="text-[10px] text-slate-400 font-semibold">{proj.metodologia}</span>
-                                </div>
-                              </td>
-                              <td className="py-3.5 px-4 font-medium">{proj.setor}</td>
-                              <td className="py-3.5 px-4 text-slate-500 font-semibold">{proj.lider?.split('@')[0] || 'Sem Líder'}</td>
-                              <td className="py-3.5 px-4 text-right font-bold text-slate-700 dark:text-slate-300">
-                                {formatCurrency(proj.investimento)}
-                              </td>
-                              <td className="py-3.5 px-4 text-right font-bold text-emerald-600 dark:text-emerald-400">
-                                {formatCurrency(proj.retornoEsperado)}
-                              </td>
-                              <td className="py-3.5 px-4">
-                                <span className={`inline-block px-2.5 py-0.5 rounded-full text-[9px] font-bold border ${
-                                  proj.status === 'Concluído' 
-                                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
-                                    : proj.status === 'Em Execução' 
-                                    ? 'bg-amber-50 text-amber-700 border-amber-200'
-                                    : 'bg-blue-50 text-blue-700 border-blue-200'
-                                }`}>
-                                  {proj.status}
-                                </span>
-                              </td>
-                              <td className="py-3.5 px-4">
-                                <div className="flex items-center justify-center space-x-1.5">
-                                  <button
-                                    onClick={(e) => handleEditTrigger(proj, e)}
-                                    className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg text-slate-500 hover:text-blue-600 transition-colors"
-                                    title="Editar Metadados"
-                                  >
-                                    <Edit className="w-3.5 h-3.5" />
-                                  </button>
-                                  <button
-                                    onClick={(e) => handleDeleteTrigger(proj, e)}
-                                    className="p-1.5 hover:bg-red-50 dark:hover:bg-red-950/20 rounded-lg text-slate-500 hover:text-red-600 transition-colors"
-                                    title="Excluir Projeto"
-                                  >
-                                    <Trash2 className="w-3.5 h-3.5" />
-                                  </button>
-                                </div>
-                              </td>
-                            </tr>
-                          ))
+                          filteredProjects.map((proj) => {
+                            const canEditProj = canModifyItem(proj.lider);
+                            const canDeleteProj = canDeleteItem(proj.lider);
+                            return (
+                              <tr 
+                                key={proj.id} 
+                                onClick={() => setSelectedProjectId(proj.id)}
+                                className="text-slate-600 dark:text-slate-300 hover:bg-slate-50/60 dark:hover:bg-slate-800/20 cursor-pointer transition-colors"
+                              >
+                                <td className="py-3.5 px-4 font-mono font-bold text-blue-600 dark:text-blue-400">{proj.codigo}</td>
+                                <td className="py-3.5 px-4">
+                                  <div>
+                                    <div className="font-bold text-slate-800 dark:text-slate-200">{proj.titulo}</div>
+                                    <span className="text-[10px] text-slate-400 font-semibold">{proj.metodologia}</span>
+                                  </div>
+                                </td>
+                                <td className="py-3.5 px-4 font-medium">{proj.setor}</td>
+                                <td className="py-3.5 px-4 text-slate-500 font-semibold">{proj.lider?.split('@')[0] || 'Sem Líder'}</td>
+                                <td className="py-3.5 px-4 text-right font-bold text-slate-700 dark:text-slate-300">
+                                  {formatCurrency(proj.investimento)}
+                                </td>
+                                <td className="py-3.5 px-4 text-right font-bold text-emerald-600 dark:text-emerald-400">
+                                  {formatCurrency(proj.retornoEsperado)}
+                                </td>
+                                <td className="py-3.5 px-4">
+                                  <span className={`inline-block px-2.5 py-0.5 rounded-full text-[9px] font-bold border ${
+                                    proj.status === 'Concluído' 
+                                      ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
+                                      : proj.status === 'Em Execução' 
+                                      ? 'bg-amber-50 text-amber-700 border-amber-200'
+                                      : 'bg-blue-50 text-blue-700 border-blue-200'
+                                  }`}>
+                                    {proj.status}
+                                  </span>
+                                </td>
+                                <td className="py-3.5 px-4">
+                                  <div className="flex items-center justify-center space-x-1.5">
+                                    {canEditProj && (
+                                      <button
+                                        onClick={(e) => handleEditTrigger(proj, e)}
+                                        className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg text-slate-500 hover:text-blue-600 transition-colors"
+                                        title="Editar Metadados"
+                                      >
+                                        <Edit className="w-3.5 h-3.5" />
+                                      </button>
+                                    )}
+                                    {canDeleteProj && (
+                                      <button
+                                        onClick={(e) => handleDeleteTrigger(proj, e)}
+                                        className="p-1.5 hover:bg-red-50 dark:hover:bg-red-950/20 rounded-lg text-slate-500 hover:text-red-600 transition-colors"
+                                        title="Excluir Projeto"
+                                      >
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                      </button>
+                                    )}
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })
                         ) : (
                           <tr>
                             <td colSpan={8} className="py-12 text-center text-xs text-slate-400">

@@ -874,31 +874,31 @@ export const INITIAL_USER_ACCOUNTS: UserAccount[] = [
 export const INITIAL_ROLE_PERMISSIONS: RolePermission[] = [
   {
     role: 'Administrador',
-    allowedSections: ['dashboard', 'documentos', 'auditorias', 'riscos', '5s', 'treinamentos', 'calibracao', 'planos', 'configuracoes', 'usuarios', 'permissoes', 'integracao', 'database', 'registros', 'fornecedores', 'ceo', 'indicadores']
+    allowedSections: ['dashboard', 'documentos', 'auditorias', 'riscos', '5s', 'treinamentos', 'calibracao', 'planos', 'configuracoes', 'perfil', 'usuarios', 'permissoes', 'integracao', 'database', 'registros', 'fornecedores', 'ceo', 'indicadores']
   },
   {
     role: 'Gestor',
-    allowedSections: ['dashboard', 'documentos', 'auditorias', 'riscos', '5s', 'treinamentos', 'calibracao', 'planos', 'configuracoes', 'usuarios', 'integracao', 'database', 'registros', 'fornecedores', 'ceo', 'indicadores']
+    allowedSections: ['dashboard', 'documentos', 'auditorias', 'riscos', '5s', 'treinamentos', 'calibracao', 'planos', 'configuracoes', 'perfil', 'usuarios', 'integracao', 'database', 'registros', 'fornecedores', 'ceo', 'indicadores']
   },
   {
     role: 'Qualidade',
-    allowedSections: ['dashboard', 'documentos', 'auditorias', 'riscos', '5s', 'treinamentos', 'calibracao', 'planos', 'configuracoes', 'usuarios', 'permissoes', 'integracao', 'registros', 'fornecedores', 'ceo', 'indicadores']
+    allowedSections: ['dashboard', 'documentos', 'auditorias', 'riscos', '5s', 'treinamentos', 'calibracao', 'planos', 'configuracoes', 'perfil', 'usuarios', 'permissoes', 'integracao', 'registros', 'fornecedores', 'ceo', 'indicadores']
   },
   {
     role: 'Supervisor',
-    allowedSections: ['dashboard', 'documentos', 'auditorias', '5s', 'treinamentos', 'calibracao', 'planos', 'registros', 'fornecedores', 'ceo', 'indicadores']
+    allowedSections: ['dashboard', 'documentos', 'auditorias', '5s', 'treinamentos', 'calibracao', 'planos', 'perfil', 'registros', 'fornecedores', 'ceo', 'indicadores']
   },
   {
     role: 'Colaborador',
-    allowedSections: ['dashboard', 'documentos', '5s', 'treinamentos', 'registros', 'ceo', 'indicadores']
+    allowedSections: ['dashboard', 'documentos', '5s', 'treinamentos', 'perfil', 'registros', 'ceo', 'indicadores']
   },
   {
     role: 'Auditor',
-    allowedSections: ['dashboard', 'documentos', 'auditorias', 'riscos', '5s', 'planos', 'permissoes', 'registros', 'fornecedores', 'ceo', 'indicadores']
+    allowedSections: ['dashboard', 'documentos', 'auditorias', 'riscos', '5s', 'planos', 'perfil', 'permissoes', 'registros', 'fornecedores', 'ceo', 'indicadores']
   },
   {
     role: 'Visitante',
-    allowedSections: ['dashboard', 'documentos', 'registros', 'indicadores', 'ceo']
+    allowedSections: ['dashboard', 'documentos', 'perfil', 'registros', 'indicadores', 'ceo']
   }
 ];
 
