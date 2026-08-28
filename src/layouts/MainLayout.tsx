@@ -72,8 +72,7 @@ export const MainLayout: React.FC<MainLayoutProps> = ({
       if (modId === 'usuarios') {
         return canUserPerform(user, 'usuarios', 'ver', undefined, permissions) ||
                canUserPerform(user, 'permissoes', 'ver', undefined, permissions) ||
-               canUserPerform(user, 'perfil', 'ver', undefined, permissions) ||
-               user.role === 'Administrador' || user.role === 'Qualidade';
+               canUserPerform(user, 'perfil', 'ver', undefined, permissions);
       }
       return canUserPerform(user, modId, 'ver', undefined, permissions);
     });

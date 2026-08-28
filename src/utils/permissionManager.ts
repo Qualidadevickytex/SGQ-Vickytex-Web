@@ -341,7 +341,8 @@ export function getEffectiveModulePermission(
       } else if (!roleEffectivePerm.ver) {
         roleEffectivePerm = {
           ...roleEffectivePerm,
-          ver: true
+          ver: true,
+          editar: moduleId === 'perfil' ? true : roleEffectivePerm.editar
         };
       }
     }

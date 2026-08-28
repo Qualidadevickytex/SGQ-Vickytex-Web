@@ -279,45 +279,35 @@ export const UsuariosAcessos: React.FC<UsuariosAcessosProps> = ({
   };
 
   // Permissões dinâmicas granulares para o módulo de usuários, perfil e matriz de acessos
-  const isAdminOrQuality = !currentLoggedUser || currentLoggedUser.role === 'Administrador' || currentLoggedUser.role === 'Qualidade';
-
   const canViewProfileTab = Boolean(
-    isAdminOrQuality || 
     canUserPerform(currentLoggedUser, 'perfil', 'ver', undefined, permissions)
   );
 
   const canEditProfile = Boolean(
-    isAdminOrQuality || 
     canUserPerform(currentLoggedUser, 'perfil', 'editar', undefined, permissions)
   );
 
   const canViewUsersTab = Boolean(
-    isAdminOrQuality || 
     canUserPerform(currentLoggedUser, 'usuarios', 'ver', undefined, permissions)
   );
 
   const canViewMatrixTab = Boolean(
-    isAdminOrQuality || 
     canUserPerform(currentLoggedUser, 'permissoes', 'ver', undefined, permissions)
   );
 
   const canManageAccessMatrix = Boolean(
-    isAdminOrQuality || 
     canUserPerform(currentLoggedUser, 'permissoes', 'editar', undefined, permissions)
   );
 
   const canAddUser = Boolean(
-    isAdminOrQuality || 
     canUserPerform(currentLoggedUser, 'usuarios', 'criar', undefined, permissions)
   );
 
   const canEditUser = Boolean(
-    isAdminOrQuality || 
     canUserPerform(currentLoggedUser, 'usuarios', 'editar', undefined, permissions)
   );
 
   const canDeleteUser = Boolean(
-    isAdminOrQuality || 
     canUserPerform(currentLoggedUser, 'usuarios', 'excluir', undefined, permissions)
   );
 
