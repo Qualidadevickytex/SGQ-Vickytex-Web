@@ -164,6 +164,11 @@ export const UsuariosAcessos: React.FC<UsuariosAcessosProps> = ({
   });
   const sectorsList = useSectors();
 
+  // Usuário selecionado para o Perfil & Senha (inicia com o usuário logado ou primeiro da lista)
+  const [selectedProfileUserId, setSelectedProfileUserId] = useState<string>(() => 
+    currentLoggedUser?.id || currentLoggedUser?.email || users[0]?.id || 'user-1'
+  );
+
   // Sub-aba da Matriz de Acessos ('usuario' = granular V,C,E,X por colaborador | 'roles' = perfis técnicos clássicos)
   const [matrizMode, setMatrizMode] = useState<'usuario' | 'roles'>('usuario');
   const [selectedUserIdForMatrix, setSelectedUserIdForMatrix] = useState<string>(() => users[0]?.id || 'user-1');
@@ -202,15 +207,18 @@ export const UsuariosAcessos: React.FC<UsuariosAcessosProps> = ({
 
   const [userToDelete, setUserToDelete] = useState<UserAccount | null>(null);
 
-  // Password change states for current user
+  // Password change states
   const [currPass, setCurrPass] = useState('');
   const [newPass, setNewPass] = useState('');
   const [confirmPass, setConfirmPass] = useState('');
   const [passError, setPassError] = useState('');
   const [passSuccess, setPassSuccess] = useState('');
 
-  // Find corresponding UserAccount for current logged in user
-  const matchingAccount = users.find(u => 
+  // Encontra a conta do usuário selecionado para exibição/edição na aba Perfil
+  const currentProfileUser = users.find(u => 
+    (u.id && selectedProfileUserId && u.id === selectedProfileUserId) ||
+    (u.email && selectedProfileUserId && u.email.toLowerCase().trim() === selectedProfileUserId.toLowerCase().trim())
+  ) || users.find(u => 
     (u.id && currentLoggedUser?.id && u.id === currentLoggedUser.id) ||
     (u.email && currentLoggedUser?.email && u.email.toLowerCase().trim() === currentLoggedUser.email.toLowerCase().trim())
   ) || {
@@ -221,36 +229,47 @@ export const UsuariosAcessos: React.FC<UsuariosAcessosProps> = ({
     sector: currentLoggedUser?.sector || 'Qualidade',
     photoURL: currentLoggedUser?.photoURL,
     status: 'Ativo' as const,
-    passwordHash: 'vickytex123',
+    passwordHash: 'mariana2026',
     telefone: '(11) 98765-4321',
     customPermissions: currentLoggedUser?.customPermissions
   };
 
-  const [profileName, setProfileName] = useState(matchingAccount.name);
-  const [profileEmail, setProfileEmail] = useState(matchingAccount.email);
-  const [profilePhone, setProfilePhone] = useState(matchingAccount.telefone || '');
-  const [profileAvatar, setProfileAvatar] = useState(matchingAccount.photoURL || PRESET_AVATARS[0]);
-  const [profileSector, setProfileSector] = useState(matchingAccount.sector || 'Qualidade');
+  const isViewingOwnProfile = Boolean(
+    (currentProfileUser.id && currentLoggedUser?.id && currentProfileUser.id === currentLoggedUser.id) ||
+    (currentProfileUser.email && currentLoggedUser?.email && currentProfileUser.email.toLowerCase().trim() === currentLoggedUser.email.toLowerCase().trim())
+  );
+
+  const [profileName, setProfileName] = useState(currentProfileUser.name);
+  const [profileEmail, setProfileEmail] = useState(currentProfileUser.email);
+  const [profilePhone, setProfilePhone] = useState(currentProfileUser.telefone || '');
+  const [profileAvatar, setProfileAvatar] = useState(currentProfileUser.photoURL || PRESET_AVATARS[0]);
+  const [profileSector, setProfileSector] = useState(currentProfileUser.sector || 'Qualidade');
   const [profileSuccess, setProfileSuccess] = useState('');
 
-  // Sincroniza os dados do formulário caso o usuário logado mude (ex: dropdown no rodapé)
+  // Sincroniza os dados do formulário quando o usuário selecionado ou logado muda
   useEffect(() => {
-    setProfileName(matchingAccount.name);
-    setProfileEmail(matchingAccount.email);
-    setProfilePhone(matchingAccount.telefone || '');
-    setProfileAvatar(matchingAccount.photoURL || PRESET_AVATARS[0]);
-    setProfileSector(matchingAccount.sector || 'Qualidade');
-  }, [currentLoggedUser?.email, matchingAccount.id, matchingAccount.name, matchingAccount.telefone, matchingAccount.photoURL, matchingAccount.sector]);
+    setProfileName(currentProfileUser.name || '');
+    setProfileEmail(currentProfileUser.email || '');
+    setProfilePhone(currentProfileUser.telefone || '');
+    setProfileAvatar(currentProfileUser.photoURL || PRESET_AVATARS[0]);
+    setProfileSector(currentProfileUser.sector || 'Qualidade');
+    setCurrPass('');
+    setNewPass('');
+    setConfirmPass('');
+    setPassError('');
+    setPassSuccess('');
+    setProfileSuccess('');
+  }, [currentProfileUser.id, currentProfileUser.email, currentProfileUser.name, currentProfileUser.telefone, currentProfileUser.photoURL, currentProfileUser.sector]);
 
-  // Handle Current User Profile Update
+  // Salva atualizações cadastrais do perfil selecionado
   const handleUpdateProfile = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!canEditProfile) {
+    if (!canEditProfile && !canEditUser) {
       showToast('Você não possui permissão para editar dados do perfil.', 'error');
       return;
     }
     const updatedAccount: UserAccount = {
-      ...matchingAccount,
+      ...currentProfileUser,
       name: profileName,
       email: profileEmail,
       telefone: profilePhone,
@@ -258,39 +277,41 @@ export const UsuariosAcessos: React.FC<UsuariosAcessosProps> = ({
       sector: profileSector
     };
     onUpdateUser(updatedAccount);
-    onAddLog('Atualização de Perfil', `O usuário ${profileEmail} atualizou seus próprios dados de perfil.`);
+    onAddLog('Atualização de Perfil', `O perfil do usuário ${profileEmail} foi atualizado.`);
     
-    // Atualiza a barra de menu/perfil lateral instantaneamente
-    refreshUser({
-      name: profileName,
-      email: profileEmail,
-      role: currentLoggedUser?.role || 'Qualidade',
-      sector: profileSector,
-      photoURL: profileAvatar
-    });
+    // Se for o usuário logado ativo, sincroniza a sessão imediatamente
+    if (isViewingOwnProfile) {
+      refreshUser({
+        name: profileName,
+        email: profileEmail,
+        role: currentLoggedUser?.role || currentProfileUser.role || 'Qualidade',
+        sector: profileSector,
+        photoURL: profileAvatar
+      });
+    }
 
-    setProfileSuccess('Perfil atualizado com sucesso no banco de dados local!');
+    setProfileSuccess(`Dados de ${profileName} salvos com sucesso!`);
     setTimeout(() => setProfileSuccess(''), 4000);
   };
 
-  // Handle Current User Password Change
+  // Salva alteração ou redefinição de senha do perfil selecionado
   const handleUpdatePassword = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!canEditProfile) {
-      setPassError('Você não possui permissão para redefinir senhas no seu perfil.');
+    if (!canEditProfile && !canEditUser) {
+      setPassError('Você não possui permissão para redefinir senhas.');
       return;
     }
     setPassError('');
     setPassSuccess('');
 
-    // Validate current password
-    const currentActualPassword = matchingAccount.passwordHash || 'mariana2026';
-    if (currPass) {
+    // Se estiver redefinindo a própria senha e preencheu o campo de senha atual, valida
+    if (isViewingOwnProfile && currPass) {
+      const currentActualPassword = currentProfileUser.passwordHash || 'mariana2026';
       const isCurrValid = currPass === currentActualPassword ||
-        (matchingAccount.email === 'qualidade@vickytex.com.br' && (currPass === 'vickytex123' || currPass === 'mariana2026')) ||
-        (matchingAccount.email === 'julia@vickytex.com.br' && (currPass === 'julia2026' || currPass === 'vickytex123')) ||
-        (matchingAccount.email === 'gerencia@vickytex.com.br' && (currPass === 'fernando2026' || currPass === 'vickytex123')) ||
-        (matchingAccount.email === 'admin@vickytex.com.br' && (currPass === 'admin123' || currPass === 'vickytex123'));
+        (currentProfileUser.email === 'qualidade@vickytex.com.br' && (currPass === 'vickytex123' || currPass === 'mariana2026')) ||
+        (currentProfileUser.email === 'julia@vickytex.com.br' && (currPass === 'julia2026' || currPass === 'vickytex123')) ||
+        (currentProfileUser.email === 'gerencia@vickytex.com.br' && (currPass === 'fernando2026' || currPass === 'vickytex123')) ||
+        (currentProfileUser.email === 'admin@vickytex.com.br' && (currPass === 'admin123' || currPass === 'vickytex123'));
 
       if (!isCurrValid) {
         setPassError('A senha atual informada está incorreta.');
@@ -298,25 +319,24 @@ export const UsuariosAcessos: React.FC<UsuariosAcessosProps> = ({
       }
     }
 
-    if (newPass !== confirmPass) {
-      setPassError('A nova senha e a confirmação não coincidem.');
-      return;
-    }
-
     if (newPass.length < 4) {
       setPassError('A senha deve conter no mínimo 4 caracteres.');
       return;
     }
 
-    // Update password in memory/storage
+    if (newPass !== confirmPass) {
+      setPassError('A nova senha e a confirmação não coincidem.');
+      return;
+    }
+
     const updatedAccount: UserAccount = {
-      ...matchingAccount,
+      ...currentProfileUser,
       passwordHash: newPass
     };
     onUpdateUser(updatedAccount);
-    onAddLog('Alteração de Senha', `O usuário ${matchingAccount.email} alterou sua senha de acesso.`);
+    onAddLog('Alteração de Senha', `A senha do usuário ${currentProfileUser.email} foi redefinida com sucesso.`);
     
-    setPassSuccess('Sua senha de acesso ao SGQ foi atualizada com sucesso!');
+    setPassSuccess(`Senha de ${currentProfileUser.name} atualizada com sucesso!`);
     setCurrPass('');
     setNewPass('');
     setConfirmPass('');
@@ -972,256 +992,353 @@ export const UsuariosAcessos: React.FC<UsuariosAcessosProps> = ({
           </div>
         )}
 
-        {/* TAB 1: MEU PERFIL */}
+        {/* TAB 1: MEU PERFIL / PERFIL DO COLABORADOR */}
         {activeTab === 'perfil' && canViewProfileTab && (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="space-y-6 animate-in fade-in duration-200">
             
-            {/* Esquerda: Detalhes do Perfil */}
-            <div className="lg:col-span-2 space-y-6">
-              <form onSubmit={handleUpdateProfile} className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-6 space-y-5 shadow-xs">
-                <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800/80 pb-3">
-                  <div className="flex items-center space-x-2">
-                    <Users className="w-4 h-4 text-blue-600" />
-                    <h3 className="text-sm font-extrabold text-slate-800 dark:text-slate-100">Informações Cadastrais (Gerais)</h3>
+            {/* Barra Superior de Seleção de Usuário na Aba Perfil */}
+            {canViewUsersTab && users.length > 1 && (
+              <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-4 shadow-xs flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                <div className="flex items-center space-x-3">
+                  <div className="relative shrink-0">
+                    <img 
+                      src={currentProfileUser.photoURL || PRESET_AVATARS[0]} 
+                      alt={currentProfileUser.name} 
+                      className="w-11 h-11 rounded-full object-cover border-2 border-blue-500/30 shadow-xs"
+                    />
+                    <span className={`absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-white dark:border-slate-900 ${
+                      currentProfileUser.status === 'Ativo' ? 'bg-emerald-500' : 'bg-slate-400'
+                    }`} />
                   </div>
-                  {!canEditProfile && (
-                    <span className="text-[10px] font-bold bg-amber-50 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400 border border-amber-200 dark:border-amber-800 px-2 py-0.5 rounded-md">
-                      Modo Somente Leitura
-                    </span>
-                  )}
-                </div>
-
-                {profileSuccess && (
-                  <div className="bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800 rounded-lg p-3 text-xs font-semibold text-emerald-700 dark:text-emerald-400 flex items-center space-x-2">
-                    <CheckCircle className="w-4 h-4 shrink-0" />
-                    <span>{profileSuccess}</span>
-                  </div>
-                )}
-
-                {/* Seleção de Avatar e Upload de Foto */}
-                <div className="space-y-3 bg-slate-50 dark:bg-slate-900/60 p-4 rounded-xl border border-slate-200/80 dark:border-slate-800/80">
-                  <label className="text-[10px] font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">Foto de Perfil & Avatar</label>
-                  
-                  <div className="flex flex-col md:flex-row md:items-center gap-5">
-                    {/* Visualização de Perfil Atual */}
-                    <div className="relative group shrink-0 self-center md:self-auto">
-                      <img 
-                        src={profileAvatar} 
-                        alt="Avatar Selecionado" 
-                        className="w-20 h-20 rounded-full border-4 border-blue-600/30 dark:border-blue-500/20 shadow-md object-cover" 
-                      />
-                      {canEditProfile && (
-                        <label className="absolute bottom-0 right-0 bg-blue-600 hover:bg-blue-700 text-white p-1.5 rounded-full cursor-pointer shadow-md transition-colors" title="Fazer upload de foto do computador">
-                          <Upload className="w-3.5 h-3.5" />
-                          <input 
-                            type="file" 
-                            accept="image/*" 
-                            className="hidden" 
-                            onChange={(e) => {
-                              const file = e.target.files?.[0];
-                              if (file) {
-                                if (file.size > 2 * 1024 * 1024) {
-                                  alert('A imagem selecionada é muito grande! Escolha uma imagem de até 2MB.');
-                                  return;
-                                }
-                                const reader = new FileReader();
-                                reader.onload = (event) => {
-                                  if (event.target?.result) {
-                                    setProfileAvatar(event.target.result as string);
-                                  }
-                                };
-                                reader.readAsDataURL(file);
-                              }
-                            }}
-                          />
-                        </label>
+                  <div>
+                    <div className="flex items-center space-x-2">
+                      <p className="text-xs font-black text-slate-900 dark:text-slate-100">{currentProfileUser.name}</p>
+                      {isViewingOwnProfile ? (
+                        <span className="text-[9px] font-extrabold bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-400 border border-blue-200 dark:border-blue-800 px-1.5 py-0.5 rounded-md">
+                          Meu Perfil Conectado
+                        </span>
+                      ) : (
+                        <span className="text-[9px] font-extrabold bg-purple-50 text-purple-600 dark:bg-purple-950/40 dark:text-purple-400 border border-purple-200 dark:border-purple-800 px-1.5 py-0.5 rounded-md">
+                          Colaborador Selecionado
+                        </span>
                       )}
                     </div>
+                    <p className="text-[10px] text-slate-400 font-mono mt-0.5">
+                      {currentProfileUser.email} • {currentProfileUser.role} ({currentProfileUser.sector})
+                    </p>
+                  </div>
+                </div>
 
-                    <div className="flex-1 space-y-3">
-                      <div>
-                        <p className="text-xs font-bold text-slate-700 dark:text-slate-300">Escolha um avatar predefinido:</p>
-                        <div className="grid grid-cols-4 sm:grid-cols-8 gap-1.5 mt-1.5">
-                          {PRESET_AVATARS.map((avatar, idx) => (
-                            <button
-                              key={idx}
-                              type="button"
-                              disabled={!canEditProfile}
-                              onClick={() => setProfileAvatar(avatar)}
-                              className={`w-8 h-8 rounded-full overflow-hidden border-2 transition-all ${
-                                profileAvatar === avatar ? 'border-blue-500 ring-2 ring-blue-500/30 scale-110' : 'border-slate-200 dark:border-slate-800 opacity-60 hover:opacity-100'
-                              } ${!canEditProfile ? 'cursor-not-allowed opacity-40' : ''}`}
-                            >
-                              <img src={avatar} alt={`Avatar #${idx + 1}`} className="w-full h-full object-cover" />
-                            </button>
-                          ))}
-                        </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <label className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">
+                    Gerenciar Perfil de:
+                  </label>
+                  <select
+                    value={currentProfileUser.id || selectedProfileUserId}
+                    onChange={(e) => {
+                      setSelectedProfileUserId(e.target.value);
+                      setSelectedUserIdForMatrix(e.target.value);
+                    }}
+                    className="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-800 dark:text-slate-200 focus:ring-2 focus:ring-blue-500 focus:outline-hidden"
+                  >
+                    {users.map(u => (
+                      <option key={u.id} value={u.id}>
+                        {u.name} ({u.email}) {u.email === currentLoggedUser?.email ? '— [Meu Perfil]' : ''}
+                      </option>
+                    ))}
+                  </select>
+
+                  {!isViewingOwnProfile && currentLoggedUser && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const myId = currentLoggedUser.id || currentLoggedUser.email || '';
+                        setSelectedProfileUserId(myId);
+                        setSelectedUserIdForMatrix(myId);
+                      }}
+                      className="text-[10px] font-bold bg-blue-50 hover:bg-blue-100 text-blue-600 dark:bg-blue-950/40 dark:hover:bg-blue-900/40 dark:text-blue-400 border border-blue-200 dark:border-blue-800 px-2.5 py-1.5 rounded-lg transition-colors whitespace-nowrap"
+                    >
+                      Ver Meu Perfil
+                    </button>
+                  )}
+
+                  {canViewMatrixTab && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedUserIdForMatrix(currentProfileUser.id);
+                        setMatrizMode('usuario');
+                        setActiveTab('permissoes');
+                      }}
+                      className="text-[10px] font-bold bg-emerald-50 hover:bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:hover:bg-emerald-900/40 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 px-2.5 py-1.5 rounded-lg transition-colors flex items-center space-x-1 whitespace-nowrap"
+                    >
+                      <ShieldCheck className="w-3 h-3" />
+                      <span>Ver Matriz de Acessos</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              {/* Esquerda: Detalhes do Perfil */}
+              <div className="lg:col-span-2 space-y-6">
+                <form onSubmit={handleUpdateProfile} className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-6 space-y-5 shadow-xs">
+                  <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800/80 pb-3">
+                    <div className="flex items-center space-x-2">
+                      <Users className="w-4 h-4 text-blue-600" />
+                      <h3 className="text-sm font-extrabold text-slate-800 dark:text-slate-100">
+                        {isViewingOwnProfile ? 'Informações Cadastrais (Meu Perfil)' : `Informações Cadastrais (${currentProfileUser.name})`}
+                      </h3>
+                    </div>
+                    {!canEditProfile && !canEditUser && (
+                      <span className="text-[10px] font-bold bg-amber-50 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400 border border-amber-200 dark:border-amber-800 px-2 py-0.5 rounded-md">
+                        Modo Somente Leitura
+                      </span>
+                    )}
+                  </div>
+
+                  {profileSuccess && (
+                    <div className="bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800 rounded-lg p-3 text-xs font-semibold text-emerald-700 dark:text-emerald-400 flex items-center space-x-2">
+                      <CheckCircle className="w-4 h-4 shrink-0" />
+                      <span>{profileSuccess}</span>
+                    </div>
+                  )}
+
+                  {/* Seleção de Avatar e Upload de Foto */}
+                  <div className="space-y-3 bg-slate-50 dark:bg-slate-900/60 p-4 rounded-xl border border-slate-200/80 dark:border-slate-800/80">
+                    <label className="text-[10px] font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">Foto de Perfil & Avatar</label>
+                    
+                    <div className="flex flex-col md:flex-row md:items-center gap-5">
+                      {/* Visualização de Perfil Atual */}
+                      <div className="relative group shrink-0 self-center md:self-auto">
+                        <img 
+                          src={profileAvatar} 
+                          alt="Avatar Selecionado" 
+                          className="w-20 h-20 rounded-full border-4 border-blue-600/30 dark:border-blue-500/20 shadow-md object-cover" 
+                        />
+                        {(canEditProfile || canEditUser) && (
+                          <label className="absolute bottom-0 right-0 bg-blue-600 hover:bg-blue-700 text-white p-1.5 rounded-full cursor-pointer shadow-md transition-colors" title="Fazer upload de foto do computador">
+                            <Upload className="w-3.5 h-3.5" />
+                            <input 
+                              type="file" 
+                              accept="image/*" 
+                              className="hidden" 
+                              onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                if (file) {
+                                  if (file.size > 2 * 1024 * 1024) {
+                                    alert('A imagem selecionada é muito grande! Escolha uma imagem de até 2MB.');
+                                    return;
+                                  }
+                                  const reader = new FileReader();
+                                  reader.onload = (event) => {
+                                    if (event.target?.result) {
+                                      setProfileAvatar(event.target.result as string);
+                                    }
+                                  };
+                                  reader.readAsDataURL(file);
+                                }
+                              }}
+                            />
+                          </label>
+                        )}
                       </div>
 
-                      <div className="space-y-1">
-                        <p className="text-[10px] font-bold text-slate-500 dark:text-slate-400">Ou use uma URL/Link de imagem da internet:</p>
-                        <div className="flex gap-2">
-                          <input
-                            type="url"
-                            disabled={!canEditProfile}
-                            value={profileAvatar.startsWith('data:') ? '' : profileAvatar}
-                            onChange={(e) => setProfileAvatar(e.target.value.trim())}
-                            placeholder="https://exemplo.com/suafoto.jpg"
-                            className="flex-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-2 text-xs text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-blue-500 focus:outline-hidden disabled:bg-slate-100 dark:disabled:bg-slate-800/50 disabled:cursor-not-allowed"
-                          />
-                          {profileAvatar.startsWith('data:') && (
-                            <span className="text-[9px] bg-blue-500/10 text-blue-600 dark:text-blue-400 px-2 py-1.5 rounded-lg border border-blue-500/20 font-bold self-center">
-                              Foto Carregada
-                            </span>
-                          )}
+                      <div className="flex-1 space-y-3">
+                        <div>
+                          <p className="text-xs font-bold text-slate-700 dark:text-slate-300">Escolha um avatar predefinido:</p>
+                          <div className="grid grid-cols-4 sm:grid-cols-8 gap-1.5 mt-1.5">
+                            {PRESET_AVATARS.map((avatar, idx) => (
+                              <button
+                                key={idx}
+                                type="button"
+                                disabled={!canEditProfile && !canEditUser}
+                                onClick={() => setProfileAvatar(avatar)}
+                                className={`w-8 h-8 rounded-full overflow-hidden border-2 transition-all ${
+                                  profileAvatar === avatar ? 'border-blue-500 ring-2 ring-blue-500/30 scale-110' : 'border-slate-200 dark:border-slate-800 opacity-60 hover:opacity-100'
+                                } ${(!canEditProfile && !canEditUser) ? 'cursor-not-allowed opacity-40' : ''}`}
+                              >
+                                <img src={avatar} alt={`Avatar #${idx + 1}`} className="w-full h-full object-cover" />
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div className="space-y-1">
+                          <p className="text-[10px] font-bold text-slate-500 dark:text-slate-400">Ou use uma URL/Link de imagem da internet:</p>
+                          <div className="flex gap-2">
+                            <input
+                              type="url"
+                              disabled={!canEditProfile && !canEditUser}
+                              value={profileAvatar.startsWith('data:') ? '' : profileAvatar}
+                              onChange={(e) => setProfileAvatar(e.target.value.trim())}
+                              placeholder="https://exemplo.com/suafoto.jpg"
+                              className="flex-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-2 text-xs text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-blue-500 focus:outline-hidden disabled:bg-slate-100 dark:disabled:bg-slate-800/50 disabled:cursor-not-allowed"
+                            />
+                            {profileAvatar.startsWith('data:') && (
+                              <span className="text-[9px] bg-blue-500/10 text-blue-600 dark:text-blue-400 px-2 py-1.5 rounded-lg border border-blue-500/20 font-bold self-center">
+                                Foto Carregada
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </div>
                     </div>
                   </div>
-                </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400">Nome Completo</label>
-                    <input
-                      type="text"
-                      required
-                      disabled={!canEditProfile}
-                      value={profileName}
-                      onChange={(e) => setProfileName(e.target.value)}
-                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-2.5 text-xs text-slate-800 dark:text-slate-100 font-medium focus:ring-2 focus:ring-blue-500 focus:outline-hidden disabled:bg-slate-100 dark:disabled:bg-slate-800/50 disabled:cursor-not-allowed"
-                    />
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400">Nome Completo</label>
+                      <input
+                        type="text"
+                        required
+                        disabled={!canEditProfile && !canEditUser}
+                        value={profileName}
+                        onChange={(e) => setProfileName(e.target.value)}
+                        className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-2.5 text-xs text-slate-800 dark:text-slate-100 font-medium focus:ring-2 focus:ring-blue-500 focus:outline-hidden disabled:bg-slate-100 dark:disabled:bg-slate-800/50 disabled:cursor-not-allowed"
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400">E-mail Corporativo</label>
+                      <input
+                        type="email"
+                        required
+                        disabled={!canEditProfile && !canEditUser}
+                        value={profileEmail}
+                        onChange={(e) => setProfileEmail(e.target.value)}
+                        className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-2.5 text-xs text-slate-800 dark:text-slate-100 font-medium focus:ring-2 focus:ring-blue-500 focus:outline-hidden disabled:bg-slate-100 dark:disabled:bg-slate-800/50 disabled:cursor-not-allowed"
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400">Telefone / Ramal</label>
+                      <input
+                        type="text"
+                        placeholder="(11) 99999-9999"
+                        disabled={!canEditProfile && !canEditUser}
+                        value={profilePhone}
+                        onChange={(e) => setProfilePhone(e.target.value)}
+                        className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-2.5 text-xs text-slate-800 dark:text-slate-100 font-medium focus:ring-2 focus:ring-blue-500 focus:outline-hidden disabled:bg-slate-100 dark:disabled:bg-slate-800/50 disabled:cursor-not-allowed"
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400">Setor Padrão</label>
+                      <select
+                        disabled={!canEditProfile && !canEditUser}
+                        value={profileSector}
+                        onChange={(e) => setProfileSector(e.target.value)}
+                        className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-2.5 text-xs text-slate-800 dark:text-slate-100 font-medium focus:ring-2 focus:ring-blue-500 focus:outline-hidden disabled:bg-slate-100 dark:disabled:bg-slate-800/50 disabled:cursor-not-allowed"
+                      >
+                        {sectorsList.map(sec => (
+                          <option key={sec} value={sec}>{sec}</option>
+                        ))}
+                      </select>
+                    </div>
                   </div>
 
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400">E-mail Corporativo</label>
-                    <input
-                      type="email"
-                      required
-                      disabled={!canEditProfile}
-                      value={profileEmail}
-                      onChange={(e) => setProfileEmail(e.target.value)}
-                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-2.5 text-xs text-slate-800 dark:text-slate-100 font-medium focus:ring-2 focus:ring-blue-500 focus:outline-hidden disabled:bg-slate-100 dark:disabled:bg-slate-800/50 disabled:cursor-not-allowed"
-                    />
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400">Telefone / Ramal</label>
-                    <input
-                      type="text"
-                      placeholder="(11) 99999-9999"
-                      disabled={!canEditProfile}
-                      value={profilePhone}
-                      onChange={(e) => setProfilePhone(e.target.value)}
-                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-2.5 text-xs text-slate-800 dark:text-slate-100 font-medium focus:ring-2 focus:ring-blue-500 focus:outline-hidden disabled:bg-slate-100 dark:disabled:bg-slate-800/50 disabled:cursor-not-allowed"
-                    />
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400">Setor Padrão</label>
-                    <select
-                      disabled={!canEditProfile}
-                      value={profileSector}
-                      onChange={(e) => setProfileSector(e.target.value)}
-                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-2.5 text-xs text-slate-800 dark:text-slate-100 font-medium focus:ring-2 focus:ring-blue-500 focus:outline-hidden disabled:bg-slate-100 dark:disabled:bg-slate-800/50 disabled:cursor-not-allowed"
+                  <div className="flex justify-end pt-2">
+                    <button
+                      type="submit"
+                      disabled={!canEditProfile && !canEditUser}
+                      className="bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 dark:disabled:bg-slate-800 disabled:text-slate-500 disabled:cursor-not-allowed text-white text-xs font-bold px-4 py-2 rounded-lg flex items-center space-x-1.5 transition-colors shadow-xs"
                     >
-                      {sectorsList.map(sec => (
-                        <option key={sec} value={sec}>{sec}</option>
-                      ))}
-                    </select>
+                      <Save className="w-3.5 h-3.5" />
+                      <span>Salvar Dados Cadastrais</span>
+                    </button>
                   </div>
-                </div>
+                </form>
+              </div>
 
-                <div className="flex justify-end pt-2">
+              {/* Direita: Alteração de Senha */}
+              <div className="space-y-6">
+                <form onSubmit={handleUpdatePassword} className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-6 space-y-4 shadow-xs">
+                  <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800/80 pb-3">
+                    <div className="flex items-center space-x-2">
+                      <Key className="w-4 h-4 text-amber-500" />
+                      <h3 className="text-sm font-extrabold text-slate-800 dark:text-slate-100">
+                        {isViewingOwnProfile ? 'Minha Senha de Acesso' : `Redefinir Senha (${currentProfileUser.name})`}
+                      </h3>
+                    </div>
+                    {!canEditProfile && !canEditUser && (
+                      <span className="text-[9px] font-bold bg-amber-50 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400 border border-amber-200 dark:border-amber-800 px-1.5 py-0.5 rounded-md">
+                        Bloqueado
+                      </span>
+                    )}
+                  </div>
+
+                  {!isViewingOwnProfile && (
+                    <div className="bg-purple-50 dark:bg-purple-950/20 border border-purple-200 dark:border-purple-800 p-2.5 rounded-lg text-[11px] text-purple-700 dark:text-purple-300 font-medium">
+                      Como administrador/gestor, você pode redefinir diretamente uma nova senha de acesso para <strong>{currentProfileUser.name}</strong>.
+                    </div>
+                  )}
+
+                  {passError && (
+                    <div className="bg-rose-50 dark:bg-rose-950/20 border border-rose-200 dark:border-rose-800 rounded-lg p-3 text-xs font-semibold text-rose-700 dark:text-rose-400 flex items-center space-x-2">
+                      <AlertTriangle className="w-4 h-4 shrink-0" />
+                      <span>{passError}</span>
+                    </div>
+                  )}
+
+                  {passSuccess && (
+                    <div className="bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800 rounded-lg p-3 text-xs font-semibold text-emerald-700 dark:text-emerald-400 flex items-center space-x-2">
+                      <CheckCircle className="w-4 h-4 shrink-0" />
+                      <span>{passSuccess}</span>
+                    </div>
+                  )}
+
+                  {isViewingOwnProfile && (
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400">Senha Atual</label>
+                      <input
+                        type="password"
+                        disabled={!canEditProfile && !canEditUser}
+                        value={currPass}
+                        onChange={(e) => setCurrPass(e.target.value)}
+                        placeholder="Digite a senha atual"
+                        className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-2.5 text-xs text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-blue-500 focus:outline-hidden disabled:bg-slate-100 dark:disabled:bg-slate-800/50 disabled:cursor-not-allowed"
+                      />
+                    </div>
+                  )}
+
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400">Nova Senha</label>
+                    <input
+                      type="password"
+                      required
+                      disabled={!canEditProfile && !canEditUser}
+                      value={newPass}
+                      onChange={(e) => setNewPass(e.target.value)}
+                      placeholder="Mínimo de 4 dígitos"
+                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-2.5 text-xs text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-blue-500 focus:outline-hidden disabled:bg-slate-100 dark:disabled:bg-slate-800/50 disabled:cursor-not-allowed"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400">Confirmar Nova Senha</label>
+                    <input
+                      type="password"
+                      required
+                      disabled={!canEditProfile && !canEditUser}
+                      value={confirmPass}
+                      onChange={(e) => setConfirmPass(e.target.value)}
+                      placeholder="Repita a nova senha"
+                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-2.5 text-xs text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-blue-500 focus:outline-hidden disabled:bg-slate-100 dark:disabled:bg-slate-800/50 disabled:cursor-not-allowed"
+                    />
+                  </div>
+
                   <button
                     type="submit"
-                    disabled={!canEditProfile}
-                    className="bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 dark:disabled:bg-slate-800 disabled:text-slate-500 disabled:cursor-not-allowed text-white text-xs font-bold px-4 py-2 rounded-lg flex items-center space-x-1.5 transition-colors shadow-xs"
+                    disabled={!canEditProfile && !canEditUser}
+                    className="w-full bg-amber-500 hover:bg-amber-600 disabled:bg-slate-300 dark:disabled:bg-slate-800 disabled:text-slate-500 disabled:cursor-not-allowed text-slate-950 text-xs font-extrabold py-2.5 rounded-lg flex items-center justify-center space-x-1.5 transition-colors shadow-xs"
                   >
-                    <Save className="w-3.5 h-3.5" />
-                    <span>Salvar Dados Cadastrais</span>
+                    <Lock className="w-3.5 h-3.5" />
+                    <span>{isViewingOwnProfile ? 'Atualizar Minha Senha' : `Salvar Nova Senha de ${currentProfileUser.name}`}</span>
                   </button>
-                </div>
-              </form>
-            </div>
-
-            {/* Direita: Alteração de Senha */}
-            <div className="space-y-6">
-              <form onSubmit={handleUpdatePassword} className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-6 space-y-4 shadow-xs">
-                <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800/80 pb-3">
-                  <div className="flex items-center space-x-2">
-                    <Key className="w-4 h-4 text-amber-500" />
-                    <h3 className="text-sm font-extrabold text-slate-800 dark:text-slate-100">Atualização de Senha</h3>
-                  </div>
-                  {!canEditProfile && (
-                    <span className="text-[9px] font-bold bg-amber-50 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400 border border-amber-200 dark:border-amber-800 px-1.5 py-0.5 rounded-md">
-                      Bloqueado
-                    </span>
-                  )}
-                </div>
-
-                {passError && (
-                  <div className="bg-rose-50 dark:bg-rose-950/20 border border-rose-200 dark:border-rose-800 rounded-lg p-3 text-xs font-semibold text-rose-700 dark:text-rose-400 flex items-center space-x-2">
-                    <AlertTriangle className="w-4 h-4 shrink-0" />
-                    <span>{passError}</span>
-                  </div>
-                )}
-
-                {passSuccess && (
-                  <div className="bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800 rounded-lg p-3 text-xs font-semibold text-emerald-700 dark:text-emerald-400 flex items-center space-x-2">
-                    <CheckCircle className="w-4 h-4 shrink-0" />
-                    <span>{passSuccess}</span>
-                  </div>
-                )}
-
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400">Senha Atual</label>
-                  <input
-                    type="password"
-                    required
-                    disabled={!canEditProfile}
-                    value={currPass}
-                    onChange={(e) => setCurrPass(e.target.value)}
-                    placeholder="Digite a senha atual"
-                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-2.5 text-xs text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-blue-500 focus:outline-hidden disabled:bg-slate-100 dark:disabled:bg-slate-800/50 disabled:cursor-not-allowed"
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400">Nova Senha</label>
-                  <input
-                    type="password"
-                    required
-                    disabled={!canEditProfile}
-                    value={newPass}
-                    onChange={(e) => setNewPass(e.target.value)}
-                    placeholder="Mínimo de 4 dígitos"
-                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-2.5 text-xs text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-blue-500 focus:outline-hidden disabled:bg-slate-100 dark:disabled:bg-slate-800/50 disabled:cursor-not-allowed"
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400">Confirmar Nova Senha</label>
-                  <input
-                    type="password"
-                    required
-                    disabled={!canEditProfile}
-                    value={confirmPass}
-                    onChange={(e) => setConfirmPass(e.target.value)}
-                    placeholder="Repita a nova senha"
-                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-2.5 text-xs text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-blue-500 focus:outline-hidden disabled:bg-slate-100 dark:disabled:bg-slate-800/50 disabled:cursor-not-allowed"
-                  />
-                </div>
-
-                <button
-                  type="submit"
-                  disabled={!canEditProfile}
-                  className="w-full bg-amber-500 hover:bg-amber-600 disabled:bg-slate-300 dark:disabled:bg-slate-800 disabled:text-slate-500 disabled:cursor-not-allowed text-slate-950 text-xs font-extrabold py-2.5 rounded-lg flex items-center justify-center space-x-1.5 transition-colors shadow-xs"
-                >
-                  <Lock className="w-3.5 h-3.5" />
-                  <span>Redefinir Senha de Acesso</span>
-                </button>
-              </form>
+                </form>
+              </div>
             </div>
 
           </div>
@@ -1280,7 +1397,7 @@ export const UsuariosAcessos: React.FC<UsuariosAcessosProps> = ({
                       <th className="px-5 py-3">Cargo / Perfil</th>
                       <th className="px-5 py-3">Telefone</th>
                       <th className="px-5 py-3">Status</th>
-                      <th className="px-5 py-3 text-right">Ações</th>
+                      <th className="px-5 py-3 text-right">Ações Rápidas</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-200 dark:divide-slate-800/80">
@@ -1297,14 +1414,29 @@ export const UsuariosAcessos: React.FC<UsuariosAcessosProps> = ({
                           className="text-xs text-slate-700 dark:text-slate-300 hover:bg-slate-50/50 dark:hover:bg-slate-800/20 transition-colors"
                         >
                           <td className="px-5 py-3.5">
-                            <div className="flex items-center space-x-3">
+                            <div 
+                              onClick={() => {
+                                setSelectedProfileUserId(userItem.id);
+                                setSelectedUserIdForMatrix(userItem.id);
+                                setActiveTab('perfil');
+                              }}
+                              className="flex items-center space-x-3 cursor-pointer group"
+                              title="Clique para abrir perfil e senha deste colaborador"
+                            >
                               <img 
                                 src={userItem.photoURL || PRESET_AVATARS[0]} 
                                 alt={userItem.name} 
-                                className="w-9 h-9 rounded-full object-cover border border-slate-200 dark:border-slate-800" 
+                                className="w-9 h-9 rounded-full object-cover border border-slate-200 dark:border-slate-800 group-hover:border-blue-500 transition-colors" 
                               />
                               <div>
-                                <p className="font-extrabold text-slate-900 dark:text-slate-100">{userItem.name}</p>
+                                <p className="font-extrabold text-slate-900 dark:text-slate-100 group-hover:text-blue-600 transition-colors flex items-center gap-1.5">
+                                  <span>{userItem.name}</span>
+                                  {userItem.email === currentLoggedUser?.email && (
+                                    <span className="text-[9px] font-bold bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-400 border border-blue-200 dark:border-blue-800 px-1 rounded-sm">
+                                      Você
+                                    </span>
+                                  )}
+                                </p>
                                 <p className="text-[10px] text-slate-400 dark:text-slate-500 font-mono flex items-center space-x-1 mt-0.5">
                                   <Mail className="w-3 h-3 text-slate-400 inline" />
                                   <span>{userItem.email}</span>
@@ -1350,24 +1482,43 @@ export const UsuariosAcessos: React.FC<UsuariosAcessosProps> = ({
                           </td>
                           <td className="px-5 py-3.5 text-right">
                             <div className="flex items-center justify-end space-x-1.5">
+                              {/* Botão 1: Perfil & Senha */}
+                              <button
+                                onClick={() => {
+                                  setSelectedProfileUserId(userItem.id);
+                                  setSelectedUserIdForMatrix(userItem.id);
+                                  setActiveTab('perfil');
+                                }}
+                                className="p-1.5 text-slate-500 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950/30 rounded-md transition-colors"
+                                title="Abrir Perfil & Senha deste Colaborador"
+                              >
+                                <Key className="w-3.5 h-3.5" />
+                              </button>
+
+                              {/* Botão 2: Matriz de Acessos & Alçadas (5.3) */}
                               <button
                                 onClick={() => {
                                   setSelectedUserIdForMatrix(userItem.id);
+                                  setSelectedProfileUserId(userItem.id);
                                   setMatrizMode('usuario');
                                   setActiveTab('permissoes');
                                 }}
                                 className="p-1.5 text-slate-500 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 rounded-md transition-colors"
-                                title="Gerenciar Direitos & Matriz [V|C|E|X]"
+                                title="Abrir Matriz de Acessos & Alçadas (5.3) deste Colaborador"
                               >
                                 <ShieldCheck className="w-3.5 h-3.5" />
                               </button>
+
+                              {/* Botão 3: Editar Cadastro no Modal */}
                               <button
                                 onClick={() => handleOpenEditForm(userItem)}
                                 className="p-1.5 text-slate-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/30 rounded-md transition-colors"
-                                title="Editar Usuário"
+                                title="Editar Cadastro (Modal)"
                               >
                                 <Edit2 className="w-3.5 h-3.5" />
                               </button>
+
+                              {/* Botão 4: Excluir */}
                               <button
                                 onClick={() => {
                                   if (!canDeleteUser) {
@@ -1497,22 +1648,39 @@ export const UsuariosAcessos: React.FC<UsuariosAcessosProps> = ({
                           Selecionar Colaborador para Gerenciar Alçadas:
                         </label>
                         <select
-                          value={selectedUserIdForMatrix}
-                          onChange={(e) => setSelectedUserIdForMatrix(e.target.value)}
+                          value={selectedUserForMatrix?.id || selectedUserIdForMatrix}
+                          onChange={(e) => {
+                            setSelectedUserIdForMatrix(e.target.value);
+                            setSelectedProfileUserId(e.target.value);
+                          }}
                           className="w-full max-w-md bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 dark:text-slate-100 focus:outline-hidden focus:ring-2 focus:ring-blue-500"
                         >
                           {users.map(u => (
                             <option key={u.id} value={u.id}>
-                              {u.name} — {u.role} ({u.sector}) [{u.status}]
+                              {u.name} — {u.role} ({u.sector}) [{u.status}] {u.email === currentLoggedUser?.email ? '— [Meu Perfil]' : ''}
                             </option>
                           ))}
                         </select>
                       </div>
                     </div>
 
-                    {/* Badges de Identificação do Usuário Selecionado */}
+                    {/* Badges de Identificação do Usuário Selecionado e Botão para Perfil */}
                     {selectedUserForMatrix && (
                       <div className="flex flex-wrap items-center gap-2">
+                        {canViewProfileTab && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedProfileUserId(selectedUserForMatrix.id);
+                              setActiveTab('perfil');
+                            }}
+                            className="bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/40 dark:hover:bg-amber-900/50 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800 px-2.5 py-1.5 rounded-xl text-xs font-bold transition-colors flex items-center space-x-1"
+                            title="Abrir Perfil e Senha deste Colaborador"
+                          >
+                            <Key className="w-3.5 h-3.5" />
+                            <span>Abrir Perfil & Senha</span>
+                          </button>
+                        )}
                         <div className="bg-slate-50 dark:bg-slate-800 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 text-right">
                           <span className="block text-[9px] font-mono text-slate-400 uppercase">Perfil Técnico:</span>
                           <span className="text-xs font-extrabold text-blue-600 dark:text-blue-400">{selectedUserForMatrix.role}</span>
