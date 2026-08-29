@@ -304,14 +304,7 @@ export function getEffectiveModulePermission(
   customPermissions?: Record<string, ModuleCrudPermission>,
   dynamicRolePermissions?: RolePermission[]
 ): ModuleCrudPermission {
-  // 1. Se o usuário possui regra customizada individual (da aba Por Colaborador & Setor), ela possui prioridade absoluta sobre o cargo
-  if (customPermissions && customPermissions[moduleId]) {
-    return {
-      ...customPermissions[moduleId]
-    };
-  }
-
-  // 2. Administrador possui acesso irrestrito e total por padrão do cargo
+  // 1. Administrador possui acesso irrestrito e total a todos os módulos, sem risco de bloqueio acidental
   if (role === 'Administrador') {
     return {
       ver: true,
@@ -319,6 +312,13 @@ export function getEffectiveModulePermission(
       editar: true,
       excluir: true,
       escopoSetor: 'todos'
+    };
+  }
+
+  // 2. Se o usuário possui regra customizada individual (da aba Por Colaborador & Setor), ela possui prioridade sobre os papéis
+  if (customPermissions && customPermissions[moduleId]) {
+    return {
+      ...customPermissions[moduleId]
     };
   }
 

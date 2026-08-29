@@ -73,6 +73,7 @@ interface UsuariosAcessosProps {
   onUpdatePermissions: (permissions: RolePermission[]) => void;
   onAddLog: (action: string, details: string) => void;
   personalizacao?: PersonalizacaoGeral;
+  defaultTab?: 'perfil' | 'usuarios' | 'permissoes';
 }
 
 const SECTION_METADATA = [
@@ -117,10 +118,50 @@ export const UsuariosAcessos: React.FC<UsuariosAcessosProps> = ({
   onDeleteUser,
   onUpdatePermissions,
   onAddLog,
-  personalizacao
+  personalizacao,
+  defaultTab
 }) => {
   const { user: currentLoggedUser, switchProfile, refreshUser } = useAuth();
-  const [activeTab, setActiveTab] = useState<'perfil' | 'usuarios' | 'permissoes'>('perfil');
+
+  // Permissões dinâmicas granulares para o módulo de usuários, perfil e matriz de acessos
+  const canViewProfileTab = Boolean(
+    canUserPerform(currentLoggedUser, 'perfil', 'ver', undefined, permissions)
+  );
+
+  const canEditProfile = Boolean(
+    canUserPerform(currentLoggedUser, 'perfil', 'editar', undefined, permissions)
+  );
+
+  const canViewUsersTab = Boolean(
+    canUserPerform(currentLoggedUser, 'usuarios', 'ver', undefined, permissions)
+  );
+
+  const canViewMatrixTab = Boolean(
+    canUserPerform(currentLoggedUser, 'permissoes', 'ver', undefined, permissions)
+  );
+
+  const canManageAccessMatrix = Boolean(
+    canUserPerform(currentLoggedUser, 'permissoes', 'editar', undefined, permissions)
+  );
+
+  const canAddUser = Boolean(
+    canUserPerform(currentLoggedUser, 'usuarios', 'criar', undefined, permissions)
+  );
+
+  const canEditUser = Boolean(
+    canUserPerform(currentLoggedUser, 'usuarios', 'editar', undefined, permissions)
+  );
+
+  const canDeleteUser = Boolean(
+    canUserPerform(currentLoggedUser, 'usuarios', 'excluir', undefined, permissions)
+  );
+
+  const [activeTab, setActiveTab] = useState<'perfil' | 'usuarios' | 'permissoes'>(() => {
+    if (defaultTab) return defaultTab;
+    if (canViewUsersTab) return 'usuarios';
+    if (canViewMatrixTab) return 'permissoes';
+    return 'perfil';
+  });
   const sectorsList = useSectors();
 
   // Sub-aba da Matriz de Acessos ('usuario' = granular V,C,E,X por colaborador | 'roles' = perfis técnicos clássicos)
@@ -281,39 +322,6 @@ export const UsuariosAcessos: React.FC<UsuariosAcessosProps> = ({
     setConfirmPass('');
     setTimeout(() => setPassSuccess(''), 4000);
   };
-
-  // Permissões dinâmicas granulares para o módulo de usuários, perfil e matriz de acessos
-  const canViewProfileTab = Boolean(
-    canUserPerform(currentLoggedUser, 'perfil', 'ver', undefined, permissions)
-  );
-
-  const canEditProfile = Boolean(
-    canUserPerform(currentLoggedUser, 'perfil', 'editar', undefined, permissions)
-  );
-
-  const canViewUsersTab = Boolean(
-    canUserPerform(currentLoggedUser, 'usuarios', 'ver', undefined, permissions)
-  );
-
-  const canViewMatrixTab = Boolean(
-    canUserPerform(currentLoggedUser, 'permissoes', 'ver', undefined, permissions)
-  );
-
-  const canManageAccessMatrix = Boolean(
-    canUserPerform(currentLoggedUser, 'permissoes', 'editar', undefined, permissions)
-  );
-
-  const canAddUser = Boolean(
-    canUserPerform(currentLoggedUser, 'usuarios', 'criar', undefined, permissions)
-  );
-
-  const canEditUser = Boolean(
-    canUserPerform(currentLoggedUser, 'usuarios', 'editar', undefined, permissions)
-  );
-
-  const canDeleteUser = Boolean(
-    canUserPerform(currentLoggedUser, 'usuarios', 'excluir', undefined, permissions)
-  );
 
   // Redireciona a aba ativa caso o usuário logado não tenha permissão de visualização na aba selecionada
   useEffect(() => {

@@ -289,7 +289,13 @@ function AppContent() {
     if (!user) return;
     if (activeSection === 'dashboard') return;
 
-    const hasViewPermission = canUserPerform(user, activeSection, 'ver', undefined, permissions);
+    const hasViewPermission = 
+      activeSection === 'usuarios'
+        ? (canUserPerform(user, 'usuarios', 'ver', undefined, permissions) ||
+           canUserPerform(user, 'permissoes', 'ver', undefined, permissions) ||
+           canUserPerform(user, 'perfil', 'ver', undefined, permissions))
+        : canUserPerform(user, activeSection, 'ver', undefined, permissions);
+
     if (!hasViewPermission) {
       setActiveSection('dashboard');
     }
