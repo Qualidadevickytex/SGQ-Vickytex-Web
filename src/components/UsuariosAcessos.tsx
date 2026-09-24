@@ -280,7 +280,10 @@ export const UsuariosAcessos: React.FC<UsuariosAcessosProps> = ({
       email: profileEmail,
       telefone: profilePhone,
       photoURL: profileAvatar,
-      sector: profileSector
+      sector: profileSector,
+      setoresAdicionais: (currentProfileUser.setoresAdicionais || []).filter(
+        s => typeof s === 'string' && s.trim().toLowerCase() !== profileSector.trim().toLowerCase()
+      )
     };
     onUpdateUser(updatedAccount);
     onAddLog('Atualização de Perfil', `O perfil do usuário ${profileEmail} foi atualizado.`);
@@ -292,6 +295,7 @@ export const UsuariosAcessos: React.FC<UsuariosAcessosProps> = ({
         email: profileEmail,
         role: currentLoggedUser?.role || currentProfileUser.role || 'Qualidade',
         sector: profileSector,
+        setoresAdicionais: updatedAccount.setoresAdicionais,
         photoURL: profileAvatar
       });
     }
@@ -391,12 +395,16 @@ export const UsuariosAcessos: React.FC<UsuariosAcessosProps> = ({
       return;
     }
     setEditingUserId(u.id);
+    const existingSetoresAdicionais = Array.isArray(u.setoresAdicionais)
+      ? (u.setoresAdicionais as string[])
+      : (Array.isArray((u as any).setores_adicionais) ? (u as any).setores_adicionais : []);
+
     setFormData({
       name: u.name,
       email: u.email,
       role: u.role,
       sector: u.sector,
-      setoresAdicionais: (u.setoresAdicionais as string[]) || [],
+      setoresAdicionais: existingSetoresAdicionais,
       photoURL: u.photoURL || PRESET_AVATARS[0],
       status: u.status,
       password: u.passwordHash || '',
@@ -441,13 +449,17 @@ export const UsuariosAcessos: React.FC<UsuariosAcessosProps> = ({
             ? formData.password.trim() 
             : (existingUser?.passwordHash || 'vickytex123');
 
+        const cleanSetoresAdicionais = (formData.setoresAdicionais || []).filter(
+          s => typeof s === 'string' && s.trim().length > 0 && s.trim().toLowerCase() !== formData.sector.trim().toLowerCase()
+        );
+
         const updatedUser: UserAccount = {
           id: editingUserId,
           name: nameTrimmed,
           email: formData.email.trim(),
           role: formData.role,
           sector: formData.sector,
-          setoresAdicionais: formData.setoresAdicionais as any,
+          setoresAdicionais: cleanSetoresAdicionais as any,
           photoURL: formData.photoURL,
           status: formData.status,
           passwordHash: finalPassword,
@@ -465,7 +477,7 @@ export const UsuariosAcessos: React.FC<UsuariosAcessosProps> = ({
             email: formData.email.trim(),
             role: formData.role,
             sector: formData.sector,
-            setoresAdicionais: formData.setoresAdicionais as any,
+            setoresAdicionais: cleanSetoresAdicionais as any,
             photoURL: formData.photoURL
           });
         }
@@ -476,6 +488,9 @@ export const UsuariosAcessos: React.FC<UsuariosAcessosProps> = ({
           setIsSubmittingUser(false);
           return;
         }
+        const cleanSetoresAdicionais = (formData.setoresAdicionais || []).filter(
+          s => typeof s === 'string' && s.trim().length > 0 && s.trim().toLowerCase() !== formData.sector.trim().toLowerCase()
+        );
         const finalPassword = formData.password.trim() !== '' ? formData.password.trim() : 'vickytex123';
         const newUser: UserAccount = {
           id: `user-${Date.now()}`,
@@ -483,7 +498,7 @@ export const UsuariosAcessos: React.FC<UsuariosAcessosProps> = ({
           email: formData.email.trim(),
           role: formData.role,
           sector: formData.sector,
-          setoresAdicionais: formData.setoresAdicionais as any,
+          setoresAdicionais: cleanSetoresAdicionais as any,
           photoURL: formData.photoURL,
           status: formData.status,
           passwordHash: finalPassword,
@@ -1533,10 +1548,18 @@ export const UsuariosAcessos: React.FC<UsuariosAcessosProps> = ({
                             </div>
                           </td>
                           <td className="px-5 py-3.5 font-medium">
-                            <span className="inline-flex items-center space-x-1.5 bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded-md text-[10px] text-slate-700 dark:text-slate-300">
-                              <Briefcase className="w-3 h-3" />
-                              <span>{userItem.sector}</span>
-                            </span>
+                            <div className="flex flex-col gap-1 items-start">
+                              <span className="inline-flex items-center space-x-1.5 bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded-md text-[10px] text-slate-700 dark:text-slate-300">
+                                <Briefcase className="w-3 h-3" />
+                                <span>{userItem.sector}</span>
+                              </span>
+                              {Array.isArray(userItem.setoresAdicionais) && userItem.setoresAdicionais.length > 0 && (
+                                <span className="inline-flex items-center space-x-1 text-[9px] font-semibold text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950/50 px-1.5 py-0.5 rounded border border-indigo-200/60 dark:border-indigo-800/60" title={`Setores adicionais: ${userItem.setoresAdicionais.join(', ')}`}>
+                                  <Building2 className="w-2.5 h-2.5 text-indigo-500" />
+                                  <span>+{userItem.setoresAdicionais.length} multissetorial ({userItem.setoresAdicionais.join(', ')})</span>
+                                </span>
+                              )}
+                            </div>
                           </td>
                           <td className="px-5 py-3.5">
                             <span className={`px-2 py-0.5 rounded-full text-[9px] font-extrabold uppercase font-mono ${
@@ -2443,7 +2466,16 @@ export const UsuariosAcessos: React.FC<UsuariosAcessosProps> = ({
                   <label className="text-[10px] font-bold text-slate-500">Setor Principal</label>
                   <select
                     value={formData.sector}
-                    onChange={(e) => setFormData({ ...formData, sector: e.target.value })}
+                    onChange={(e) => {
+                      const newSector = e.target.value;
+                      setFormData({
+                        ...formData,
+                        sector: newSector,
+                        setoresAdicionais: (formData.setoresAdicionais || []).filter(
+                          s => typeof s === 'string' && s.trim().toLowerCase() !== newSector.trim().toLowerCase()
+                        )
+                      });
+                    }}
                     className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-2.5 text-xs text-slate-800 dark:text-slate-100 focus:outline-hidden focus:ring-2 focus:ring-blue-500"
                   >
                     {sectorsList.map(sec => (
@@ -2460,39 +2492,51 @@ export const UsuariosAcessos: React.FC<UsuariosAcessosProps> = ({
                     <Building2 className="w-3.5 h-3.5 text-indigo-500" />
                     <span>Setores Adicionais Vinculados (Multissetorial)</span>
                   </label>
-                  <span className="text-[9px] text-slate-400 font-mono">Opcional</span>
+                  <div className="flex items-center space-x-2">
+                    {Array.isArray(formData.setoresAdicionais) && formData.setoresAdicionais.length > 0 && (
+                      <span className="text-[10px] font-extrabold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 px-1.5 py-0.5 rounded-sm border border-indigo-200 dark:border-indigo-800">
+                        {formData.setoresAdicionais.length} vinculado{formData.setoresAdicionais.length > 1 ? 's' : ''}
+                      </span>
+                    )}
+                    <span className="text-[9px] text-slate-400 font-mono">Opcional</span>
+                  </div>
                 </div>
                 <p className="text-[10px] text-slate-500 dark:text-slate-400">
                   Marque outros setores em que este colaborador também atua ou possui alçada:
                 </p>
                 <div className="flex flex-wrap gap-1.5 pt-1">
-                  {sectorsList.filter(s => s !== formData.sector).map(sec => {
-                    const isSelected = formData.setoresAdicionais.includes(sec);
+                  {sectorsList.filter(s => s.trim().toLowerCase() !== (formData.sector || '').trim().toLowerCase()).map(sec => {
+                    const isSelected = (formData.setoresAdicionais || []).some(
+                      s => typeof s === 'string' && s.trim().toLowerCase() === sec.trim().toLowerCase()
+                    );
                     return (
                       <button
                         type="button"
                         key={sec}
                         onClick={() => {
+                          const currentList = Array.isArray(formData.setoresAdicionais) ? formData.setoresAdicionais : [];
                           if (isSelected) {
                             setFormData({
                               ...formData,
-                              setoresAdicionais: formData.setoresAdicionais.filter(s => s !== sec)
+                              setoresAdicionais: currentList.filter(
+                                s => typeof s === 'string' && s.trim().toLowerCase() !== sec.trim().toLowerCase()
+                              )
                             });
                           } else {
                             setFormData({
                               ...formData,
-                              setoresAdicionais: [...formData.setoresAdicionais, sec]
+                              setoresAdicionais: [...currentList, sec]
                             });
                           }
                         }}
-                        className={`text-[10px] font-semibold px-2.5 py-1 rounded-lg border transition-all cursor-pointer ${
+                        className={`text-[10px] font-semibold px-2.5 py-1 rounded-lg border transition-all cursor-pointer flex items-center gap-1 ${
                           isSelected
-                            ? 'bg-indigo-100 text-indigo-800 border-indigo-300 dark:bg-indigo-950/60 dark:text-indigo-200 dark:border-indigo-700 shadow-2xs'
+                            ? 'bg-indigo-600 text-white border-indigo-700 shadow-xs dark:bg-indigo-600 dark:text-white dark:border-indigo-500 font-bold'
                             : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700/50'
                         }`}
                       >
-                        {isSelected ? '✓ ' : '+ '}
-                        {sec}
+                        <span className="font-mono">{isSelected ? '✓' : '+'}</span>
+                        <span>{sec}</span>
                       </button>
                     );
                   })}

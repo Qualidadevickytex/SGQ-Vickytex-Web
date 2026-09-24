@@ -128,6 +128,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               name: found.name || fbUser.displayName || 'Usuário SGQ',
               role: (found.role as UserRole) || 'Qualidade',
               sector: (found.sector as SectorType) || 'Qualidade',
+              setoresAdicionais: (found.setoresAdicionais as SectorType[]) || [],
               photoURL: found.photoURL || fbUser.photoURL || undefined,
               customPermissions: found.customPermissions
             });
@@ -289,6 +290,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         name: firestoreUser?.name || cred?.user?.displayName || cleanEmail.split('@')[0],
         role: (firestoreUser?.role as UserRole) || 'Qualidade',
         sector: (firestoreUser?.sector as SectorType) || 'Qualidade',
+        setoresAdicionais: (firestoreUser?.setoresAdicionais as SectorType[]) || [],
         photoURL: firestoreUser?.photoURL || cred?.user?.photoURL,
         customPermissions: firestoreUser?.customPermissions
       };
@@ -317,6 +319,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     let targetCustomPermissions = user.customPermissions;
     let targetSector = preset.sector || user.sector || 'Qualidade';
+    let targetSetoresAdicionais: SectorType[] = user.setoresAdicionais || [];
     let targetName = preset.name || user.name;
     let targetEmail = preset.email || user.email;
     let targetPhoto = preset.photoURL || user.photoURL;
@@ -330,6 +333,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (found) {
           targetCustomPermissions = found.customPermissions;
           targetSector = (found.sector as SectorType) || targetSector;
+          targetSetoresAdicionais = (found.setoresAdicionais as SectorType[]) || targetSetoresAdicionais;
           targetName = found.name || targetName;
           targetEmail = found.email || targetEmail;
           targetPhoto = found.photoURL || targetPhoto;
@@ -345,6 +349,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       email: targetEmail,
       role,
       sector: targetSector,
+      setoresAdicionais: targetSetoresAdicionais,
       photoURL: targetPhoto,
       customPermissions: targetCustomPermissions
     };

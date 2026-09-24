@@ -24,7 +24,9 @@ export const userService = {
             name: found.name,
             role: found.role as any,
             sector: found.sector as any,
-            photoURL: found.photoURL
+            setoresAdicionais: found.setoresAdicionais,
+            photoURL: found.photoURL,
+            customPermissions: found.customPermissions
           };
         }
       }

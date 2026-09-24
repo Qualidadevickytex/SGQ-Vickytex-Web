@@ -27,12 +27,18 @@ class UserRepositoryClass extends BaseRepository<UserAccount> {
   }
 
   protected mapRecord(rec: any): UserAccount {
+    const rawSetores = rec.setoresAdicionais ?? rec.setores_adicionais ?? [];
+    const setoresAdicionais = Array.isArray(rawSetores)
+      ? rawSetores.filter((s: any) => typeof s === 'string' && s.trim().length > 0)
+      : [];
+
     return {
       id: rec.id,
       name: rec.name || rec.username || '',
       email: rec.email || '',
       role: rec.role || 'Colaborador',
       sector: rec.sector || rec.setor || 'Geral',
+      setoresAdicionais,
       photoURL: rec.photoURL || rec.photo_url || '',
       status: rec.status || 'Ativo',
       passwordHash: rec.passwordHash || rec.password_hash || rec.password || 'vickytex123',
@@ -45,11 +51,18 @@ class UserRepositoryClass extends BaseRepository<UserAccount> {
   }
 
   protected mapToPayload(data: Partial<UserAccount>): any {
+    const rawSetores = data.setoresAdicionais ?? (data as any)?.setores_adicionais ?? [];
+    const cleanSetores = Array.isArray(rawSetores)
+      ? rawSetores.filter((s: any) => typeof s === 'string' && s.trim().length > 0)
+      : [];
+
     const payload: any = {
       name: data.name,
       email: data.email,
       role: data.role,
       sector: data.sector,
+      setoresAdicionais: cleanSetores,
+      setores_adicionais: cleanSetores,
       status: data.status,
       passwordHash: data.passwordHash || '',
       password_hash: data.passwordHash || '',

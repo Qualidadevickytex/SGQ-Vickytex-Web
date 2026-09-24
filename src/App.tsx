@@ -202,6 +202,7 @@ function AppContent() {
               currentUser.role !== myLatestRecord.role ||
               currentUser.sector !== myLatestRecord.sector ||
               currentUser.photoURL !== myLatestRecord.photoURL ||
+              JSON.stringify(currentUser.setoresAdicionais || []) !== JSON.stringify(myLatestRecord.setoresAdicionais || []) ||
               JSON.stringify(currentUser.customPermissions || {}) !== JSON.stringify(myLatestRecord.customPermissions || {});
 
             if (hasChanged) {
@@ -211,6 +212,7 @@ function AppContent() {
                 email: myLatestRecord.email,
                 role: myLatestRecord.role,
                 sector: myLatestRecord.sector,
+                setoresAdicionais: myLatestRecord.setoresAdicionais,
                 photoURL: myLatestRecord.photoURL,
                 customPermissions: myLatestRecord.customPermissions
               });
@@ -632,6 +634,7 @@ function AppContent() {
         email: updated.email,
         role: updated.role,
         sector: updated.sector,
+        setoresAdicionais: updated.setoresAdicionais,
         photoURL: updated.photoURL,
         customPermissions: updated.customPermissions
       });
