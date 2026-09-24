@@ -10,6 +10,8 @@ export interface Setor5S {
   nome: string;
   ativo: boolean;
   ordemRanking: number;
+  participaRanking?: boolean; // Se o setor concorre no ranking de excelência 5S (padrão true)
+  motivoExclusaoRanking?: string; // Justificativa opcional para não estar no ranking
 }
 
 export interface Senso5S {

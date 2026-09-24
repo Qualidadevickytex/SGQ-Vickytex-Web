@@ -199,11 +199,17 @@ export const UsuariosAcessos: React.FC<UsuariosAcessosProps> = ({
     email: '',
     role: 'Qualidade' as UserRole,
     sector: 'Qualidade',
+    setoresAdicionais: [] as string[],
     photoURL: PRESET_AVATARS[0],
     status: 'Ativo' as 'Ativo' | 'Inativo',
     password: '',
     telefone: ''
   });
+
+  // Modal de Escopo Multissetorial por Módulo
+  const [scopeModalModule, setScopeModalModule] = useState<{ id: string; label: string } | null>(null);
+  const [scopeModalType, setScopeModalType] = useState<SectorScope>('setor_proprio');
+  const [scopeModalSelectedSectors, setScopeModalSelectedSectors] = useState<string[]>([]);
 
   const [userToDelete, setUserToDelete] = useState<UserAccount | null>(null);
 
@@ -369,6 +375,7 @@ export const UsuariosAcessos: React.FC<UsuariosAcessosProps> = ({
       email: '',
       role: 'Qualidade',
       sector: sectorsList[0] || 'Qualidade',
+      setoresAdicionais: [],
       photoURL: PRESET_AVATARS[Math.floor(Math.random() * PRESET_AVATARS.length)],
       status: 'Ativo',
       password: '',
@@ -389,6 +396,7 @@ export const UsuariosAcessos: React.FC<UsuariosAcessosProps> = ({
       email: u.email,
       role: u.role,
       sector: u.sector,
+      setoresAdicionais: (u.setoresAdicionais as string[]) || [],
       photoURL: u.photoURL || PRESET_AVATARS[0],
       status: u.status,
       password: u.passwordHash || '',
@@ -430,8 +438,8 @@ export const UsuariosAcessos: React.FC<UsuariosAcessosProps> = ({
         }
         const existingUser = users.find(u => u.id === editingUserId);
         const finalPassword = formData.password.trim() !== '' 
-          ? formData.password.trim() 
-          : (existingUser?.passwordHash || 'vickytex123');
+            ? formData.password.trim() 
+            : (existingUser?.passwordHash || 'vickytex123');
 
         const updatedUser: UserAccount = {
           id: editingUserId,
@@ -439,6 +447,7 @@ export const UsuariosAcessos: React.FC<UsuariosAcessosProps> = ({
           email: formData.email.trim(),
           role: formData.role,
           sector: formData.sector,
+          setoresAdicionais: formData.setoresAdicionais as any,
           photoURL: formData.photoURL,
           status: formData.status,
           passwordHash: finalPassword,
@@ -456,6 +465,7 @@ export const UsuariosAcessos: React.FC<UsuariosAcessosProps> = ({
             email: formData.email.trim(),
             role: formData.role,
             sector: formData.sector,
+            setoresAdicionais: formData.setoresAdicionais as any,
             photoURL: formData.photoURL
           });
         }
@@ -473,6 +483,7 @@ export const UsuariosAcessos: React.FC<UsuariosAcessosProps> = ({
           email: formData.email.trim(),
           role: formData.role,
           sector: formData.sector,
+          setoresAdicionais: formData.setoresAdicionais as any,
           photoURL: formData.photoURL,
           status: formData.status,
           passwordHash: finalPassword,
@@ -597,7 +608,84 @@ export const UsuariosAcessos: React.FC<UsuariosAcessosProps> = ({
     showToast(`Permissão de ${action.toUpperCase()} no módulo atualizada.`);
   };
 
-  // Alterna o escopo de setor do módulo para o usuário
+  // Abre o modal de configuração de escopo de setores para o módulo
+  const handleOpenScopeModal = (moduleId: string, moduleLabel: string) => {
+    if (!canManageAccessMatrix) {
+      showToast('Apenas administradores ou analistas de qualidade podem editar o escopo de setor.', 'error');
+      return;
+    }
+    if (!selectedUserForMatrix) return;
+
+    const userRole = selectedUserForMatrix.role || 'Colaborador';
+    const currentEffective = getEffectiveModulePermission(userRole, moduleId, selectedUserForMatrix.customPermissions, permissions);
+
+    setScopeModalModule({ id: moduleId, label: moduleLabel });
+    setScopeModalType(currentEffective.escopoSetor || 'setor_proprio');
+    
+    // Setores pré-selecionados
+    if (currentEffective.setoresPermitidos && currentEffective.setoresPermitidos.length > 0) {
+      setScopeModalSelectedSectors(currentEffective.setoresPermitidos);
+    } else {
+      setScopeModalSelectedSectors([
+        selectedUserForMatrix.sector,
+        ...((selectedUserForMatrix.setoresAdicionais as string[]) || [])
+      ]);
+    }
+  };
+
+  // Salva o escopo de setor configurado no modal
+  const handleSaveScopeModal = () => {
+    if (!scopeModalModule || !selectedUserForMatrix) return;
+
+    const userRole = selectedUserForMatrix.role || 'Colaborador';
+    const currentEffective = getEffectiveModulePermission(userRole, scopeModalModule.id, selectedUserForMatrix.customPermissions, permissions);
+
+    const updatedModulePerm: ModuleCrudPermission = {
+      ...currentEffective,
+      escopoSetor: scopeModalType,
+      setoresPermitidos: scopeModalType === 'setores_especificos' ? scopeModalSelectedSectors : undefined
+    };
+
+    const updatedCustom: Record<string, ModuleCrudPermission> = {
+      ...(selectedUserForMatrix.customPermissions || {}),
+      [scopeModalModule.id]: updatedModulePerm
+    };
+
+    const updatedUser: UserAccount = {
+      ...selectedUserForMatrix,
+      customPermissions: updatedCustom
+    };
+
+    onUpdateUser(updatedUser);
+
+    const scopeDesc = scopeModalType === 'todos'
+      ? 'Todos os Setores (Global)'
+      : scopeModalType === 'setores_especificos'
+      ? `Multissetorial (${scopeModalSelectedSectors.length} setores: ${scopeModalSelectedSectors.join(', ')})`
+      : `Setor Próprio (${selectedUserForMatrix.sector})`;
+
+    onAddLog(
+      'Escopo de Setor Alterado',
+      `Escopo do módulo ${scopeModalModule.label} alterado para [${scopeDesc}] para ${selectedUserForMatrix.name}.`
+    );
+
+    const isCurrentLoggedUser = 
+      (selectedUserForMatrix.id && currentLoggedUser?.id && selectedUserForMatrix.id === currentLoggedUser.id) ||
+      (selectedUserForMatrix.email && currentLoggedUser?.email && 
+       selectedUserForMatrix.email.toLowerCase().trim() === currentLoggedUser.email.toLowerCase().trim());
+
+    if (isCurrentLoggedUser) {
+      refreshUser({
+        ...currentLoggedUser,
+        customPermissions: updatedCustom
+      });
+    }
+
+    setScopeModalModule(null);
+    showToast(`Escopo do módulo ${scopeModalModule.label} configurado com sucesso!`);
+  };
+
+  // Alterna o escopo de setor do módulo para o usuário (ciclo: setor_proprio -> todos -> setores_especificos)
   const handleToggleUserModuleScope = (moduleId: string) => {
     if (!canManageAccessMatrix) {
       showToast('Apenas administradores ou analistas de qualidade podem editar o escopo de setor.', 'error');
@@ -1898,6 +1986,14 @@ export const UsuariosAcessos: React.FC<UsuariosAcessosProps> = ({
                                       <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-tight">
                                         {mod.description}
                                       </p>
+                                      {mod.id === '5s' && (
+                                        <div className="mt-1.5 flex items-center gap-1.5 text-[10px] text-blue-700 dark:text-blue-300 bg-blue-50/80 dark:bg-blue-950/40 px-2 py-1 rounded-md border border-blue-200/60 dark:border-blue-800/60">
+                                          <ShieldCheck className="w-3.5 h-3.5 shrink-0 text-blue-600 dark:text-blue-400" />
+                                          <span>
+                                            <strong>Regra de Alçada 5S:</strong> Usuários setoriais visualizam Indicadores & Painel e Auditorias (sem editar/excluir), tratam e salvam planos de ação do(s) seu(s) setor(es), com o menu Cadastro & Parâmetros restrito à Qualidade/Administrador.
+                                          </span>
+                                        </div>
+                                      )}
                                     </div>
                                   </div>
                                 </td>
@@ -1974,22 +2070,37 @@ export const UsuariosAcessos: React.FC<UsuariosAcessosProps> = ({
                                 <td className="px-4 py-3.5 text-center">
                                   <button
                                     type="button"
-                                    onClick={() => handleToggleUserModuleScope(mod.id)}
-                                    className={`inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all border ${
+                                    onClick={() => handleOpenScopeModal(mod.id, mod.label)}
+                                    className={`inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all border shadow-2xs group cursor-pointer hover:scale-102 active:scale-98 ${
                                       effective.escopoSetor === 'todos'
                                         ? 'bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/40 dark:text-purple-300 dark:border-purple-800 hover:bg-purple-100'
+                                        : effective.escopoSetor === 'setores_especificos'
+                                        ? 'bg-indigo-50 text-indigo-700 border-indigo-200 dark:bg-indigo-950/40 dark:text-indigo-300 dark:border-indigo-800 hover:bg-indigo-100 ring-1 ring-indigo-400/30'
                                         : 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800 hover:bg-amber-100'
                                     }`}
-                                    title="Clique para alternar entre escopo do setor próprio e escopo global"
+                                    title={
+                                      effective.escopoSetor === 'todos'
+                                        ? 'Escopo Global: Todos os Setores. Clique para gerenciar.'
+                                        : effective.escopoSetor === 'setores_especificos'
+                                        ? `Multissetorial: ${(effective.setoresPermitidos || []).join(', ')}. Clique para gerenciar.`
+                                        : `Apenas Setor Próprio (${selectedUserForMatrix?.sector}). Clique para gerenciar ou adicionar mais setores.`
+                                    }
                                   >
                                     {effective.escopoSetor === 'todos' ? (
                                       <>
-                                        <Globe className="w-3.5 h-3.5" />
+                                        <Globe className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" />
                                         <span>Todos os Setores (Global)</span>
+                                      </>
+                                    ) : effective.escopoSetor === 'setores_especificos' ? (
+                                      <>
+                                        <Building2 className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+                                        <span>
+                                          {(effective.setoresPermitidos?.length || 0)} Setores ({effective.setoresPermitidos?.slice(0, 2).join(', ')}{(effective.setoresPermitidos?.length || 0) > 2 ? '...' : ''})
+                                        </span>
                                       </>
                                     ) : (
                                       <>
-                                        <Building2 className="w-3.5 h-3.5" />
+                                        <Building2 className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
                                         <span>Apenas Setor ({selectedUserForMatrix?.sector})</span>
                                       </>
                                     )}
@@ -2329,7 +2440,7 @@ export const UsuariosAcessos: React.FC<UsuariosAcessosProps> = ({
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-slate-500">Setor</label>
+                  <label className="text-[10px] font-bold text-slate-500">Setor Principal</label>
                   <select
                     value={formData.sector}
                     onChange={(e) => setFormData({ ...formData, sector: e.target.value })}
@@ -2339,6 +2450,52 @@ export const UsuariosAcessos: React.FC<UsuariosAcessosProps> = ({
                       <option key={sec} value={sec}>{sec}</option>
                     ))}
                   </select>
+                </div>
+              </div>
+
+              {/* Setores Adicionais / Multissetorial */}
+              <div className="space-y-2 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700">
+                <div className="flex items-center justify-between">
+                  <label className="text-[11px] font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                    <Building2 className="w-3.5 h-3.5 text-indigo-500" />
+                    <span>Setores Adicionais Vinculados (Multissetorial)</span>
+                  </label>
+                  <span className="text-[9px] text-slate-400 font-mono">Opcional</span>
+                </div>
+                <p className="text-[10px] text-slate-500 dark:text-slate-400">
+                  Marque outros setores em que este colaborador também atua ou possui alçada:
+                </p>
+                <div className="flex flex-wrap gap-1.5 pt-1">
+                  {sectorsList.filter(s => s !== formData.sector).map(sec => {
+                    const isSelected = formData.setoresAdicionais.includes(sec);
+                    return (
+                      <button
+                        type="button"
+                        key={sec}
+                        onClick={() => {
+                          if (isSelected) {
+                            setFormData({
+                              ...formData,
+                              setoresAdicionais: formData.setoresAdicionais.filter(s => s !== sec)
+                            });
+                          } else {
+                            setFormData({
+                              ...formData,
+                              setoresAdicionais: [...formData.setoresAdicionais, sec]
+                            });
+                          }
+                        }}
+                        className={`text-[10px] font-semibold px-2.5 py-1 rounded-lg border transition-all cursor-pointer ${
+                          isSelected
+                            ? 'bg-indigo-100 text-indigo-800 border-indigo-300 dark:bg-indigo-950/60 dark:text-indigo-200 dark:border-indigo-700 shadow-2xs'
+                            : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700/50'
+                        }`}
+                      >
+                        {isSelected ? '✓ ' : '+ '}
+                        {sec}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 
@@ -2556,6 +2713,249 @@ export const UsuariosAcessos: React.FC<UsuariosAcessosProps> = ({
               </div>
             )}
 
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE CONFIGURAÇÃO DE ESCOPO DE SETOR POR MÓDULO (ISO 9001 - 5.3) */}
+      {scopeModalModule && selectedUserForMatrix && (
+        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl">
+            {/* Header */}
+            <div className="px-6 py-4 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
+              <div className="flex items-center space-x-2.5">
+                <div className="p-2 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800">
+                  <Building2 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-extrabold text-slate-900 dark:text-slate-100">
+                    Escopo de Setores: {scopeModalModule.label}
+                  </h3>
+                  <p className="text-[10px] text-slate-500 font-mono">
+                    {selectedUserForMatrix.name} ({selectedUserForMatrix.role}) • Setor Principal: {selectedUserForMatrix.sector}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setScopeModalModule(null)}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="p-6 space-y-4">
+              <p className="text-xs text-slate-600 dark:text-slate-300">
+                Selecione em quais setores o colaborador terá validade para as ações de Ver, Criar, Editar ou Excluir neste módulo:
+              </p>
+
+              {/* Opções de Escopo */}
+              <div className="space-y-2.5">
+                {/* 1. Apenas Setor Principal */}
+                <div 
+                  onClick={() => setScopeModalType('setor_proprio')}
+                  className={`flex items-start space-x-3 p-3.5 rounded-xl border cursor-pointer transition-all ${
+                    scopeModalType === 'setor_proprio'
+                      ? 'bg-amber-50/80 border-amber-300 dark:bg-amber-950/30 dark:border-amber-700 ring-2 ring-amber-500/20 shadow-2xs'
+                      : 'bg-white dark:bg-slate-800/40 border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800/70'
+                  }`}
+                >
+                  <input 
+                    type="radio" 
+                    name="scopeTypeModal" 
+                    checked={scopeModalType === 'setor_proprio'} 
+                    onChange={() => setScopeModalType('setor_proprio')}
+                    className="mt-0.5 text-amber-600 focus:ring-amber-500"
+                  />
+                  <div className="flex-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-slate-900 dark:text-slate-100 flex items-center gap-1.5">
+                        <Building2 className="w-3.5 h-3.5 text-amber-600" />
+                        Apenas Setor Principal
+                      </span>
+                      <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-md bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">
+                        {selectedUserForMatrix.sector}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                      O colaborador atua exclusivamente nos registros e dados pertencentes ao seu setor de lotação.
+                    </p>
+                  </div>
+                </div>
+
+                {/* 2. Múltiplos Setores Específicos (Multissetorial) */}
+                <div 
+                  onClick={() => setScopeModalType('setores_especificos')}
+                  className={`flex items-start space-x-3 p-3.5 rounded-xl border cursor-pointer transition-all ${
+                    scopeModalType === 'setores_especificos'
+                      ? 'bg-indigo-50/80 border-indigo-300 dark:bg-indigo-950/30 dark:border-indigo-700 ring-2 ring-indigo-500/20 shadow-2xs'
+                      : 'bg-white dark:bg-slate-800/40 border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800/70'
+                  }`}
+                >
+                  <input 
+                    type="radio" 
+                    name="scopeTypeModal" 
+                    checked={scopeModalType === 'setores_especificos'} 
+                    onChange={() => setScopeModalType('setores_especificos')}
+                    className="mt-0.5 text-indigo-600 focus:ring-indigo-500"
+                  />
+                  <div className="flex-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-slate-900 dark:text-slate-100 flex items-center gap-1.5">
+                        <CheckSquare className="w-3.5 h-3.5 text-indigo-600" />
+                        Múltiplos Setores Selecionados (Multissetorial)
+                      </span>
+                      <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-md bg-indigo-100 text-indigo-800 dark:bg-indigo-900/40 dark:text-indigo-300">
+                        {scopeModalSelectedSectors.length} setor(es)
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                      Atribua dois ou mais setores onde o usuário terá exatamente as mesmas permissões (ideal para auditores internos, líderes ou facilitadores de 5S).
+                    </p>
+                  </div>
+                </div>
+
+                {/* Bloco de seleção de setores quando "setores_especificos" ativo */}
+                {scopeModalType === 'setores_especificos' && (
+                  <div className="ml-6 p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-indigo-200 dark:border-indigo-900/50 space-y-2.5 animate-in fade-in duration-150">
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className="font-bold text-slate-700 dark:text-slate-300">Setores autorizados:</span>
+                      <div className="flex items-center space-x-2">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setScopeModalSelectedSectors(sectorsList);
+                          }}
+                          className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
+                        >
+                          Marcar Todos
+                        </button>
+                        <span className="text-slate-300 dark:text-slate-600">|</span>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setScopeModalSelectedSectors([selectedUserForMatrix.sector]);
+                          }}
+                          className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
+                        >
+                          Meu Setor
+                        </button>
+                        <span className="text-slate-300 dark:text-slate-600">|</span>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setScopeModalSelectedSectors([]);
+                          }}
+                          className="text-[10px] font-bold text-slate-500 hover:text-rose-600 dark:hover:text-rose-400 hover:underline cursor-pointer"
+                        >
+                          Limpar
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-44 overflow-y-auto pr-1">
+                      {sectorsList.map((sec) => {
+                        const isChecked = scopeModalSelectedSectors.includes(sec);
+                        const isPrimary = sec === selectedUserForMatrix.sector;
+                        return (
+                          <label
+                            key={sec}
+                            onClick={(e) => e.stopPropagation()}
+                            className={`flex items-center space-x-2 p-2 rounded-lg text-xs font-medium cursor-pointer border transition-colors ${
+                              isChecked 
+                                ? 'bg-indigo-50 text-indigo-900 border-indigo-200 dark:bg-indigo-950/40 dark:text-indigo-200 dark:border-indigo-800' 
+                                : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700/50'
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={() => {
+                                if (isChecked) {
+                                  setScopeModalSelectedSectors(scopeModalSelectedSectors.filter(s => s !== sec));
+                                } else {
+                                  setScopeModalSelectedSectors([...scopeModalSelectedSectors, sec]);
+                                }
+                              }}
+                              className="rounded-sm text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                            />
+                            <span className="truncate flex-1" title={sec}>
+                              {sec}
+                            </span>
+                            {isPrimary && (
+                              <span className="text-[8px] font-extrabold bg-amber-100 text-amber-800 dark:bg-amber-900/60 dark:text-amber-300 px-1 py-0.2 rounded-xs shrink-0">
+                                Primário
+                              </span>
+                            )}
+                          </label>
+                        );
+                      })}
+                    </div>
+                    {scopeModalSelectedSectors.length === 0 && (
+                      <p className="text-[10px] text-rose-600 dark:text-rose-400 font-semibold">
+                        * Selecione ao menos 1 setor para autorizar o acesso.
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                {/* 3. Global (Todos os Setores) */}
+                <div 
+                  onClick={() => setScopeModalType('todos')}
+                  className={`flex items-start space-x-3 p-3.5 rounded-xl border cursor-pointer transition-all ${
+                    scopeModalType === 'todos'
+                      ? 'bg-purple-50/80 border-purple-300 dark:bg-purple-950/30 dark:border-purple-700 ring-2 ring-purple-500/20 shadow-2xs'
+                      : 'bg-white dark:bg-slate-800/40 border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800/70'
+                  }`}
+                >
+                  <input 
+                    type="radio" 
+                    name="scopeTypeModal" 
+                    checked={scopeModalType === 'todos'} 
+                    onChange={() => setScopeModalType('todos')}
+                    className="mt-0.5 text-purple-600 focus:ring-purple-500"
+                  />
+                  <div className="flex-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-slate-900 dark:text-slate-100 flex items-center gap-1.5">
+                        <Globe className="w-3.5 h-3.5 text-purple-600" />
+                        Global (Todos os Setores da Empresa)
+                      </span>
+                      <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-md bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-300">
+                        Acesso Amplo
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                      O colaborador poderá atuar nos dados de qualquer departamento (padrão de auditores líderes, gerentes ou administradores).
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="px-6 py-4 bg-slate-50 dark:bg-slate-800/50 border-t border-slate-200 dark:border-slate-800 flex items-center justify-end space-x-2.5">
+              <button
+                type="button"
+                onClick={() => setScopeModalModule(null)}
+                className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveScopeModal}
+                disabled={scopeModalType === 'setores_especificos' && scopeModalSelectedSectors.length === 0}
+                className="px-4 py-2 rounded-xl text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-300 dark:disabled:bg-slate-700 transition-colors flex items-center space-x-1.5 shadow-xs cursor-pointer disabled:cursor-not-allowed"
+              >
+                <Save className="w-3.5 h-3.5" />
+                <span>Salvar Escopo do Módulo</span>
+              </button>
+            </div>
           </div>
         </div>
       )}

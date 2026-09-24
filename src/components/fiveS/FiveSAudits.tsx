@@ -56,7 +56,10 @@ interface FiveSAuditsProps {
   onUpdateFotos: (data: Fotografia5S[]) => void;
   onUpdatePlanos: (data: PlanoAcao5S[]) => void;
   onAddLog: (action: string, details: string) => void;
-  canModify: boolean;
+  canModify?: boolean;
+  canCreateAudit?: boolean;
+  canEditAudit?: boolean;
+  canDeleteAudit?: boolean;
   currentUserEmail?: string;
   currentUserName?: string;
 }
@@ -77,10 +80,17 @@ export const FiveSAudits: React.FC<FiveSAuditsProps> = ({
   onUpdateFotos,
   onUpdatePlanos,
   onAddLog,
-  canModify,
+  canModify = false,
+  canCreateAudit,
+  canEditAudit,
+  canDeleteAudit,
   currentUserEmail = 'qualidade@vickytex.com.br',
   currentUserName = 'Mariana Silva'
 }) => {
+  const allowCreate = canCreateAudit ?? canModify;
+  const allowEdit = canEditAudit ?? canModify;
+  const allowDelete = canDeleteAudit ?? canModify;
+
   const [activeTab, setActiveTab] = useState<'nova' | 'andamento' | 'historico'>('historico');
   const { accessToken, googleOAuthToken } = useAuth();
   const [isUploadingToDrive, setIsUploadingToDrive] = useState(false);
@@ -143,6 +153,15 @@ export const FiveSAudits: React.FC<FiveSAuditsProps> = ({
 
   // Handle opening New Audit Form
   const handleStartNewAudit = (editAudit?: Auditoria5S) => {
+    if (editAudit && !allowEdit) {
+      showNotification("Você não possui permissão para editar auditorias.", "error");
+      return;
+    }
+    if (!editAudit && !allowCreate) {
+      showNotification("Você não possui permissão para iniciar novas auditorias.", "error");
+      return;
+    }
+
     if (editAudit) {
       setEditingAuditId(editAudit.id);
       setSelectedSectorId(editAudit.setorId);
@@ -443,12 +462,15 @@ export const FiveSAudits: React.FC<FiveSAuditsProps> = ({
 
   // Delete Audit
   const handleDeleteAudit = (id: string, code: string) => {
-    if (!canModify) return;
+    if (!allowDelete) {
+      showNotification("Você não possui permissão para excluir auditorias.", "error");
+      return;
+    }
     setDeletingAudit({ id, code });
   };
 
   const confirmDeleteAudit = () => {
-    if (!deletingAudit || !canModify) return;
+    if (!deletingAudit || !allowDelete) return;
     const { id, code } = deletingAudit;
     
     onUpdateAudits(auditorias.filter(a => a.id !== id));
@@ -533,7 +555,7 @@ export const FiveSAudits: React.FC<FiveSAuditsProps> = ({
         >
           Auditorias em Andamento (Rascunhos)
         </button>
-        {canModify && (
+        {allowCreate && (
           <button
             onClick={() => { handleStartNewAudit(); }}
             className={`px-4 py-2 text-xs font-bold rounded-lg transition-all flex items-center space-x-1 ${
@@ -784,7 +806,9 @@ export const FiveSAudits: React.FC<FiveSAuditsProps> = ({
                 className="w-full mt-1.5 bg-white dark:bg-slate-800 text-xs font-bold border border-slate-200 dark:border-slate-700 rounded-lg p-2"
               >
                 {setores.filter(s => s.ativo).map(s => (
-                  <option key={s.id} value={s.id}>{s.nome}</option>
+                  <option key={s.id} value={s.id}>
+                    {s.nome}{s.participaRanking === false ? ' (Fora do Ranking)' : ''}
+                  </option>
                 ))}
               </select>
             </div>
@@ -1015,7 +1039,9 @@ export const FiveSAudits: React.FC<FiveSAuditsProps> = ({
               >
                 <option value="TODOS">Todos Setores</option>
                 {setores.map(s => (
-                  <option key={s.id} value={s.id}>{s.nome}</option>
+                  <option key={s.id} value={s.id}>
+                    {s.nome}{s.participaRanking === false ? ' (Fora do Ranking)' : ''}
+                  </option>
                 ))}
               </select>
 
@@ -1105,19 +1131,19 @@ export const FiveSAudits: React.FC<FiveSAuditsProps> = ({
                             >
                               <FileText className="w-3.5 h-3.5" />
                             </button>
-                            {canModify && (
+                            {allowEdit && (
                               <button 
                                 onClick={() => handleStartNewAudit(item)}
-                                className="p-1 text-slate-400 hover:text-blue-500 inline-flex items-center justify-center"
+                                className="p-1 text-slate-400 hover:text-blue-500 inline-flex items-center justify-center cursor-pointer"
                                 title={item.status === 'Rascunho' ? "Continuar Rascunho" : "Editar Auditoria"}
                               >
                                 <Edit2 className="w-3.5 h-3.5" />
                               </button>
                             )}
-                            {canModify && (
+                            {allowDelete && (
                               <button 
                                 onClick={() => handleDeleteAudit(item.id, item.codigo)}
-                                className="p-1 text-slate-400 hover:text-rose-500 inline-flex items-center justify-center"
+                                className="p-1 text-slate-400 hover:text-rose-500 inline-flex items-center justify-center cursor-pointer"
                                 title="Remover"
                               >
                                 <Trash2 className="w-3.5 h-3.5" />

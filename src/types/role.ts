@@ -27,7 +27,7 @@ export type PermissionCode =
   | 'audits.manage';
 
 export type CrudAction = 'ver' | 'criar' | 'editar' | 'excluir';
-export type SectorScope = 'todos' | 'setor_proprio';
+export type SectorScope = 'todos' | 'setor_proprio' | 'setores_especificos';
 
 export type SystemModuleId = 
   | 'dashboard'
@@ -55,6 +55,7 @@ export interface ModuleCrudPermission {
   editar: boolean;
   excluir: boolean;
   escopoSetor: SectorScope;
+  setoresPermitidos?: string[]; // Lista de setores autorizados quando escopo for 'setores_especificos'
 }
 
 export interface UserCustomPermissions {

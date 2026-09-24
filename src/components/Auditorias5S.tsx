@@ -16,6 +16,7 @@ import { Auditoria5S, SectorType, PlanoAcao } from '../types';
 import { PersonalizacaoGeral } from '../utils/mockData';
 import { useAuth } from '../contexts/AuthContext';
 import { useModulePermission } from '../utils/permissionManager';
+import { useSectors } from '../hooks/useSectors';
 
 // Import our modular 5S Submodules
 import { FiveSDashboard } from './fiveS/FiveSDashboard';
@@ -62,16 +63,40 @@ export const Auditorias5SComponent: React.FC<Auditorias5SProps> = ({
 }) => {
   const { user } = useAuth();
   const {
+    canView,
     canCreate,
     canEdit,
     canDelete,
+    escopoSetor,
     canModifyItem,
     canDeleteItem
   } = useModulePermission('5s');
-  const canModify = canEdit || canCreate;
+
+  const isSuperUser = user?.role === 'Administrador' || user?.role === 'Qualidade';
+
+  // 1. Aba Cadastro & Parâmetros: Apenas Administrador, Qualidade ou usuários que possuam permissão global total (edição + exclusão)
+  const canViewConfigTab = isSuperUser || (canEdit && canDelete && escopoSetor === 'todos');
+
+  // 2. Auditorias:
+  // - Criação: apenas Administrador, Qualidade, Auditor ou canCreate global
+  const canCreateAudit = isSuperUser || user?.role === 'Auditor' || (canCreate && escopoSetor === 'todos');
+  // - Edição de auditorias: apenas Administrador ou Qualidade (ou canEdit global de auditorias)
+  const canEditAudit = isSuperUser || (canEdit && escopoSetor === 'todos');
+  // - Exclusão de auditorias: apenas Administrador ou Qualidade com canDelete global
+  const canDeleteAudit = isSuperUser || (canDelete && escopoSetor === 'todos');
 
   // State of current menu tab
   const [menu, setMenu] = useState<'indicadores' | 'auditorias' | 'planos' | 'configuracao'>('indicadores');
+
+  // Proteção: redireciona para indicadores se tentar acessar 'configuracao' sem permissão
+  useEffect(() => {
+    if (menu === 'configuracao' && !canViewConfigTab) {
+      setMenu('indicadores');
+    }
+  }, [menu, canViewConfigTab]);
+
+  // Setores oficiais cadastrados na tabela do sistema (sgq_vickytex_setores)
+  const systemSectors = useSectors();
 
   // Load dynamic 5S normalized tables from Store with realtime subscriptions
   const [setores, setSetores] = useState(() => getSetores());
@@ -128,6 +153,34 @@ export const Auditorias5SComponent: React.FC<Auditorias5SProps> = ({
       unsubPlanos();
     };
   }, [auditorias]);
+
+  // Sincronização automática com a tabela de setores produtivos do sistema (sgq_vickytex_setores)
+  useEffect(() => {
+    if (!systemSectors || systemSectors.length === 0 || !setores) return;
+
+    let hasChanges = false;
+    const currentList = [...setores];
+
+    systemSectors.forEach((sysSec) => {
+      const exists = currentList.some(
+        s => s.nome.trim().toLowerCase() === sysSec.trim().toLowerCase()
+      );
+      if (!exists) {
+        hasChanges = true;
+        currentList.push({
+          id: `setor-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+          nome: sysSec,
+          ativo: true,
+          ordemRanking: currentList.length + 1,
+          participaRanking: true
+        });
+      }
+    });
+
+    if (hasChanges) {
+      handleUpdateSetores(currentList);
+    }
+  }, [systemSectors]);
 
   // Wrappers to update and persist collections locally & trigger sync
   const handleUpdateSetores = (data: typeof setores) => {
@@ -243,7 +296,7 @@ export const Auditorias5SComponent: React.FC<Auditorias5SProps> = ({
             { id: 'indicadores', label: 'Indicadores & Painel', icon: BarChart3 },
             { id: 'auditorias', label: 'Auditorias', icon: ClipboardCheck },
             { id: 'planos', label: 'Planos de Ação', icon: Target },
-            { id: 'configuracao', label: 'Cadastro & Parâmetros', icon: Settings },
+            ...(canViewConfigTab ? [{ id: 'configuracao', label: 'Cadastro & Parâmetros', icon: Settings }] : []),
           ].map((tab) => {
             const Icon = tab.icon;
             const isActive = menu === tab.id;
@@ -296,7 +349,10 @@ export const Auditorias5SComponent: React.FC<Auditorias5SProps> = ({
               onUpdateFotos={handleUpdateFotos}
               onUpdatePlanos={handleUpdatePlanos}
               onAddLog={onAddLog}
-              canModify={canModify}
+              canModify={canEditAudit}
+              canCreateAudit={canCreateAudit}
+              canEditAudit={canEditAudit}
+              canDeleteAudit={canDeleteAudit}
               currentUserEmail={user?.email}
               currentUserName={user?.name}
             />
@@ -311,12 +367,12 @@ export const Auditorias5SComponent: React.FC<Auditorias5SProps> = ({
               requisitos={requisitos}
               onUpdatePlanos={handleUpdatePlanos}
               onAddLog={onAddLog}
-              canModify={canModify}
+              canModify={true}
               currentUserName={user?.name}
             />
           )}
 
-          {menu === 'configuracao' && (
+          {menu === 'configuracao' && canViewConfigTab && (
             <FiveSConfig
               setores={setores}
               sensos={sensos}
@@ -324,12 +380,13 @@ export const Auditorias5SComponent: React.FC<Auditorias5SProps> = ({
               classificacoes={classificacoes}
               config={config}
               ciclos={ciclos}
+              systemSectors={systemSectors}
               onUpdateSetores={handleUpdateSetores}
               onUpdateRequisitos={handleUpdateRequisitos}
               onUpdateClassificacoes={handleUpdateClassificacoes}
               onUpdateConfig={handleUpdateConfig}
               onUpdateCiclos={handleUpdateCiclos}
-              canModify={canModify}
+              canModify={canViewConfigTab}
             />
           )}
         </div>

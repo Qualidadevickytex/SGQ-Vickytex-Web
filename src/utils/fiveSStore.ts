@@ -14,14 +14,14 @@ import {
 // --- SEED INITIAL DATA ---
 
 export const INITIAL_SETORES: Setor5S[] = [
-  { id: "setor-1", nome: "Administrativo", ativo: true, ordemRanking: 1 },
-  { id: "setor-2", nome: "Estoque MP / Insumos", ativo: true, ordemRanking: 2 },
-  { id: "setor-3", nome: "Corte", ativo: true, ordemRanking: 3 },
-  { id: "setor-4", nome: "Separação", ativo: true, ordemRanking: 4 },
-  { id: "setor-5", nome: "Costura", ativo: true, ordemRanking: 5 },
-  { id: "setor-6", nome: "Embalagem", ativo: true, ordemRanking: 6 },
-  { id: "setor-7", nome: "Expedição", ativo: true, ordemRanking: 7 },
-  { id: "setor-8", nome: "E-Commerce", ativo: true, ordemRanking: 8 }
+  { id: "setor-1", nome: "Administrativo", ativo: true, ordemRanking: 1, participaRanking: true },
+  { id: "setor-2", nome: "Estoque MP / Insumos", ativo: true, ordemRanking: 2, participaRanking: true },
+  { id: "setor-3", nome: "Corte", ativo: true, ordemRanking: 3, participaRanking: true },
+  { id: "setor-4", nome: "Separação", ativo: true, ordemRanking: 4, participaRanking: true },
+  { id: "setor-5", nome: "Costura", ativo: true, ordemRanking: 5, participaRanking: true },
+  { id: "setor-6", nome: "Embalagem", ativo: true, ordemRanking: 6, participaRanking: true },
+  { id: "setor-7", nome: "Expedição", ativo: true, ordemRanking: 7, participaRanking: true },
+  { id: "setor-8", nome: "E-Commerce", ativo: true, ordemRanking: 8, participaRanking: true }
 ];
 
 export const INITIAL_SENSOS: Senso5S[] = [

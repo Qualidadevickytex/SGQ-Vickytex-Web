@@ -8,6 +8,9 @@ import {
   Calendar,
   Camera,
   Check,
+  CheckCircle2,
+  Lock,
+  ShieldCheck,
   Eye,
   User,
   Plus,
@@ -57,6 +60,7 @@ export const FiveSActionPlans: React.FC<FiveSActionPlansProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('TODOS');
   const [filterSector, setFilterSector] = useState('TODOS');
+  const [filterOnlyMySectors, setFilterOnlyMySectors] = useState(false);
 
   // Editing Action Plan modal
   const [editingPlan, setEditingPlan] = useState<PlanoAcao5S | null>(null);
@@ -69,11 +73,76 @@ export const FiveSActionPlans: React.FC<FiveSActionPlansProps> = ({
   const [correctionPhotos, setCorrectionPhotos] = useState<string[]>([]);
   const [isLiveCameraOpen, setIsLiveCameraOpen] = useState(false);
 
-  // Access control based on sector mapping
+  // Setores atrelados ao usuário logado (setor primário, setores adicionais e matriz de acessos 5S)
+  const userTiedSectors = React.useMemo(() => {
+    const list = new Set<string>();
+    if (user?.sector) list.add(user.sector.trim().toLowerCase());
+    if (Array.isArray(user?.setoresAdicionais)) {
+      user.setoresAdicionais.forEach(s => s && list.add(s.trim().toLowerCase()));
+    }
+    const fiveSPerm = user?.customPermissions?.['5s'];
+    if (fiveSPerm?.setoresPermitidos && Array.isArray(fiveSPerm.setoresPermitidos)) {
+      fiveSPerm.setoresPermitidos.forEach(s => s && list.add(s.trim().toLowerCase()));
+    }
+    return Array.from(list);
+  }, [user]);
+
+  const isSuperUser = user?.role === 'Administrador' || user?.role === 'Qualidade';
+  const hasGlobalScope = isSuperUser || user?.customPermissions?.['5s']?.escopoSetor === 'todos';
+
+  // Nomes legíveis dos setores do usuário para mensagens e badges
+  const userTiedSectorNames = React.useMemo(() => {
+    if (hasGlobalScope) return ['Todos os Setores (Global)'];
+    const names = new Set<string>();
+    if (user?.sector) names.add(user.sector);
+    if (Array.isArray(user?.setoresAdicionais)) {
+      user.setoresAdicionais.forEach(s => s && names.add(s));
+    }
+    const fiveSPerm = user?.customPermissions?.['5s'];
+    if (fiveSPerm?.setoresPermitidos && Array.isArray(fiveSPerm.setoresPermitidos)) {
+      fiveSPerm.setoresPermitidos.forEach(s => s && names.add(s));
+    }
+    return Array.from(names);
+  }, [user, hasGlobalScope]);
+
+  // Informações de setor vinculadas ao plano de ação
+  const getPlanSectorInfo = (plan: PlanoAcao5S | null) => {
+    if (!plan) return { id: '', nome: 'Setor Não Informado' };
+    const audit = auditorias.find(a => a.id === plan.auditoriaId);
+    let sectorName = audit?.setor || '';
+    let sectorId = audit?.setorId || '';
+
+    if (sectorId && !sectorName) {
+      const match = setores.find(s => s.id === sectorId);
+      if (match) sectorName = match.nome;
+    } else if (sectorName && !sectorId) {
+      const match = setores.find(s => s.nome.toLowerCase() === sectorName.toLowerCase());
+      if (match) sectorId = match.id;
+    }
+
+    return {
+      id: sectorId,
+      nome: sectorName || 'Geral'
+    };
+  };
+
+  // Verifica se o plano pertence a um setor atrelado ao usuário (ou se o usuário tem escopo global)
+  const isPlanSectorTiedToUser = (plan: PlanoAcao5S | null): boolean => {
+    if (!plan) return false;
+    if (hasGlobalScope) return true;
+    if (userTiedSectors.length === 0) return false;
+
+    const { id, nome } = getPlanSectorInfo(plan);
+    const idLower = id.trim().toLowerCase();
+    const nomeLower = nome.trim().toLowerCase();
+
+    return userTiedSectors.some(s => s === idLower || s === nomeLower);
+  };
+
   const auditOfEditingPlan = editingPlan ? auditorias.find(a => a.id === editingPlan.auditoriaId) : null;
-  const isQualidadeOrAdminOfEditingPlan = user?.role === 'Qualidade' || user?.role === 'Administrador';
-  const userSectorMatchesEditingPlan = !!(user?.sector && auditOfEditingPlan?.setor && user.sector.trim().toLowerCase() === auditOfEditingPlan.setor.trim().toLowerCase());
-  const hasAccessToFillEditingPlan = canModify && (isQualidadeOrAdminOfEditingPlan || userSectorMatchesEditingPlan);
+  const editingPlanSectorInfo = getPlanSectorInfo(editingPlan);
+  // O usuário pode editar e salvar se for dos setores atrelados ou superusuário
+  const hasAccessToFillEditingPlan = isPlanSectorTiedToUser(editingPlan);
 
   const handleOpenPlanModal = (plan: PlanoAcao5S) => {
     setEditingPlan(plan);
@@ -108,13 +177,8 @@ export const FiveSActionPlans: React.FC<FiveSActionPlansProps> = ({
     e.preventDefault();
     if (!editingPlan) return;
 
-    const audit = auditorias.find(a => a.id === editingPlan.auditoriaId);
-    const isQualidadeOrAdmin = user?.role === 'Qualidade' || user?.role === 'Administrador';
-    const userSectorMatches = !!(user?.sector && audit?.setor && user.sector.trim().toLowerCase() === audit.setor.trim().toLowerCase());
-    const hasAccessToFill = canModify && (isQualidadeOrAdmin || userSectorMatches);
-
-    if (!hasAccessToFill) {
-      alert(`Acesso negado. O preenchimento deste plano de ação é restrito a usuários do setor correspondente (${audit?.setor || 'Nenhum'}).`);
+    if (!isPlanSectorTiedToUser(editingPlan)) {
+      alert(`Acesso negado. A edição e o salvamento deste plano de ação são restritos a colaboradores do setor correspondente (${editingPlanSectorInfo.nome}).`);
       return;
     }
 
@@ -169,12 +233,14 @@ export const FiveSActionPlans: React.FC<FiveSActionPlansProps> = ({
 
     const matchSearch = p.descricao.toLowerCase().includes(searchTerm.toLowerCase()) || 
                         p.responsavel.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                        reqCode.toLowerCase().includes(searchTerm.toLowerCase());
+                        reqCode.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                        sectorName.toLowerCase().includes(searchTerm.toLowerCase());
     
     const matchStatus = filterStatus === 'TODOS' || p.status === filterStatus;
     const matchSector = filterSector === 'TODOS' || audit.setorId === filterSector;
+    const matchMySector = !filterOnlyMySectors || isPlanSectorTiedToUser(p);
 
-    return matchSearch && matchStatus && matchSector;
+    return matchSearch && matchStatus && matchSector && matchMySector;
   });
 
   // NC list (non-conformities that might or might not have action plans)
@@ -258,7 +324,7 @@ export const FiveSActionPlans: React.FC<FiveSActionPlansProps> = ({
           />
         </div>
 
-        <div className="grid grid-cols-2 gap-2 shrink-0">
+        <div className="flex flex-wrap items-center gap-2 shrink-0">
           <select
             value={filterSector}
             onChange={(e) => setFilterSector(e.target.value)}
@@ -283,6 +349,22 @@ export const FiveSActionPlans: React.FC<FiveSActionPlansProps> = ({
               <option value="Atrasado">Atrasado</option>
             </select>
           )}
+
+          {!hasGlobalScope && userTiedSectors.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setFilterOnlyMySectors(prev => !prev)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center space-x-1.5 border shrink-0 cursor-pointer ${
+                filterOnlyMySectors
+                  ? 'bg-emerald-600 text-white border-emerald-700 shadow-xs'
+                  : 'bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700'
+              }`}
+              title="Exibir apenas os planos de ação atrelados ao(s) seu(s) setor(es)"
+            >
+              <Check className={`w-3.5 h-3.5 ${filterOnlyMySectors ? 'opacity-100' : 'opacity-30'}`} />
+              <span>Apenas Meus Setores</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -297,6 +379,7 @@ export const FiveSActionPlans: React.FC<FiveSActionPlansProps> = ({
             filteredPlanos.map(plan => {
               const audit = auditorias.find(a => a.id === plan.auditoriaId);
               const req = requisitos.find(r => r.id === plan.requisitoId);
+              const isTied = isPlanSectorTiedToUser(plan);
               
               return (
                 <div key={plan.id} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-xs hover:shadow-md transition-all flex flex-col justify-between">
@@ -305,13 +388,26 @@ export const FiveSActionPlans: React.FC<FiveSActionPlansProps> = ({
                       <span className="text-[10px] font-mono font-bold text-[#0B3A63] bg-blue-50 dark:bg-blue-950/30 px-2 py-0.5 rounded-sm uppercase">
                         {req?.codigo || '5S'}
                       </span>
-                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
-                        plan.status === 'Concluído' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' :
-                        plan.status === 'Em Andamento' ? 'bg-amber-50 text-amber-600 border-amber-100' :
-                        'bg-slate-100 text-slate-500 border-slate-200'
-                      }`}>
-                        {plan.status}
-                      </span>
+                      <div className="flex items-center gap-1.5">
+                        {isTied ? (
+                          <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 flex items-center gap-1">
+                            <CheckCircle2 className="w-2.5 h-2.5 text-emerald-600" />
+                            <span>Seu Setor</span>
+                          </span>
+                        ) : (
+                          <span className="px-1.5 py-0.5 rounded text-[9px] font-medium bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400 border border-slate-200 dark:border-slate-700 flex items-center gap-1">
+                            <Lock className="w-2.5 h-2.5 text-slate-400" />
+                            <span>Outro Setor</span>
+                          </span>
+                        )}
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                          plan.status === 'Concluído' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' :
+                          plan.status === 'Em Andamento' ? 'bg-amber-50 text-amber-600 border-amber-100' :
+                          'bg-slate-100 text-slate-500 border-slate-200'
+                        }`}>
+                          {plan.status}
+                        </span>
+                      </div>
                     </div>
 
                     <h4 className="text-xs font-bold text-slate-800 dark:text-slate-100 line-clamp-2">
@@ -319,7 +415,7 @@ export const FiveSActionPlans: React.FC<FiveSActionPlansProps> = ({
                     </h4>
 
                     <div className="text-[11px] text-slate-400 space-y-1 font-sans">
-                      <p>Setor: <span className="font-semibold text-slate-600 dark:text-slate-300">{audit?.setor}</span></p>
+                      <p>Setor: <span className="font-semibold text-slate-600 dark:text-slate-300">{audit?.setor || 'Geral'}</span></p>
                       <p>Responsável: {plan.responsavel ? (
                         <span className="font-semibold text-slate-600 dark:text-slate-300">{plan.responsavel}</span>
                       ) : (
@@ -333,9 +429,12 @@ export const FiveSActionPlans: React.FC<FiveSActionPlansProps> = ({
                     <span className="text-[9px] text-slate-400 uppercase font-mono">Ref: {audit?.codigo}</span>
                     <button
                       onClick={() => handleOpenPlanModal(plan)}
-                      className="text-[11px] text-[#0B3A63] dark:text-sky-400 font-bold hover:underline"
+                      className={`text-[11px] font-bold hover:underline cursor-pointer flex items-center space-x-1 ${
+                        isTied ? 'text-[#0B3A63] dark:text-sky-400' : 'text-slate-500 dark:text-slate-400'
+                      }`}
                     >
-                      Gerenciar Plano &rarr;
+                      <span>{isTied ? 'Editar e Tratar' : 'Consultar Detalhes'}</span>
+                      <span>&rarr;</span>
                     </button>
                   </div>
                 </div>
@@ -492,13 +591,25 @@ export const FiveSActionPlans: React.FC<FiveSActionPlansProps> = ({
             </div>
             
             <div className="p-5 space-y-4 text-xs max-h-[70vh] overflow-y-auto">
-              {!hasAccessToFillEditingPlan && (
-                <div className="p-3 bg-rose-50 dark:bg-rose-950/20 border border-rose-100 dark:border-rose-900 text-rose-600 dark:text-rose-400 rounded-lg flex items-start gap-2">
-                  <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
-                  <div>
-                    <p className="font-bold">Acesso Restrito ao Setor</p>
-                    <p className="text-[11px] mt-0.5">
-                      O preenchimento deste plano de ação é restrito a colaboradores do setor correspondente (<strong>{auditOfEditingPlan?.setor || 'Nenhum'}</strong>). Seu setor atual é <strong>{user?.sector || 'não definido'}</strong>.
+              {hasAccessToFillEditingPlan ? (
+                <div className="p-2.5 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 rounded-lg text-emerald-800 dark:text-emerald-300 text-xs flex items-center justify-between">
+                  <div className="flex items-center gap-1.5 font-bold">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <span>Setor Vinculado: {editingPlanSectorInfo.nome}</span>
+                  </div>
+                  <span className="text-[10px] font-bold uppercase tracking-wider bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-200 px-2 py-0.5 rounded-full">
+                    Edição Liberada
+                  </span>
+                </div>
+              ) : (
+                <div className="p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-300 rounded-lg flex items-start gap-2.5 text-xs">
+                  <Lock className="w-4 h-4 shrink-0 mt-0.5 text-amber-600" />
+                  <div className="space-y-0.5">
+                    <p className="font-bold">Acesso em Modo de Consulta (Somente Leitura)</p>
+                    <p className="text-[11px] leading-relaxed">
+                      Este plano de ação pertence ao setor <strong>{editingPlanSectorInfo.nome}</strong>.
+                      Seu usuário está vinculado a: <strong>{userTiedSectorNames.length > 0 ? userTiedSectorNames.join(', ') : (user?.sector || 'Nenhum')}</strong>.
+                      Apenas colaboradores do setor correspondente podem preencher e salvar ações corretivas.
                     </p>
                   </div>
                 </div>
@@ -644,18 +755,31 @@ export const FiveSActionPlans: React.FC<FiveSActionPlansProps> = ({
             </div>
 
             <div className="bg-slate-50 dark:bg-slate-950 p-4 flex justify-end space-x-2 border-t border-slate-150 dark:border-slate-850">
-              <button type="button" onClick={() => setEditingPlan(null)} className="px-3 py-1.5 border border-slate-200 dark:border-slate-800 text-slate-500 rounded-lg hover:bg-slate-100">Cancelar</button>
               <button 
-                type="submit" 
-                disabled={!hasAccessToFillEditingPlan}
-                className={`px-3 py-1.5 rounded-lg font-bold transition-all ${
-                  hasAccessToFillEditingPlan 
-                    ? 'bg-amber-500 text-slate-950 hover:bg-amber-600' 
-                    : 'bg-slate-200 text-slate-400 dark:bg-slate-800 dark:text-slate-600 cursor-not-allowed'
-                }`}
+                type="button" 
+                onClick={() => setEditingPlan(null)} 
+                className="px-3.5 py-1.5 border border-slate-200 dark:border-slate-800 text-slate-500 rounded-lg hover:bg-slate-100 text-xs font-semibold cursor-pointer"
               >
-                Salvar Alterações
+                Fechar
               </button>
+              {hasAccessToFillEditingPlan ? (
+                <button 
+                  type="submit" 
+                  className="px-4 py-1.5 rounded-lg font-bold text-xs bg-amber-500 text-slate-950 hover:bg-amber-600 transition-all shadow-xs cursor-pointer flex items-center space-x-1.5"
+                >
+                  <Check className="w-3.5 h-3.5" />
+                  <span>Salvar Alterações</span>
+                </button>
+              ) : (
+                <button 
+                  type="button" 
+                  disabled
+                  className="px-3.5 py-1.5 rounded-lg font-semibold text-xs bg-slate-200 text-slate-400 dark:bg-slate-800 dark:text-slate-600 cursor-not-allowed flex items-center space-x-1.5"
+                >
+                  <Lock className="w-3.5 h-3.5" />
+                  <span>Salvar Bloqueado (Outro Setor)</span>
+                </button>
+              )}
             </div>
           </form>
         </div>

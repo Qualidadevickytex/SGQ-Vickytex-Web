@@ -13,6 +13,7 @@ export interface UserProfile {
   photoURL?: string;
   role: UserRole;
   sector?: SectorType;
+  setoresAdicionais?: SectorType[];
   customPermissions?: Record<string, ModuleCrudPermission>;
 }
 
@@ -22,6 +23,7 @@ export interface UserAccount {
   email: string;
   role: UserRole;
   sector: SectorType;
+  setoresAdicionais?: SectorType[];
   photoURL?: string;
   status: 'Ativo' | 'Inativo';
   passwordHash: string; // Senha em texto ou hash simulado

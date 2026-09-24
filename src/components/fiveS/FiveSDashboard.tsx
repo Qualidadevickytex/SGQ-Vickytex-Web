@@ -126,10 +126,10 @@ export const FiveSDashboard: React.FC<FiveSDashboardProps> = ({
   });
 
   // --- 3. SECTOR RANKING ---
-  // Get latest finalized audit for each sector
+  // Get latest finalized audit for each sector (apenas setores ativos e elegíveis para o ranking)
   const sectorRanking = useMemo(() => {
     return setores
-      .filter(s => s.ativo)
+      .filter(s => s.ativo && s.participaRanking !== false)
       .map(sector => {
         const sectorAudits = finalizedAudits.filter(a => a.setorId === sector.id);
         const hasAudit = sectorAudits.length > 0;
@@ -157,6 +157,10 @@ export const FiveSDashboard: React.FC<FiveSDashboardProps> = ({
         return b.score - a.score;
       });
   }, [setores, finalizedAudits]);
+
+  const excludedRankingCount = useMemo(() => {
+    return setores.filter(s => s.ativo && s.participaRanking === false).length;
+  }, [setores]);
 
   // --- 4. EVOLUTION OVER TIME & SECTOR FILTERING ---
   const [evolutionMode, setEvolutionMode] = useState<'geral' | 'setor' | 'comparativo'>('geral');
@@ -442,7 +446,14 @@ export const FiveSDashboard: React.FC<FiveSDashboardProps> = ({
                 <Trophy className="w-4 h-4 text-amber-500" />
                 <span>Ranking de Excelência 5S</span>
               </h3>
-              <p className="text-[10px] text-slate-400">Última avaliação de cada setor elegível.</p>
+              <p className="text-[10px] text-slate-400">
+                Última avaliação de cada setor elegível para o ranking
+                {excludedRankingCount > 0 ? (
+                  <span className="ml-1 text-slate-400 font-medium">({sectorRanking.length} no ranking • {excludedRankingCount} fora do ranking)</span>
+                ) : (
+                  <span className="ml-1 font-medium">({sectorRanking.length} setores)</span>
+                )}
+              </p>
             </div>
             <span className="text-[10px] font-mono bg-amber-500/10 text-amber-600 px-2.5 py-0.5 rounded-full font-bold">
               Prêmio: {config.trofeuNomePremio || 'Troféu 5S'}

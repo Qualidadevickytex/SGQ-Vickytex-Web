@@ -366,6 +366,7 @@ export function canUserPerform(
   user: {
     role?: UserRole;
     sector?: string;
+    setoresAdicionais?: string[];
     customPermissions?: Record<string, ModuleCrudPermission>;
   } | null,
   moduleId: SystemModuleId | string,
@@ -391,19 +392,33 @@ export function canUserPerform(
     return true;
   }
 
+  // Se o escopo for múltiplos setores específicos configurados na Matriz:
+  if (effective.escopoSetor === 'setores_especificos' && itemSector) {
+    const cleanItemSector = itemSector.trim().toLowerCase();
+    if (cleanItemSector === 'todos' || cleanItemSector === 'geral') {
+      return true;
+    }
+    const allowed = (effective.setoresPermitidos && effective.setoresPermitidos.length > 0)
+      ? effective.setoresPermitidos
+      : [user.sector || ''];
+    return allowed.some(s => s.trim().toLowerCase() === cleanItemSector);
+  }
+
   // Se o escopo é restrito ao setor próprio e foi passado um setor de item:
   if (effective.escopoSetor === 'setor_proprio' && itemSector && user.sector) {
     const cleanUserSector = user.sector.trim().toLowerCase();
     const cleanItemSector = itemSector.trim().toLowerCase();
     
-    // Setores universais ou idênticos
-    if (cleanItemSector === 'todos' || cleanItemSector === 'geral' || cleanItemSector === cleanUserSector) {
+    // Setores universais ou idênticos ao principal ou aos setores adicionais do usuário
+    const userSectors = [cleanUserSector, ...(user.setoresAdicionais || []).map(s => s.trim().toLowerCase())];
+
+    if (cleanItemSector === 'todos' || cleanItemSector === 'geral' || userSectors.includes(cleanItemSector)) {
       return true;
     }
 
-    // Se a ação for criar e o escopo for setor_proprio, o usuário só cria no seu setor
+    // Se a ação for criar e o escopo for setor_proprio, o usuário só cria nos seus setores autorizados
     if (action === 'criar') {
-      return cleanItemSector === cleanUserSector;
+      return userSectors.includes(cleanItemSector);
     }
 
     return false;

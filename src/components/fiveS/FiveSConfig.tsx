@@ -13,7 +13,13 @@ import {
   Calendar,
   Check,
   RefreshCw,
-  Trophy
+  Trophy,
+  CheckCircle2,
+  XCircle,
+  Info,
+  ChevronUp,
+  ChevronDown,
+  CheckCheck
 } from 'lucide-react';
 import { 
   Setor5S, 
@@ -23,6 +29,7 @@ import {
   CicloAuditoria,
   Senso5S
 } from '../../types/fiveS';
+import { SystemSettingsRepository } from '../../services/database/repositories/systemSettings.repository';
 
 interface FiveSConfigProps {
   setores: Setor5S[];
@@ -31,6 +38,7 @@ interface FiveSConfigProps {
   classificacoes: Classificacao5S[];
   config: Configuracao5S;
   ciclos: CicloAuditoria[];
+  systemSectors?: string[];
   onUpdateSetores: (data: Setor5S[]) => void;
   onUpdateRequisitos: (data: Requisito5S[]) => void;
   onUpdateClassificacoes: (data: Classificacao5S[]) => void;
@@ -46,6 +54,7 @@ export const FiveSConfig: React.FC<FiveSConfigProps> = ({
   classificacoes,
   config,
   ciclos,
+  systemSectors = [],
   onUpdateSetores,
   onUpdateRequisitos,
   onUpdateClassificacoes,
@@ -61,6 +70,9 @@ export const FiveSConfig: React.FC<FiveSConfigProps> = ({
   const [sectorName, setSectorName] = useState('');
   const [sectorActive, setSectorActive] = useState(true);
   const [sectorOrder, setSectorOrder] = useState(1);
+  const [sectorRankingEligible, setSectorRankingEligible] = useState(true);
+  const [sectorExclusionReason, setSectorExclusionReason] = useState('');
+  const [sectorSaveToSystem, setSectorSaveToSystem] = useState(false);
 
   // Requirement form state
   const [isReqModalOpen, setIsReqModalOpen] = useState(false);
@@ -128,39 +140,152 @@ export const FiveSConfig: React.FC<FiveSConfigProps> = ({
       setSectorName(sector.nome);
       setSectorActive(sector.ativo);
       setSectorOrder(sector.ordemRanking);
+      setSectorRankingEligible(sector.participaRanking !== false);
+      setSectorExclusionReason(sector.motivoExclusaoRanking || '');
+      setSectorSaveToSystem(false);
     } else {
       setEditingSector(null);
       setSectorName('');
       setSectorActive(true);
       setSectorOrder(setores.length + 1);
+      setSectorRankingEligible(true);
+      setSectorExclusionReason('');
+      setSectorSaveToSystem(true);
     }
     setIsSectorModalOpen(true);
   };
 
+  const handleToggleRanking = (sectorId: string) => {
+    if (!canModify) return;
+    const updated = setores.map(s => {
+      if (s.id === sectorId) {
+        const current = s.participaRanking !== false;
+        return { ...s, participaRanking: !current };
+      }
+      return s;
+    });
+    onUpdateSetores(updated);
+  };
+
+  const handleSetAllRanking = (inRanking: boolean) => {
+    if (!canModify) return;
+    const updated = setores.map(s => ({
+      ...s,
+      participaRanking: inRanking
+    }));
+    onUpdateSetores(updated);
+  };
+
+  const handleMoveSectorOrder = (sectorId: string, direction: 'up' | 'down') => {
+    if (!canModify) return;
+    const sorted = [...setores].sort((a, b) => a.ordemRanking - b.ordemRanking);
+    const index = sorted.findIndex(s => s.id === sectorId);
+    if (index === -1) return;
+
+    const targetIndex = direction === 'up' ? index - 1 : index + 1;
+    if (targetIndex < 0 || targetIndex >= sorted.length) return;
+
+    const currentOrder = sorted[index].ordemRanking;
+    const targetOrder = sorted[targetIndex].ordemRanking;
+
+    sorted[index].ordemRanking = targetOrder;
+    sorted[targetIndex].ordemRanking = currentOrder;
+
+    onUpdateSetores(sorted);
+  };
+
+  const handleToggleSectorActive = (sectorId: string) => {
+    if (!canModify) return;
+    const updated = setores.map(s => {
+      if (s.id === sectorId) {
+        return { ...s, ativo: !s.ativo };
+      }
+      return s;
+    });
+    onUpdateSetores(updated);
+  };
+
+  const handleSyncWithSystemSectors = () => {
+    if (!systemSectors || systemSectors.length === 0) {
+      alert('Nenhum setor encontrado na tabela do sistema para sincronizar.');
+      return;
+    }
+    let addedCount = 0;
+    const currentList = [...setores];
+
+    systemSectors.forEach((sysSec) => {
+      const exists = currentList.some(
+        s => s.nome.trim().toLowerCase() === sysSec.trim().toLowerCase()
+      );
+      if (!exists) {
+        addedCount++;
+        currentList.push({
+          id: `setor-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+          nome: sysSec,
+          ativo: true,
+          ordemRanking: currentList.length + 1,
+          participaRanking: true
+        });
+      }
+    });
+
+    if (addedCount > 0) {
+      onUpdateSetores(currentList);
+      alert(`${addedCount} setor(es) da tabela do sistema foram sincronizados com o Programa 5S com sucesso!`);
+    } else {
+      alert('Todos os setores da tabela oficial do sistema já estão integrados ao Programa 5S.');
+    }
+  };
+
   const handleSaveSector = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!sectorName.trim()) return;
+    const cleanName = sectorName.trim();
+    if (!cleanName) return;
 
     let updatedList = [...setores];
     if (editingSector) {
       updatedList = updatedList.map(s => s.id === editingSector.id 
-        ? { ...s, nome: sectorName.trim(), ativo: sectorActive, ordemRanking: Number(sectorOrder) }
+        ? { 
+            ...s, 
+            nome: cleanName, 
+            ativo: sectorActive, 
+            ordemRanking: Number(sectorOrder),
+            participaRanking: sectorRankingEligible,
+            motivoExclusaoRanking: !sectorRankingEligible ? sectorExclusionReason.trim() : undefined
+          }
         : s
       );
     } else {
       updatedList.push({
         id: `setor-${Date.now()}`,
-        nome: sectorName.trim(),
+        nome: cleanName,
         ativo: sectorActive,
-        ordemRanking: Number(sectorOrder)
+        ordemRanking: Number(sectorOrder),
+        participaRanking: sectorRankingEligible,
+        motivoExclusaoRanking: !sectorRankingEligible ? sectorExclusionReason.trim() : undefined
       });
+
+      // Se solicitado, sincroniza também de volta com a tabela de setores do sistema
+      if (sectorSaveToSystem) {
+        const alreadyInSystem = systemSectors.some(
+          s => s.trim().toLowerCase() === cleanName.toLowerCase()
+        );
+        if (!alreadyInSystem) {
+          const updatedSystem = [...systemSectors, cleanName];
+          try {
+            localStorage.setItem('sgq_vickytex_setores', JSON.stringify(updatedSystem));
+            window.dispatchEvent(new CustomEvent('sgq_setores_updated'));
+          } catch {}
+          SystemSettingsRepository.create({ id: 'sgq_vickytex_setores', items: updatedSystem }).catch(() => {});
+        }
+      }
     }
     onUpdateSetores(updatedList);
     setIsSectorModalOpen(false);
   };
 
   const handleDeleteSector = (id: string) => {
-    if (confirm("Deseja realmente excluir este setor?")) {
+    if (confirm("Deseja realmente excluir este setor do programa 5S?")) {
       const updated = setores.filter(s => s.id !== id);
       onUpdateSetores(updated);
     }
@@ -401,58 +526,230 @@ export const FiveSConfig: React.FC<FiveSConfigProps> = ({
         {/* --- 1. SETORES VIEW --- */}
         {subTab === 'setores' && (
           <div className="space-y-4">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
-                <h3 className="text-sm font-extrabold text-slate-800 dark:text-slate-100">Setores do Programa 5S</h3>
-                <p className="text-[11px] text-slate-400 mt-0.5">Cadastre e configure os setores da fábrica elegíveis para o ranking 5S.</p>
+                <h3 className="text-sm font-extrabold text-slate-800 dark:text-slate-100 flex items-center space-x-2">
+                  <span>Setores do Programa 5S</span>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                    Tabela do Sistema Unificada
+                  </span>
+                </h3>
+                <p className="text-[11px] text-slate-400 mt-0.5">
+                  Utiliza o mesmo cadastro da tabela de setores produtivos do sistema. Defina abaixo quais setores participam do ranking do Troféu 5S.
+                </p>
               </div>
+              <div className="flex items-center space-x-2">
+                {canModify && (
+                  <>
+                    <button
+                      onClick={handleSyncWithSystemSectors}
+                      type="button"
+                      title="Sincronizar com os setores cadastrados nas Configurações Gerais do Sistema"
+                      className="bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 px-3 py-1.5 rounded-lg text-[11px] font-bold flex items-center space-x-1.5 transition-colors border border-slate-200 dark:border-slate-700"
+                    >
+                      <RefreshCw className="w-3.5 h-3.5 text-blue-500" />
+                      <span>Sincronizar com Sistema</span>
+                    </button>
+                    <button
+                      onClick={() => handleOpenSectorModal()}
+                      className="bg-amber-500 hover:bg-amber-600 text-slate-950 px-3 py-1.5 rounded-lg text-[11px] font-bold flex items-center space-x-1 shadow-sm transition-colors"
+                    >
+                      <Plus className="w-3.5 h-3.5 text-slate-950" />
+                      <span>Novo Setor</span>
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+
+            {/* Banner de resumo e controle do ranking */}
+            <div className="bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800 rounded-xl p-3.5 space-y-3 text-xs">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center space-x-2 text-slate-600 dark:text-slate-300">
+                  <Info className="w-4 h-4 text-sky-500 shrink-0" />
+                  <span className="text-[11px]">
+                    <strong>Regra de Ranking:</strong> Apenas setores marcados como <strong className="text-amber-600 dark:text-amber-400">"No Ranking"</strong> concorrem no Ranking de Excelência e ao Troféu 5S. Setores fora do ranking continuam aptos a auditorias internas.
+                  </span>
+                </div>
+                <div className="flex items-center gap-2 font-mono text-[11px]">
+                  <span className="px-2 py-0.5 rounded-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 font-bold">
+                    Total: <strong>{setores.length}</strong>
+                  </span>
+                  <span className="px-2 py-0.5 rounded-md bg-amber-500/10 border border-amber-500/30 text-amber-700 dark:text-amber-400 font-black flex items-center space-x-1">
+                    <Trophy className="w-3 h-3 text-amber-500" />
+                    <span>No Ranking: {setores.filter(s => s.ativo && s.participaRanking !== false).length}</span>
+                  </span>
+                  <span className="px-2 py-0.5 rounded-md bg-slate-200/60 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-500 dark:text-slate-400 font-bold">
+                    Fora do Ranking: {setores.filter(s => s.participaRanking === false).length}
+                  </span>
+                </div>
+              </div>
+
               {canModify && (
-                <button
-                  onClick={() => handleOpenSectorModal()}
-                  className="bg-amber-500 hover:bg-amber-600 text-slate-950 px-3 py-1.5 rounded-lg text-[11px] font-bold flex items-center space-x-1"
-                >
-                  <Plus className="w-3.5 h-3.5 text-slate-900" />
-                  <span>Novo Setor</span>
-                </button>
+                <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-200/60 dark:border-slate-800/60">
+                  <div className="flex items-center gap-1.5 text-[11px] text-slate-500 font-medium">
+                    <span>Ações em Lote do Ranking:</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleSetAllRanking(true)}
+                      className="px-2.5 py-1 text-[11px] font-bold rounded-lg border border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-300 bg-amber-50/70 dark:bg-amber-950/30 hover:bg-amber-100 dark:hover:bg-amber-900/50 flex items-center space-x-1 cursor-pointer transition-colors"
+                      title="Habilitar todos os setores ativos no ranking 5S"
+                    >
+                      <CheckCheck className="w-3.5 h-3.5 text-amber-600" />
+                      <span>Incluir Todos no Ranking</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleSetAllRanking(false)}
+                      className="px-2.5 py-1 text-[11px] font-bold rounded-lg border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center space-x-1 cursor-pointer transition-colors"
+                      title="Desmarcar todos os setores do ranking 5S"
+                    >
+                      <X className="w-3.5 h-3.5 text-slate-500" />
+                      <span>Desmarcar Todos</span>
+                    </button>
+                  </div>
+                </div>
               )}
             </div>
 
-            <div className="overflow-x-auto rounded-lg border border-slate-100 dark:border-slate-800">
+            <div className="overflow-x-auto rounded-lg border border-slate-100 dark:border-slate-800 shadow-2xs">
               <table className="w-full text-left text-xs">
                 <thead className="bg-slate-50 dark:bg-slate-950 text-slate-500 font-bold border-b border-slate-100 dark:border-slate-800">
                   <tr>
-                    <th className="p-3">Ordem Ranking</th>
+                    <th className="p-3 w-32 text-center">Ordem Ranking</th>
                     <th className="p-3">Nome do Setor</th>
-                    <th className="p-3">Status</th>
+                    <th className="p-3 text-center">No Ranking 5S?</th>
+                    <th className="p-3 text-center">Status Auditoria</th>
                     {canModify && <th className="p-3 text-right">Ações</th>}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-medium">
-                  {setores.map((s) => (
-                    <tr key={s.id} className="hover:bg-slate-50/40 dark:hover:bg-slate-800/10">
-                      <td className="p-3 font-mono text-slate-500 font-bold">{s.ordemRanking}º</td>
-                      <td className="p-3 font-bold text-slate-800 dark:text-slate-200">{s.nome}</td>
-                      <td className="p-3">
-                        <span className={`px-2 py-0.5 rounded-sm text-[10px] font-bold ${
-                          s.ativo 
-                            ? 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600' 
-                            : 'bg-rose-50 dark:bg-rose-950/30 text-rose-600'
-                        }`}>
-                          {s.ativo ? 'Ativo' : 'Inativo'}
-                        </span>
-                      </td>
-                      {canModify && (
-                        <td className="p-3 text-right space-x-1.5">
-                          <button onClick={() => handleOpenSectorModal(s)} className="p-1 text-slate-400 hover:text-blue-500">
-                            <Edit2 className="w-3.5 h-3.5" />
-                          </button>
-                          <button onClick={() => handleDeleteSector(s.id)} className="p-1 text-slate-400 hover:text-rose-500">
-                            <Trash2 className="w-3.5 h-3.5" />
+                  {setores.map((s, sIdx) => {
+                    const inRanking = s.participaRanking !== false;
+                    const isSystemSector = systemSectors.some(
+                      sys => sys.trim().toLowerCase() === s.nome.trim().toLowerCase()
+                    );
+                    return (
+                      <tr key={s.id} className="hover:bg-slate-50/40 dark:hover:bg-slate-800/10 transition-colors">
+                        <td className="p-3 text-center">
+                          {inRanking ? (
+                            <div className="inline-flex items-center space-x-1">
+                              {canModify && (
+                                <div className="flex flex-col">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleMoveSectorOrder(s.id, 'up')}
+                                    disabled={sIdx === 0}
+                                    title="Subir posição no ranking"
+                                    className="p-0.5 text-slate-400 hover:text-amber-500 disabled:opacity-20 cursor-pointer disabled:cursor-not-allowed"
+                                  >
+                                    <ChevronUp className="w-3 h-3" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleMoveSectorOrder(s.id, 'down')}
+                                    disabled={sIdx === setores.length - 1}
+                                    title="Descer posição no ranking"
+                                    className="p-0.5 text-slate-400 hover:text-amber-500 disabled:opacity-20 cursor-pointer disabled:cursor-not-allowed"
+                                  >
+                                    <ChevronDown className="w-3 h-3" />
+                                  </button>
+                                </div>
+                              )}
+                              <span className="inline-flex items-center justify-center min-w-7 h-6 px-1.5 rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400 font-black font-mono text-xs">
+                                {s.ordemRanking}º
+                              </span>
+                            </div>
+                          ) : (
+                            <span className="text-slate-400 dark:text-slate-600 font-mono text-[11px] italic" title="Este setor não concorre no ranking">
+                              —
+                            </span>
+                          )}
+                        </td>
+                        <td className="p-3">
+                          <div className="space-y-0.5">
+                            <div className="flex items-center space-x-2">
+                              <span className="font-extrabold text-slate-800 dark:text-slate-100">{s.nome}</span>
+                              {isSystemSector && (
+                                <span className="text-[9px] font-bold px-1.5 py-0.2 rounded-xs bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-400 border border-blue-200/60 dark:border-blue-900/60" title="Presente no cadastro oficial de setores do sistema">
+                                  Sistema
+                                </span>
+                              )}
+                            </div>
+                            {!inRanking && s.motivoExclusaoRanking && (
+                              <p className="text-[10px] text-slate-400 dark:text-slate-500 italic">
+                                Motivo: {s.motivoExclusaoRanking}
+                              </p>
+                            )}
+                          </div>
+                        </td>
+                        <td className="p-3 text-center">
+                          <button
+                            type="button"
+                            onClick={() => handleToggleRanking(s.id)}
+                            disabled={!canModify}
+                            title={inRanking ? "Clique para desativar este setor do ranking 5S" : "Clique para incluir este setor no ranking 5S"}
+                            className={`inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold transition-all ${
+                              !canModify ? 'opacity-80 cursor-not-allowed' : 'cursor-pointer hover:scale-102 active:scale-98'
+                            } ${
+                              inRanking
+                                ? 'bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-300 dark:bg-amber-950/50 dark:hover:bg-amber-900/60 dark:text-amber-300 dark:border-amber-700 shadow-2xs'
+                                : 'bg-slate-100 hover:bg-slate-200 text-slate-500 border border-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-400 dark:border-slate-700'
+                            }`}
+                          >
+                            {inRanking ? (
+                              <>
+                                <Trophy className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                                <span>Sim (No Ranking)</span>
+                              </>
+                            ) : (
+                              <>
+                                <XCircle className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                                <span>Não (Fora)</span>
+                              </>
+                            )}
                           </button>
                         </td>
-                      )}
-                    </tr>
-                  ))}
+                        <td className="p-3 text-center">
+                          <button
+                            type="button"
+                            onClick={() => handleToggleSectorActive(s.id)}
+                            disabled={!canModify}
+                            title="Clique para alternar o status ativo/inativo para auditorias"
+                            className={`px-2.5 py-0.5 rounded-sm text-[10px] font-bold transition-colors ${
+                              !canModify ? 'opacity-80 cursor-not-allowed' : 'cursor-pointer'
+                            } ${
+                              s.ativo 
+                                ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800' 
+                                : 'bg-rose-50 hover:bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:text-rose-400 border border-rose-200 dark:border-rose-800'
+                            }`}
+                          >
+                            {s.ativo ? 'Ativo' : 'Inativo'}
+                          </button>
+                        </td>
+                        {canModify && (
+                          <td className="p-3 text-right space-x-1.5">
+                            <button 
+                              onClick={() => handleOpenSectorModal(s)} 
+                              title="Editar Setor"
+                              className="p-1.5 text-slate-400 hover:text-blue-500 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                            >
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </button>
+                            <button 
+                              onClick={() => handleDeleteSector(s.id)} 
+                              title="Excluir Setor"
+                              className="p-1.5 text-slate-400 hover:text-rose-500 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </td>
+                        )}
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -825,8 +1122,8 @@ export const FiveSConfig: React.FC<FiveSConfigProps> = ({
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/40 backdrop-blur-xs">
           <form onSubmit={handleSaveSector} className="bg-white dark:bg-slate-900 rounded-xl max-w-sm w-full border border-slate-200 dark:border-slate-800 shadow-xl overflow-hidden animate-fade-in">
             <div className="bg-[#0B3A63] text-white p-4 flex justify-between items-center">
-              <h4 className="text-xs font-bold uppercase tracking-wider">{editingSector ? 'Editar Setor' : 'Cadastrar Setor'}</h4>
-              <button type="button" onClick={() => setIsSectorModalOpen(false)}><X className="w-4 h-4" /></button>
+              <h4 className="text-xs font-bold uppercase tracking-wider">{editingSector ? 'Editar Setor 5S' : 'Cadastrar Setor 5S'}</h4>
+              <button type="button" onClick={() => setIsSectorModalOpen(false)} className="hover:opacity-80 cursor-pointer"><X className="w-4 h-4" /></button>
             </div>
             <div className="p-5 space-y-4 text-xs text-left">
               <div className="space-y-1">
@@ -834,38 +1131,137 @@ export const FiveSConfig: React.FC<FiveSConfigProps> = ({
                 <input
                   type="text"
                   required
+                  list="system-sectors-datalist"
+                  placeholder="Ex: Corte, Costura, Expedição..."
                   value={sectorName}
                   onChange={(e) => setSectorName(e.target.value)}
-                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-2 text-slate-800 dark:text-slate-100"
+                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-2 text-slate-800 dark:text-slate-100 font-bold focus:outline-none focus:ring-2 focus:ring-amber-500"
                 />
+                <datalist id="system-sectors-datalist">
+                  {systemSectors.map((sysSec, idx) => (
+                    <option key={idx} value={sysSec} />
+                  ))}
+                </datalist>
+                <p className="text-[10px] text-slate-400">
+                  Dica: Você pode selecionar qualquer setor já existente na tabela do sistema ou digitar um novo.
+                </p>
+                {systemSectors && systemSectors.length > 0 && !editingSector && (
+                  <div className="space-y-1 pt-1">
+                    <span className="text-[9px] font-black text-slate-400 uppercase block">Setores da Tabela do Sistema:</span>
+                    <div className="flex flex-wrap gap-1 max-h-20 overflow-y-auto p-1 bg-slate-50 dark:bg-slate-800/40 rounded-md border border-slate-200/50 dark:border-slate-800">
+                      {systemSectors.map((sysSec, idx) => {
+                        const alreadyAdded = setores.some(s => s.nome.trim().toLowerCase() === sysSec.trim().toLowerCase());
+                        return (
+                          <button
+                            key={idx}
+                            type="button"
+                            onClick={() => setSectorName(sysSec)}
+                            className={`px-1.5 py-0.5 rounded text-[10px] font-bold transition-all cursor-pointer ${
+                              sectorName === sysSec
+                                ? 'bg-blue-600 text-white'
+                                : alreadyAdded
+                                ? 'bg-slate-200/60 dark:bg-slate-800 text-slate-500 opacity-60'
+                                : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:border-blue-400 border border-slate-200 dark:border-slate-700'
+                            }`}
+                          >
+                            {sysSec} {alreadyAdded ? '✓' : '+'}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
 
-              <div className="space-y-1">
-                <label className="block text-[10px] font-black text-slate-400 uppercase">Ordem no Ranking</label>
+              {/* Opção de participação no Ranking 5S */}
+              <div className="p-3 bg-amber-500/10 dark:bg-amber-500/5 border border-amber-300/60 dark:border-amber-700/60 rounded-lg space-y-1.5">
+                <div className="flex items-center space-x-2">
+                  <input
+                    type="checkbox"
+                    id="sect_ranking_modal"
+                    checked={sectorRankingEligible}
+                    onChange={(e) => setSectorRankingEligible(e.target.checked)}
+                    className="w-4 h-4 rounded-sm border-slate-300 accent-amber-500 cursor-pointer"
+                  />
+                  <label htmlFor="sect_ranking_modal" className="text-slate-800 dark:text-slate-200 font-bold flex items-center space-x-1.5 cursor-pointer">
+                    <Trophy className="w-3.5 h-3.5 text-amber-500" />
+                    <span>Concorrer no Ranking de Excelência 5S</span>
+                  </label>
+                </div>
+                <p className="text-[10px] text-slate-500 dark:text-slate-400 pl-6 leading-tight">
+                  {sectorRankingEligible
+                    ? 'Este setor entra no cálculo e na visualização do ranking oficial e concorre ao Troféu 5S.'
+                    : 'Setor excluído do ranking. Poderá ser auditado internamente, porém não aparecerá na disputa de pódio do Troféu 5S.'}
+                </p>
+
+                {!sectorRankingEligible && (
+                  <div className="space-y-1 pt-1.5 pl-6">
+                    <label className="block text-[9px] font-black text-slate-500 uppercase">
+                      Motivo da Exclusão do Ranking (Opcional)
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Ex: Setor administrativo / de apoio, sem maquinário..."
+                      value={sectorExclusionReason}
+                      onChange={(e) => setSectorExclusionReason(e.target.value)}
+                      className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-md p-1.5 text-xs text-slate-800 dark:text-slate-100 focus:outline-hidden focus:ring-1 focus:ring-amber-500"
+                    />
+                  </div>
+                )}
+              </div>
+
+              <div className={`space-y-1 transition-opacity ${!sectorRankingEligible ? 'opacity-50' : ''}`}>
+                <label className="block text-[10px] font-black text-slate-400 uppercase">
+                  Ordem de Exibição no Ranking {!sectorRankingEligible && '(Inativo - Fora do Ranking)'}
+                </label>
                 <input
                   type="number"
-                  required
+                  required={sectorRankingEligible}
+                  disabled={!sectorRankingEligible}
                   min={1}
                   value={sectorOrder}
                   onChange={(e) => setSectorOrder(Number(e.target.value))}
-                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-2 text-slate-800 dark:text-slate-100 font-mono"
+                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-2 text-slate-800 dark:text-slate-100 font-mono disabled:bg-slate-100 dark:disabled:bg-slate-850 disabled:cursor-not-allowed"
                 />
               </div>
 
-              <div className="flex items-center space-x-2 pt-2">
-                <input
-                  type="checkbox"
-                  id="sect_active"
-                  checked={sectorActive}
-                  onChange={(e) => setSectorActive(e.target.checked)}
-                  className="w-4 h-4 rounded-sm border-slate-300 accent-amber-500"
-                />
-                <label htmlFor="sect_active" className="text-slate-700 dark:text-slate-300 font-semibold">Setor Ativo (Elegível para auditorias)</label>
+              <div className="space-y-2 pt-1 border-t border-slate-100 dark:border-slate-800">
+                <div className="flex items-center space-x-2">
+                  <input
+                    type="checkbox"
+                    id="sect_active_modal"
+                    checked={sectorActive}
+                    onChange={(e) => setSectorActive(e.target.checked)}
+                    className="w-4 h-4 rounded-sm border-slate-300 accent-emerald-500 cursor-pointer"
+                  />
+                  <label htmlFor="sect_active_modal" className="text-slate-700 dark:text-slate-300 font-semibold cursor-pointer">
+                    Setor Ativo (Habilitado para auditorias 5S)
+                  </label>
+                </div>
+
+                {!editingSector && (
+                  <div className="flex items-center space-x-2">
+                    <input
+                      type="checkbox"
+                      id="sect_save_system"
+                      checked={sectorSaveToSystem}
+                      onChange={(e) => setSectorSaveToSystem(e.target.checked)}
+                      className="w-4 h-4 rounded-sm border-slate-300 accent-blue-600 cursor-pointer"
+                    />
+                    <label htmlFor="sect_save_system" className="text-slate-600 dark:text-slate-400 font-medium text-[11px] cursor-pointer">
+                      Cadastrar também na tabela principal de setores do sistema
+                    </label>
+                  </div>
+                )}
               </div>
             </div>
-            <div className="bg-slate-50 dark:bg-slate-950 p-4 flex justify-end space-x-2">
-              <button type="button" onClick={() => setIsSectorModalOpen(false)} className="px-3 py-1.5 border border-slate-200 dark:border-slate-800 text-slate-500 rounded-lg hover:bg-slate-100">Cancelar</button>
-              <button type="submit" className="bg-amber-500 text-slate-950 px-3 py-1.5 rounded-lg font-bold">Salvar</button>
+            <div className="bg-slate-50 dark:bg-slate-950 p-4 flex justify-end space-x-2 border-t border-slate-100 dark:border-slate-800">
+              <button type="button" onClick={() => setIsSectorModalOpen(false)} className="px-3 py-1.5 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer font-medium">
+                Cancelar
+              </button>
+              <button type="submit" className="bg-amber-500 hover:bg-amber-600 text-slate-950 px-4 py-1.5 rounded-lg font-bold shadow-xs cursor-pointer">
+                Salvar Setor
+              </button>
             </div>
           </form>
         </div>
