@@ -162,6 +162,7 @@ export const Auditorias5SComponent: React.FC<Auditorias5SProps> = ({
     const currentList = [...setores];
 
     systemSectors.forEach((sysSec) => {
+      if (!sysSec) return;
       const exists = currentList.some(
         s => s.nome.trim().toLowerCase() === sysSec.trim().toLowerCase()
       );
@@ -169,7 +170,7 @@ export const Auditorias5SComponent: React.FC<Auditorias5SProps> = ({
         hasChanges = true;
         currentList.push({
           id: `setor-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-          nome: sysSec,
+          nome: sysSec.trim(),
           ativo: true,
           ordemRanking: currentList.length + 1,
           participaRanking: true
@@ -180,7 +181,30 @@ export const Auditorias5SComponent: React.FC<Auditorias5SProps> = ({
     if (hasChanges) {
       handleUpdateSetores(currentList);
     }
-  }, [systemSectors]);
+  }, [systemSectors, setores]);
+
+  // Lista unificada garantindo que todos os setores cadastrados no sistema estejam disponíveis
+  const mergedSetores = React.useMemo(() => {
+    const list = [...setores];
+    if (Array.isArray(systemSectors)) {
+      systemSectors.forEach((sysSec) => {
+        if (!sysSec) return;
+        const exists = list.some(
+          s => s.nome.trim().toLowerCase() === sysSec.trim().toLowerCase()
+        );
+        if (!exists) {
+          list.push({
+            id: `setor-sys-${sysSec.trim().toLowerCase().replace(/[^a-z0-9]/g, '-')}`,
+            nome: sysSec.trim(),
+            ativo: true,
+            ordemRanking: list.length + 1,
+            participaRanking: false
+          });
+        }
+      });
+    }
+    return list;
+  }, [setores, systemSectors]);
 
   // Wrappers to update and persist collections locally & trigger sync
   const handleUpdateSetores = (data: typeof setores) => {
@@ -322,7 +346,7 @@ export const Auditorias5SComponent: React.FC<Auditorias5SProps> = ({
           {menu === 'indicadores' && (
             <FiveSDashboard
               auditorias={auditorias}
-              setores={setores}
+              setores={mergedSetores}
               sensos={sensos}
               requisitos={requisitos}
               classificacoes={classificacoes}
@@ -335,7 +359,7 @@ export const Auditorias5SComponent: React.FC<Auditorias5SProps> = ({
           {menu === 'auditorias' && (
             <FiveSAudits
               auditorias={auditorias}
-              setores={setores}
+              setores={mergedSetores}
               sensos={sensos}
               requisitos={requisitos}
               classificacoes={classificacoes}
@@ -363,7 +387,7 @@ export const Auditorias5SComponent: React.FC<Auditorias5SProps> = ({
               planos={planos5S}
               itens={itens}
               auditorias={auditorias}
-              setores={setores}
+              setores={mergedSetores}
               requisitos={requisitos}
               onUpdatePlanos={handleUpdatePlanos}
               onAddLog={onAddLog}
@@ -374,7 +398,7 @@ export const Auditorias5SComponent: React.FC<Auditorias5SProps> = ({
 
           {menu === 'configuracao' && canViewConfigTab && (
             <FiveSConfig
-              setores={setores}
+              setores={mergedSetores}
               sensos={sensos}
               requisitos={requisitos}
               classificacoes={classificacoes}

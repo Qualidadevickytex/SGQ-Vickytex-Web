@@ -237,7 +237,10 @@ export const FiveSActionPlans: React.FC<FiveSActionPlansProps> = ({
                         sectorName.toLowerCase().includes(searchTerm.toLowerCase());
     
     const matchStatus = filterStatus === 'TODOS' || p.status === filterStatus;
-    const matchSector = filterSector === 'TODOS' || audit.setorId === filterSector;
+    const matchSector = filterSector === 'TODOS' || 
+                        audit.setorId === filterSector ||
+                        audit.setor === filterSector ||
+                        (setores.find(s => s.id === filterSector)?.nome.toLowerCase() === (audit.setor || '').toLowerCase());
     const matchMySector = !filterOnlyMySectors || isPlanSectorTiedToUser(p);
 
     return matchSearch && matchStatus && matchSector && matchMySector;
@@ -249,7 +252,10 @@ export const FiveSActionPlans: React.FC<FiveSActionPlansProps> = ({
     if (!audit) return false;
 
     const matchNC = it.avaliacao === 'Não Atende' || it.avaliacao === 'Atende Parcialmente';
-    const matchSector = filterSector === 'TODOS' || audit.setorId === filterSector;
+    const matchSector = filterSector === 'TODOS' || 
+                        audit.setorId === filterSector ||
+                        audit.setor === filterSector ||
+                        (setores.find(s => s.id === filterSector)?.nome.toLowerCase() === (audit.setor || '').toLowerCase());
     
     const req = requisitos.find(r => r.id === it.requisitoId);
     const matchSearch = req?.codigo.toLowerCase().includes(searchTerm.toLowerCase()) || 
@@ -265,7 +271,10 @@ export const FiveSActionPlans: React.FC<FiveSActionPlansProps> = ({
     if (!audit) return false;
 
     const matchReinc = (it.reincidenciaCount || 0) > 0;
-    const matchSector = filterSector === 'TODOS' || audit.setorId === filterSector;
+    const matchSector = filterSector === 'TODOS' || 
+                        audit.setorId === filterSector ||
+                        audit.setor === filterSector ||
+                        (setores.find(s => s.id === filterSector)?.nome.toLowerCase() === (audit.setor || '').toLowerCase());
 
     const req = requisitos.find(r => r.id === it.requisitoId);
     const matchSearch = req?.codigo.toLowerCase().includes(searchTerm.toLowerCase()) || 
@@ -328,7 +337,7 @@ export const FiveSActionPlans: React.FC<FiveSActionPlansProps> = ({
           <select
             value={filterSector}
             onChange={(e) => setFilterSector(e.target.value)}
-            className="bg-slate-50 dark:bg-slate-800 text-[10px] border border-slate-200 dark:border-slate-700 rounded-lg p-2 font-bold"
+            className="bg-slate-50 dark:bg-slate-800 text-[10px] border border-slate-200 dark:border-slate-700 rounded-lg p-2 font-bold cursor-pointer"
           >
             <option value="TODOS">Todos Setores</option>
             {setores.map(s => (

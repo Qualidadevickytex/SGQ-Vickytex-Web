@@ -19,9 +19,14 @@ export const INITIAL_SETORES: Setor5S[] = [
   { id: "setor-3", nome: "Corte", ativo: true, ordemRanking: 3, participaRanking: true },
   { id: "setor-4", nome: "Separação", ativo: true, ordemRanking: 4, participaRanking: true },
   { id: "setor-5", nome: "Costura", ativo: true, ordemRanking: 5, participaRanking: true },
-  { id: "setor-6", nome: "Embalagem", ativo: true, ordemRanking: 6, participaRanking: true },
-  { id: "setor-7", nome: "Expedição", ativo: true, ordemRanking: 7, participaRanking: true },
-  { id: "setor-8", nome: "E-Commerce", ativo: true, ordemRanking: 8, participaRanking: true }
+  { id: "setor-6", nome: "Embalagem/Expedição", ativo: true, ordemRanking: 6, participaRanking: true },
+  { id: "setor-8", nome: "E-Commerce", ativo: true, ordemRanking: 7, participaRanking: true },
+  { id: "setor-1790253417525-ku26", nome: "Qualidade", ativo: true, ordemRanking: 8, participaRanking: false, consolidaNoSetorId: "setor-1" },
+  { id: "setor-1790253417525-qu40", nome: "Compras", ativo: true, ordemRanking: 9, participaRanking: false, consolidaNoSetorId: "setor-1" },
+  { id: "setor-1790253417525-16go", nome: "PPCP", ativo: true, ordemRanking: 10, participaRanking: false, consolidaNoSetorId: "setor-1" },
+  { id: "setor-1790253417525-cgm6", nome: "Engenharia", ativo: true, ordemRanking: 11, participaRanking: false, consolidaNoSetorId: "setor-1" },
+  { id: "setor-1790253417525-gn4d", nome: "Comercial", ativo: true, ordemRanking: 12, participaRanking: false, consolidaNoSetorId: "setor-1" },
+  { id: "setor-1790253417525-7uwv", nome: "Recursos Humanos", ativo: true, ordemRanking: 13, participaRanking: false, consolidaNoSetorId: "setor-1" }
 ];
 
 export const INITIAL_SENSOS: Senso5S[] = [

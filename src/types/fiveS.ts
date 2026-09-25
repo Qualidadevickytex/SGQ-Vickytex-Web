@@ -12,6 +12,7 @@ export interface Setor5S {
   ordemRanking: number;
   participaRanking?: boolean; // Se o setor concorre no ranking de excelência 5S (padrão true)
   motivoExclusaoRanking?: string; // Justificativa opcional para não estar no ranking
+  consolidaNoSetorId?: string; // ID do setor pai no qual as notas são consolidadas (ex.: 'setor-1' Administrativo)
 }
 
 export interface Senso5S {

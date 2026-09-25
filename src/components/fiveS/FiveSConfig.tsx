@@ -72,6 +72,7 @@ export const FiveSConfig: React.FC<FiveSConfigProps> = ({
   const [sectorOrder, setSectorOrder] = useState(1);
   const [sectorRankingEligible, setSectorRankingEligible] = useState(true);
   const [sectorExclusionReason, setSectorExclusionReason] = useState('');
+  const [sectorConsolidaNoSetorId, setSectorConsolidaNoSetorId] = useState('setor-1');
   const [sectorSaveToSystem, setSectorSaveToSystem] = useState(false);
 
   // Requirement form state
@@ -142,6 +143,7 @@ export const FiveSConfig: React.FC<FiveSConfigProps> = ({
       setSectorOrder(sector.ordemRanking);
       setSectorRankingEligible(sector.participaRanking !== false);
       setSectorExclusionReason(sector.motivoExclusaoRanking || '');
+      setSectorConsolidaNoSetorId(sector.consolidaNoSetorId || (sector.participaRanking === false ? 'setor-1' : ''));
       setSectorSaveToSystem(false);
     } else {
       setEditingSector(null);
@@ -150,6 +152,7 @@ export const FiveSConfig: React.FC<FiveSConfigProps> = ({
       setSectorOrder(setores.length + 1);
       setSectorRankingEligible(true);
       setSectorExclusionReason('');
+      setSectorConsolidaNoSetorId('setor-1');
       setSectorSaveToSystem(true);
     }
     setIsSectorModalOpen(true);
@@ -160,7 +163,12 @@ export const FiveSConfig: React.FC<FiveSConfigProps> = ({
     const updated = setores.map(s => {
       if (s.id === sectorId) {
         const current = s.participaRanking !== false;
-        return { ...s, participaRanking: !current };
+        const newParticipa = !current;
+        return { 
+          ...s, 
+          participaRanking: newParticipa,
+          consolidaNoSetorId: !newParticipa ? (s.consolidaNoSetorId || 'setor-1') : undefined
+        };
       }
       return s;
     });
@@ -251,7 +259,8 @@ export const FiveSConfig: React.FC<FiveSConfigProps> = ({
             ativo: sectorActive, 
             ordemRanking: Number(sectorOrder),
             participaRanking: sectorRankingEligible,
-            motivoExclusaoRanking: !sectorRankingEligible ? sectorExclusionReason.trim() : undefined
+            motivoExclusaoRanking: !sectorRankingEligible ? sectorExclusionReason.trim() : undefined,
+            consolidaNoSetorId: !sectorRankingEligible ? (sectorConsolidaNoSetorId || undefined) : undefined
           }
         : s
       );
@@ -262,7 +271,8 @@ export const FiveSConfig: React.FC<FiveSConfigProps> = ({
         ativo: sectorActive,
         ordemRanking: Number(sectorOrder),
         participaRanking: sectorRankingEligible,
-        motivoExclusaoRanking: !sectorRankingEligible ? sectorExclusionReason.trim() : undefined
+        motivoExclusaoRanking: !sectorRankingEligible ? sectorExclusionReason.trim() : undefined,
+        consolidaNoSetorId: !sectorRankingEligible ? (sectorConsolidaNoSetorId || undefined) : undefined
       });
 
       // Se solicitado, sincroniza também de volta com a tabela de setores do sistema
@@ -670,11 +680,16 @@ export const FiveSConfig: React.FC<FiveSConfigProps> = ({
                         </td>
                         <td className="p-3">
                           <div className="space-y-0.5">
-                            <div className="flex items-center space-x-2">
+                            <div className="flex items-center space-x-2 flex-wrap gap-y-1">
                               <span className="font-extrabold text-slate-800 dark:text-slate-100">{s.nome}</span>
                               {isSystemSector && (
                                 <span className="text-[9px] font-bold px-1.5 py-0.2 rounded-xs bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-400 border border-blue-200/60 dark:border-blue-900/60" title="Presente no cadastro oficial de setores do sistema">
                                   Sistema
+                                </span>
+                              )}
+                              {!inRanking && s.consolidaNoSetorId && (
+                                <span className="text-[9px] font-bold px-1.5 py-0.2 rounded-xs bg-indigo-50 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300 border border-indigo-200/60" title="As notas deste setor são consolidadas na pontuação final do setor pai">
+                                  Consolida no {setores.find(p => p.id === s.consolidaNoSetorId)?.nome || 'Administrativo'}
                                 </span>
                               )}
                             </div>
@@ -1195,17 +1210,43 @@ export const FiveSConfig: React.FC<FiveSConfigProps> = ({
                 </p>
 
                 {!sectorRankingEligible && (
-                  <div className="space-y-1 pt-1.5 pl-6">
-                    <label className="block text-[9px] font-black text-slate-500 uppercase">
-                      Motivo da Exclusão do Ranking (Opcional)
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="Ex: Setor administrativo / de apoio, sem maquinário..."
-                      value={sectorExclusionReason}
-                      onChange={(e) => setSectorExclusionReason(e.target.value)}
-                      className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-md p-1.5 text-xs text-slate-800 dark:text-slate-100 focus:outline-hidden focus:ring-1 focus:ring-amber-500"
-                    />
+                  <div className="space-y-2.5 pt-1.5 pl-6 border-t border-amber-200/50 dark:border-amber-800/40">
+                    <div className="space-y-1">
+                      <label className="block text-[9px] font-black text-indigo-700 dark:text-indigo-400 uppercase">
+                        Consolidar Nota no Setor Pai (Ranking 5S)
+                      </label>
+                      <select
+                        value={sectorConsolidaNoSetorId}
+                        onChange={(e) => setSectorConsolidaNoSetorId(e.target.value)}
+                        className="w-full bg-white dark:bg-slate-900 border border-indigo-200 dark:border-indigo-800 rounded-md p-1.5 text-xs text-slate-800 dark:text-slate-100 font-semibold focus:outline-hidden focus:ring-1 focus:ring-indigo-500"
+                      >
+                        <option value="">Não consolidar (avaliação isolada sem pontuar no ranking)</option>
+                        {setores
+                          .filter(s => s.participaRanking !== false && s.id !== (editingSector ? editingSector.id : ''))
+                          .map(s => (
+                            <option key={s.id} value={s.id}>
+                              Consolidar no {s.nome}
+                            </option>
+                          ))
+                        }
+                      </select>
+                      <p className="text-[9.5px] text-slate-500 dark:text-slate-400 leading-tight">
+                        As notas das auditorias deste setor serão contabilizadas e farão média na nota final do setor selecionado (ex: Administrativo).
+                      </p>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="block text-[9px] font-black text-slate-500 uppercase">
+                        Motivo da Exclusão do Ranking (Opcional)
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="Ex: Setor administrativo / de apoio, sem maquinário..."
+                        value={sectorExclusionReason}
+                        onChange={(e) => setSectorExclusionReason(e.target.value)}
+                        className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-md p-1.5 text-xs text-slate-800 dark:text-slate-100 focus:outline-hidden focus:ring-1 focus:ring-amber-500"
+                      />
+                    </div>
                   </div>
                 )}
               </div>

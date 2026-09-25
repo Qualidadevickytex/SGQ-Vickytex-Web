@@ -131,7 +131,55 @@ export const FiveSDashboard: React.FC<FiveSDashboardProps> = ({
     return setores
       .filter(s => s.ativo && s.participaRanking !== false)
       .map(sector => {
-        const sectorAudits = finalizedAudits.filter(a => a.setorId === sector.id);
+        // Verifica se este setor consolida subsetores de apoio (ex: Administrativo consolida RH, Compras, PPCP, Comercial, etc.)
+        const isConsolidatedParent = sector.nome.toLowerCase().includes('administrativ') || 
+          setores.some(sub => sub.consolidaNoSetorId === sector.id);
+
+        if (isConsolidatedParent) {
+          // Achar todos os subsetores vinculados a este setor pai
+          const linkedSubsectors = setores.filter(s => 
+            s.id !== sector.id && (
+              s.consolidaNoSetorId === sector.id || 
+              (sector.nome.toLowerCase().includes('administrativ') && s.participaRanking === false)
+            )
+          );
+          
+          const targetSectorIds = [sector.id, ...linkedSubsectors.map(s => s.id)];
+          const subSectorScores: { sectorName: string; score: number; date: string }[] = [];
+
+          targetSectorIds.forEach(secId => {
+            const secAudits = finalizedAudits.filter(a => 
+              a.setorId === secId || 
+              (setores.find(s => s.id === secId)?.nome.toLowerCase() === (a.setor || '').toLowerCase())
+            );
+            if (secAudits.length > 0) {
+              const sorted = [...secAudits].sort((a,b) => b.dataAuditoria.localeCompare(a.dataAuditoria));
+              const secName = setores.find(s => s.id === secId)?.nome || sorted[0].setor;
+              subSectorScores.push({
+                sectorName: secName,
+                score: sorted[0].mediaGeral,
+                date: sorted[0].dataAuditoria
+              });
+            }
+          });
+
+          if (subSectorScores.length > 0) {
+            const avgScore = Number((subSectorScores.reduce((acc, curr) => acc + curr.score, 0) / subSectorScores.length).toFixed(1));
+            const latestDate = [...subSectorScores].sort((a,b) => b.date.localeCompare(a.date))[0].date;
+            return {
+              id: sector.id,
+              nome: sector.nome,
+              hasAudit: true,
+              score: avgScore,
+              date: latestDate,
+              isConsolidated: true,
+              subSectorsCount: subSectorScores.length,
+              subSectorsDetails: subSectorScores
+            };
+          }
+        }
+
+        const sectorAudits = finalizedAudits.filter(a => a.setorId === sector.id || (sector.nome.toLowerCase() === (a.setor || '').toLowerCase()));
         const hasAudit = sectorAudits.length > 0;
         let score = 0;
         let date = 'N/A';
@@ -148,7 +196,10 @@ export const FiveSDashboard: React.FC<FiveSDashboardProps> = ({
           nome: sector.nome,
           hasAudit,
           score,
-          date
+          date,
+          isConsolidated: false,
+          subSectorsCount: 0,
+          subSectorsDetails: []
         };
       })
       .sort((a, b) => {
@@ -218,9 +269,22 @@ export const FiveSDashboard: React.FC<FiveSDashboardProps> = ({
         dataPoint['Média Geral'] = null;
       }
 
-      // B. Individual Active Sectors Averages
-      setores.filter(s => s.ativo).forEach(sector => {
-        const sectorMonthly = monthlyAudits.filter(a => a.setorId === sector.id);
+      // B. Individual Active Sectors Averages (apenas setores no ranking)
+      setores.filter(s => s.ativo && s.participaRanking !== false).forEach(sector => {
+        const isConsolidated = sector.nome.toLowerCase().includes('administrativ') || 
+                               setores.some(sub => sub.consolidaNoSetorId === sector.id);
+
+        let sectorMonthly: typeof monthlyAudits;
+        if (isConsolidated) {
+          const targetIds = [
+            sector.id, 
+            ...setores.filter(s => s.consolidaNoSetorId === sector.id || (sector.nome.toLowerCase().includes('administrativ') && s.participaRanking === false)).map(s => s.id)
+          ];
+          sectorMonthly = monthlyAudits.filter(a => targetIds.includes(a.setorId) || targetIds.some(tId => setores.find(s => s.id === tId)?.nome.toLowerCase() === (a.setor || '').toLowerCase()));
+        } else {
+          sectorMonthly = monthlyAudits.filter(a => a.setorId === sector.id || sector.nome.toLowerCase() === (a.setor || '').toLowerCase());
+        }
+
         if (sectorMonthly.length > 0) {
           const sum = sectorMonthly.reduce((acc, a) => acc + a.mediaGeral, 0);
           dataPoint[sector.nome] = Number((sum / sectorMonthly.length).toFixed(1));
@@ -259,9 +323,21 @@ export const FiveSDashboard: React.FC<FiveSDashboardProps> = ({
       S5: number;
     }[] = [];
 
-    // Grouping sectors and months
-    setores.filter(s => s.ativo).forEach(sector => {
-      const sectorAudits = finalizedAudits.filter(a => a.setorId === sector.id);
+    // Grouping sectors and months (apenas setores no ranking)
+    setores.filter(s => s.ativo && s.participaRanking !== false).forEach(sector => {
+      const isConsolidated = sector.nome.toLowerCase().includes('administrativ') || 
+                             setores.some(sub => sub.consolidaNoSetorId === sector.id);
+
+      let sectorAudits: typeof finalizedAudits;
+      if (isConsolidated) {
+        const targetIds = [
+          sector.id, 
+          ...setores.filter(s => s.consolidaNoSetorId === sector.id || (sector.nome.toLowerCase().includes('administrativ') && s.participaRanking === false)).map(s => s.id)
+        ];
+        sectorAudits = finalizedAudits.filter(a => targetIds.includes(a.setorId) || targetIds.some(tId => setores.find(s => s.id === tId)?.nome.toLowerCase() === (a.setor || '').toLowerCase()));
+      } else {
+        sectorAudits = finalizedAudits.filter(a => a.setorId === sector.id || sector.nome.toLowerCase() === (a.setor || '').toLowerCase());
+      }
       
       // Get unique months for this sector's audits
       const sectorMonths = new Set<string>();
@@ -475,8 +551,25 @@ export const FiveSDashboard: React.FC<FiveSDashboardProps> = ({
                       {idx + 1}
                     </span>
                     <div>
-                      <p className="font-extrabold text-slate-800 dark:text-slate-100">{item.nome}</p>
-                      <p className="text-[10px] text-slate-400">Última auditoria: <span className="font-semibold font-mono">{item.date}</span></p>
+                      <div className="flex items-center space-x-1.5 flex-wrap">
+                        <p className="font-extrabold text-slate-800 dark:text-slate-100">{item.nome}</p>
+                        {item.isConsolidated && (
+                          <span 
+                            className="text-[9px] font-bold px-1.5 py-0.2 rounded-xs bg-indigo-50 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300 border border-indigo-200/60"
+                            title={`Nota calculada pela média consolidada de ${item.subSectorsCount} áreas auditadas`}
+                          >
+                            Consolidado ({item.subSectorsCount} áreas)
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[10px] text-slate-400">
+                        Última auditoria: <span className="font-semibold font-mono">{item.date}</span>
+                        {item.isConsolidated && item.subSectorsDetails && item.subSectorsDetails.length > 0 && (
+                          <span className="block text-[9px] text-slate-500 dark:text-slate-400 font-medium mt-0.5">
+                            Áreas contabilizadas: {item.subSectorsDetails.map(d => `${d.sectorName} (${d.score}%)`).join(', ')}
+                          </span>
+                        )}
+                      </p>
                     </div>
                   </div>
 
@@ -580,7 +673,7 @@ export const FiveSDashboard: React.FC<FiveSDashboardProps> = ({
                   const val = e.target.value as any;
                   setEvolutionMode(val);
                   if (val === 'setor' && selectedSectorEvolution === 'todos') {
-                    const firstSec = setores.find(s => s.ativo);
+                    const firstSec = setores.find(s => s.ativo && s.participaRanking !== false);
                     if (firstSec) setSelectedSectorEvolution(firstSec.id);
                   }
                 }}
@@ -597,7 +690,7 @@ export const FiveSDashboard: React.FC<FiveSDashboardProps> = ({
                   onChange={(e) => setSelectedSectorEvolution(e.target.value)}
                   className="p-1 px-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-md font-bold text-slate-700 dark:text-slate-200 cursor-pointer"
                 >
-                  {setores.filter(s => s.ativo).map(s => (
+                  {setores.filter(s => s.ativo && s.participaRanking !== false).map(s => (
                     <option key={s.id} value={s.id}>{s.nome}</option>
                   ))}
                 </select>
@@ -646,7 +739,7 @@ export const FiveSDashboard: React.FC<FiveSDashboardProps> = ({
                   })()}
 
                   {evolutionMode === 'comparativo' && 
-                    setores.filter(s => s.ativo).map((sector, idx) => (
+                    setores.filter(s => s.ativo && s.participaRanking !== false).map((sector, idx) => (
                       <Line 
                         key={sector.id}
                         type="monotone" 

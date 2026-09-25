@@ -144,9 +144,8 @@ export const FiveSAudits: React.FC<FiveSAuditsProps> = ({
       setSelectedCycleId(activeCycle.id);
     }
     if (setores.length > 0) {
-      const activeSects = setores.filter(s => s.ativo);
-      if (activeSects.length > 0) {
-        setSelectedSectorId(activeSects[0].id);
+      if (!selectedSectorId) {
+        setSelectedSectorId(setores[0].id);
       }
     }
   }, [ciclos, setores]);
@@ -523,7 +522,10 @@ export const FiveSAudits: React.FC<FiveSAuditsProps> = ({
   const filteredAudits = normalizedAudits.filter(a => {
     const matchSearch = a.codigo.toLowerCase().includes(searchTerm.toLowerCase()) || 
                         a.auditor.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchSector = selectedSector === 'TODOS' || a.setorId === selectedSector;
+    const matchSector = selectedSector === 'TODOS' || 
+                        a.setorId === selectedSector ||
+                        a.setor === selectedSector ||
+                        (setores.find(s => s.id === selectedSector)?.nome.toLowerCase() === (a.setor || '').toLowerCase());
     const matchCycle = selectedCycle === 'TODOS' || a.cicloId === selectedCycle;
     const matchStatus = activeTab === 'andamento' ? a.status === 'Rascunho' : a.status === 'Finalizada';
 
@@ -805,12 +807,28 @@ export const FiveSAudits: React.FC<FiveSAuditsProps> = ({
                 onChange={(e) => setSelectedSectorId(e.target.value)}
                 className="w-full mt-1.5 bg-white dark:bg-slate-800 text-xs font-bold border border-slate-200 dark:border-slate-700 rounded-lg p-2"
               >
-                {setores.filter(s => s.ativo).map(s => (
-                  <option key={s.id} value={s.id}>
-                    {s.nome}{s.participaRanking === false ? ' (Fora do Ranking)' : ''}
-                  </option>
-                ))}
+                {setores.map(s => {
+                  const parent = s.consolidaNoSetorId ? setores.find(p => p.id === s.consolidaNoSetorId) : null;
+                  return (
+                    <option key={s.id} value={s.id}>
+                      {s.nome} {s.participaRanking === false && parent ? `(Consolida no ${parent.nome})` : ''}
+                    </option>
+                  );
+                })}
               </select>
+              {(() => {
+                const currentSec = setores.find(s => s.id === selectedSectorId);
+                if (currentSec?.participaRanking === false && currentSec?.consolidaNoSetorId) {
+                  const parentName = setores.find(p => p.id === currentSec.consolidaNoSetorId)?.nome || 'Administrativo';
+                  return (
+                    <div className="mt-1.5 p-1.5 rounded-md bg-indigo-50/80 dark:bg-indigo-950/30 border border-indigo-200/60 dark:border-indigo-800/60 text-[10px] text-indigo-800 dark:text-indigo-300 font-medium leading-tight flex items-start space-x-1">
+                      <span className="shrink-0">ℹ️</span>
+                      <span>Área de apoio: checklist e nota próprios, consolidando a média no <strong>{parentName}</strong> para o Ranking 5S.</span>
+                    </div>
+                  );
+                }
+                return null;
+              })()}
             </div>
 
             <div>
@@ -1035,12 +1053,13 @@ export const FiveSAudits: React.FC<FiveSAuditsProps> = ({
               <select
                 value={selectedSector}
                 onChange={(e) => setSelectedSector(e.target.value)}
-                className="bg-slate-50 dark:bg-slate-800 text-[10px] border border-slate-200 dark:border-slate-700 rounded-lg p-2 font-bold"
+                className="bg-slate-50 dark:bg-slate-800 text-[10px] border border-slate-200 dark:border-slate-700 rounded-lg p-2 font-bold cursor-pointer"
+                title="Filtrar por Setor Auditado"
               >
                 <option value="TODOS">Todos Setores</option>
                 {setores.map(s => (
                   <option key={s.id} value={s.id}>
-                    {s.nome}{s.participaRanking === false ? ' (Fora do Ranking)' : ''}
+                    {s.nome}
                   </option>
                 ))}
               </select>
@@ -1097,6 +1116,18 @@ export const FiveSAudits: React.FC<FiveSAuditsProps> = ({
                               <p className="font-extrabold text-slate-800 dark:text-slate-200">
                                 {setores.find(s => s.id === item.setorId)?.nome || item.setor}
                               </p>
+                              {(() => {
+                                const auditSector = setores.find(s => s.id === item.setorId || s.nome.toLowerCase() === (item.setor || '').toLowerCase());
+                                if (auditSector?.participaRanking === false && auditSector?.consolidaNoSetorId) {
+                                  const parentName = setores.find(p => p.id === auditSector.consolidaNoSetorId)?.nome || 'Administrativo';
+                                  return (
+                                    <span className="text-[9px] font-bold px-1.5 py-0.2 rounded-xs bg-indigo-50 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300 border border-indigo-200/60" title={`As notas desta auditoria consolidam na nota final do ${parentName} no ranking`}>
+                                      Consolida no {parentName}
+                                    </span>
+                                  );
+                                }
+                                return null;
+                              })()}
                               {photoCount > 0 && (
                                 <button
                                   type="button"
