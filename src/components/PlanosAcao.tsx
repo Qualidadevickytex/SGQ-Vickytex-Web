@@ -13,6 +13,7 @@ import {
   Search, 
   HelpCircle, 
   AlertCircle, 
+  AlertTriangle,
   CheckCircle2, 
   Clock, 
   DollarSign, 
@@ -36,9 +37,10 @@ import {
   ListPlus,
   Layers,
   PlusCircle,
-  Target
+  Target,
+  History
 } from 'lucide-react';
-import { Documento, Auditoria, NaoConformidade, SectorType, PlanoAcao, ItemAcao5W2H } from '../types';
+import { Documento, Auditoria, NaoConformidade, SectorType, PlanoAcao, ItemAcao5W2H, HistoricoPrazoAcao } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { useSectors } from '../hooks/useSectors';
 import { SECTORS, getSectors, PersonalizacaoGeral } from '../utils/mockData';
@@ -148,6 +150,8 @@ export const PlanosAcaoComponent: React.FC<PlanosAcaoProps> = ({
   const [actionItemModalError, setActionItemModalError] = useState<string | null>(null);
   const [actionItemTargetPlanoId, setActionItemTargetPlanoId] = useState<string | null>(null);
   const [editingActionItem, setEditingActionItem] = useState<ItemAcao5W2H | null>(null);
+  const [justificativaPrazo, setJustificativaPrazo] = useState('');
+  const [viewingHistoryAction, setViewingHistoryAction] = useState<ItemAcao5W2H | null>(null);
   const [actionItemForm, setActionItemForm] = useState({
     oQue: '',
     porQue: '',
@@ -205,7 +209,37 @@ export const PlanosAcaoComponent: React.FC<PlanosAcaoProps> = ({
     const totalCost = actions.length > 0 
       ? actions.reduce((acc, a) => acc + (Number(a.quantoCusta) || 0), 0)
       : (plano.quantoCusta || 0);
-    const prazoFinal = plano.prazoGeral || (actions.length > 0 ? [...actions].map(a => a.quando).sort().reverse()[0] : (plano.quando || plano.dataCriacao));
+
+    // Obter o prazo limite final considerando as ações do plano
+    const parseDateValue = (d?: string): number => {
+      if (!d) return 0;
+      const clean = d.includes('T') ? d.split('T')[0] : d;
+      if (clean.includes('/')) {
+        const parts = clean.split('/');
+        if (parts.length === 3) {
+          return new Date(`${parts[2]}-${parts[1]}-${parts[0]}`).getTime() || 0;
+        }
+      }
+      return new Date(clean).getTime() || 0;
+    };
+
+    let prazoFinal = plano.prazoGeral || plano.quando || plano.dataCriacao;
+    if (actions.length > 0) {
+      // Ordenar ações pela data de prazo mais distante
+      const validActionDates = actions
+        .filter(a => a.quando)
+        .sort((a, b) => parseDateValue(b.quando) - parseDateValue(a.quando));
+      
+      if (validActionDates.length > 0) {
+        const maxActionDate = validActionDates[0].quando;
+        // Se a capa não tiver prazoGeral explícito maior, o prazo limite é a maior data entre as ações
+        if (!plano.prazoGeral || parseDateValue(maxActionDate) >= parseDateValue(plano.prazoGeral)) {
+          prazoFinal = maxActionDate;
+        } else {
+          prazoFinal = plano.prazoGeral;
+        }
+      }
+    }
     
     // Status consolidado da Capa
     let statusConsolidado = plano.status;
@@ -263,7 +297,10 @@ export const PlanosAcaoComponent: React.FC<PlanosAcaoProps> = ({
         </td>
         <td style="padding: 8px; border: 1px solid #cbd5e1; font-size: 11px;">${act.onde || '-'}</td>
         <td style="padding: 8px; border: 1px solid #cbd5e1; font-weight: 600; font-size: 11px;">${act.quem}</td>
-        <td style="padding: 8px; border: 1px solid #cbd5e1; text-align: center; font-size: 11px; white-space: nowrap;">${formatDateBR(act.quando)}</td>
+        <td style="padding: 8px; border: 1px solid #cbd5e1; text-align: center; font-size: 11px; white-space: nowrap;">
+          ${formatDateBR(act.quando)}
+          ${act.historicoPrazos && act.historicoPrazos.length > 0 ? `<div style="font-size: 9px; color: #b45309; font-weight: bold; margin-top: 2px;">(Prorrogado ${act.historicoPrazos.length}x)</div>` : ''}
+        </td>
         <td style="padding: 8px; border: 1px solid #cbd5e1; text-align: right; font-family: monospace; font-size: 11px;">R$ ${(Number(act.quantoCusta) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
         <td style="padding: 8px; border: 1px solid #cbd5e1; text-align: center; font-size: 10px; font-weight: bold;">
           <span style="display: inline-block; padding: 2px 6px; border-radius: 4px; ${
@@ -868,15 +905,30 @@ export const PlanosAcaoComponent: React.FC<PlanosAcaoProps> = ({
     const isUnderway = updatedActions.some(a => a.status === 'Em Andamento' || a.status === 'Concluído');
     const statusFinal = allCancelled ? 'Cancelada' : (allConcluded ? 'Concluído' : (isUnderway ? 'Em Andamento' : plano.status));
 
+    const parseDateValue = (d?: string): number => {
+      if (!d) return 0;
+      const clean = d.includes('T') ? d.split('T')[0] : d;
+      if (clean.includes('/')) {
+        const parts = clean.split('/');
+        if (parts.length === 3) return new Date(`${parts[2]}-${parts[1]}-${parts[0]}`).getTime() || 0;
+      }
+      return new Date(clean).getTime() || 0;
+    };
+    const sortedDates = updatedActions
+      .filter(a => a.quando)
+      .sort((a, b) => parseDateValue(b.quando) - parseDateValue(a.quando));
+    const latestActionDeadline = sortedDates.length > 0 ? sortedDates[0].quando : plano.prazoGeral;
+
     const updatedPlano: PlanoAcao = {
       ...plano,
       acoes: updatedActions,
       status: statusFinal,
       quantoCusta: totalCost,
+      prazoGeral: latestActionDeadline || plano.prazoGeral,
       oQue: firstAct?.oQue || '',
       porQue: firstAct?.porQue || '',
       onde: firstAct?.onde || '',
-      quando: firstAct?.quando || '',
+      quando: latestActionDeadline || firstAct?.quando || '',
       quem: firstAct?.quem || plano.coordenador || '',
       como: firstAct?.como || ''
     };
@@ -891,6 +943,7 @@ export const PlanosAcaoComponent: React.FC<PlanosAcaoProps> = ({
     const plano = planos.find(p => p.id === planoId);
     setActionItemTargetPlanoId(planoId);
     setEditingActionItem(null);
+    setJustificativaPrazo('');
     setActionItemModalError(null);
     setActionItemForm({
       oQue: '',
@@ -909,6 +962,7 @@ export const PlanosAcaoComponent: React.FC<PlanosAcaoProps> = ({
   const handleOpenEditActionModal = (planoId: string, item: ItemAcao5W2H) => {
     setActionItemTargetPlanoId(planoId);
     setEditingActionItem(item);
+    setJustificativaPrazo('');
     setActionItemModalError(null);
     setActionItemForm({
       oQue: item.oQue,
@@ -934,12 +988,32 @@ export const PlanosAcaoComponent: React.FC<PlanosAcaoProps> = ({
       setActionItemModalError('Preencha os campos obrigatórios da ação (O quê, Quem, Quando).');
       return;
     }
+
+    const isPrazoAlterado = editingActionItem && editingActionItem.quando !== actionItemForm.quando;
+    if (isPrazoAlterado && !justificativaPrazo.trim()) {
+      setActionItemModalError('Ao alterar o prazo limite da ação, a justificativa técnica é obrigatória (Norma ISO 9001:2015).');
+      return;
+    }
+
     setActionItemModalError(null);
 
     const currentActions = getPlanActions(plano);
     let updatedActions: ItemAcao5W2H[];
 
     if (editingActionItem) {
+      let historicoAtualizado = editingActionItem.historicoPrazos || [];
+      if (isPrazoAlterado) {
+        const novoRegistro: HistoricoPrazoAcao = {
+          id: `hist_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+          prazoAnterior: editingActionItem.quando,
+          novoPrazo: actionItemForm.quando,
+          justificativa: justificativaPrazo.trim(),
+          alteradoEm: new Date().toISOString(),
+          alteradoPor: user?.name ? `${user.name} (${user.role || 'SGQ'})` : 'Gestão da Qualidade Vickytex'
+        };
+        historicoAtualizado = [...historicoAtualizado, novoRegistro];
+      }
+
       updatedActions = currentActions.map(a => a.id === editingActionItem.id ? {
         ...a,
         oQue: actionItemForm.oQue.trim(),
@@ -949,7 +1023,8 @@ export const PlanosAcaoComponent: React.FC<PlanosAcaoProps> = ({
         quem: actionItemForm.quem.trim(),
         como: actionItemForm.como.trim(),
         quantoCusta: Number(actionItemForm.quantoCusta) || 0,
-        status: actionItemForm.status
+        status: actionItemForm.status,
+        historicoPrazos: historicoAtualizado
       } : a);
     } else {
       const newAction: ItemAcao5W2H = {
@@ -973,16 +1048,41 @@ export const PlanosAcaoComponent: React.FC<PlanosAcaoProps> = ({
     const isUnderway = updatedActions.some(a => a.status === 'Em Andamento' || a.status === 'Concluído');
     const statusFinal = allCancelled ? 'Cancelada' : (allConcluded ? 'Concluído' : (isUnderway ? 'Em Andamento' : plano.status));
 
+    const parseDateValue = (d?: string): number => {
+      if (!d) return 0;
+      const clean = d.includes('T') ? d.split('T')[0] : d;
+      if (clean.includes('/')) {
+        const parts = clean.split('/');
+        if (parts.length === 3) return new Date(`${parts[2]}-${parts[1]}-${parts[0]}`).getTime() || 0;
+      }
+      return new Date(clean).getTime() || 0;
+    };
+    const sortedDates = updatedActions
+      .filter(a => a.quando)
+      .sort((a, b) => parseDateValue(b.quando) - parseDateValue(a.quando));
+    const latestActionDeadline = sortedDates.length > 0 ? sortedDates[0].quando : plano.prazoGeral;
+
     const updatedPlano: PlanoAcao = {
       ...plano,
       acoes: updatedActions,
       quantoCusta: totalCost,
-      status: statusFinal
+      status: statusFinal,
+      prazoGeral: latestActionDeadline || plano.prazoGeral,
+      quando: latestActionDeadline || plano.quando
     };
 
     onUpdatePlano(updatedPlano);
     setIsActionItemModalOpen(false);
-    onAddLog('Ação 5W2H Salva', `Ação ${editingActionItem ? 'atualizada' : 'adicionada'} no plano ${plano.codigo}.`, plano.documentoId);
+    
+    if (isPrazoAlterado) {
+      onAddLog(
+        'Repactuação de Prazo 5W2H', 
+        `Prazo da ação #${editingActionItem.itemNumero || ''} (${actionItemForm.oQue}) no plano ${plano.codigo} alterado de ${formatDateBR(editingActionItem.quando)} para ${formatDateBR(actionItemForm.quando)}. Motivo: ${justificativaPrazo.trim()}`,
+        plano.documentoId
+      );
+    } else {
+      onAddLog('Ação 5W2H Salva', `Ação ${editingActionItem ? 'atualizada' : 'adicionada'} no plano ${plano.codigo}.`, plano.documentoId);
+    }
   };
 
   // Excluir plano de ação
@@ -1006,7 +1106,12 @@ export const PlanosAcaoComponent: React.FC<PlanosAcaoProps> = ({
       );
     
     const matchesSector = selectedSector === 'Todos' || plano.setor === selectedSector;
-    const matchesStatus = selectedStatus === 'Todos' || stats.statusConsolidado === selectedStatus || plano.status === selectedStatus;
+    const isPlanoOverdue = isDateOverdue(stats.prazoFinal, stats.statusConsolidado);
+    const matchesStatus = selectedStatus === 'Todos' 
+      ? true 
+      : selectedStatus === 'Atrasado' 
+        ? isPlanoOverdue 
+        : (stats.statusConsolidado === selectedStatus || plano.status === selectedStatus);
 
     return matchesSearch && matchesSector && matchesStatus;
   });
@@ -1014,12 +1119,21 @@ export const PlanosAcaoComponent: React.FC<PlanosAcaoProps> = ({
   // Métricas
   const totalInvestido = filteredPlanos.reduce((acc, p) => acc + getPlanStats(p).totalCost, 0);
   const totalAcoesCount = filteredPlanos.reduce((acc, p) => acc + getPlanStats(p).total, 0);
-  const planejados = filteredPlanos.filter(p => getPlanStats(p).statusConsolidado === 'Planejado').length;
-  const emAndamento = filteredPlanos.filter(p => getPlanStats(p).statusConsolidado === 'Em Andamento').length;
+  const atrasados = filteredPlanos.filter(p => isDateOverdue(getPlanStats(p).prazoFinal, getPlanStats(p).statusConsolidado)).length;
+  const planejados = filteredPlanos.filter(p => getPlanStats(p).statusConsolidado === 'Planejado' && !isDateOverdue(getPlanStats(p).prazoFinal, getPlanStats(p).statusConsolidado)).length;
+  const emAndamento = filteredPlanos.filter(p => getPlanStats(p).statusConsolidado === 'Em Andamento' && !isDateOverdue(getPlanStats(p).prazoFinal, getPlanStats(p).statusConsolidado)).length;
   const concluidos = filteredPlanos.filter(p => getPlanStats(p).statusConsolidado === 'Concluído').length;
 
-  // Renderizar badge de status
-  const getStatusBadge = (status: string) => {
+  // Renderizar badge de status com suporte a Atrasado
+  const getStatusBadge = (status: string, isOverdue?: boolean) => {
+    if (isOverdue && status !== 'Concluído' && status !== 'Cancelada') {
+      return (
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-rose-50 text-rose-700 border border-rose-200 dark:bg-rose-950/40 dark:text-rose-400 dark:border-rose-800">
+          <AlertTriangle className="w-2.5 h-2.5 shrink-0" />
+          <span>Atrasado</span>
+        </span>
+      );
+    }
     switch (status) {
       case 'Planejado':
         return <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-600 border border-blue-200 dark:bg-blue-950/30 dark:text-blue-400 dark:border-blue-900">Planejado</span>;
@@ -1028,7 +1142,14 @@ export const PlanosAcaoComponent: React.FC<PlanosAcaoProps> = ({
       case 'Concluído':
         return <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-400 dark:border-emerald-900">Concluído</span>;
       case 'Cancelada':
-        return <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200 dark:bg-rose-950/30 dark:text-rose-400 dark:border-rose-900">Cancelado</span>;
+        return <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700">Cancelado</span>;
+      case 'Atrasado':
+        return (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-rose-50 text-rose-700 border border-rose-200 dark:bg-rose-950/40 dark:text-rose-400 dark:border-rose-800">
+            <AlertTriangle className="w-2.5 h-2.5 shrink-0" />
+            <span>Atrasado</span>
+          </span>
+        );
       default:
         return null;
     }
@@ -1083,12 +1204,12 @@ export const PlanosAcaoComponent: React.FC<PlanosAcaoProps> = ({
       </div>
 
       {/* KPI Dashboard Row */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
         <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 shadow-xs">
           <p className="text-[10px] font-mono font-bold text-slate-400 uppercase tracking-wider">Total de Planos</p>
           <div className="flex items-baseline justify-between mt-1">
             <span className="text-2xl font-black text-slate-800 dark:text-white">{filteredPlanos.length}</span>
-            <span className="text-[10px] font-bold text-slate-400">ativos</span>
+            <span className="text-[10px] font-bold text-slate-400">cadastrados</span>
           </div>
         </div>
         <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 shadow-xs">
@@ -1102,7 +1223,17 @@ export const PlanosAcaoComponent: React.FC<PlanosAcaoProps> = ({
           <p className="text-[10px] font-mono font-bold text-amber-500 uppercase tracking-wider">Em Andamento</p>
           <div className="flex items-baseline justify-between mt-1">
             <span className="text-2xl font-black text-amber-600 dark:text-amber-400">{emAndamento}</span>
-            <span className="text-[10px] font-bold text-amber-400">em execução</span>
+            <span className="text-[10px] font-bold text-amber-400">no prazo</span>
+          </div>
+        </div>
+        <div className={`bg-white dark:bg-slate-900 border ${atrasados > 0 ? 'border-rose-300 dark:border-rose-900/60 bg-rose-50/20' : 'border-slate-200 dark:border-slate-800'} rounded-2xl p-4 shadow-xs`}>
+          <p className="text-[10px] font-mono font-bold text-rose-500 uppercase tracking-wider flex items-center justify-between">
+            <span>Atrasados</span>
+            {atrasados > 0 && <AlertTriangle className="w-3 h-3 text-rose-500 shrink-0" />}
+          </p>
+          <div className="flex items-baseline justify-between mt-1">
+            <span className={`text-2xl font-black ${atrasados > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-slate-400'}`}>{atrasados}</span>
+            <span className="text-[10px] font-bold text-rose-400">atenção</span>
           </div>
         </div>
         <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 shadow-xs">
@@ -1112,10 +1243,10 @@ export const PlanosAcaoComponent: React.FC<PlanosAcaoProps> = ({
             <span className="text-[10px] font-bold text-emerald-400">eficazes</span>
           </div>
         </div>
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 shadow-xs col-span-2 md:col-span-1">
-          <p className="text-[10px] font-mono font-bold text-slate-400 uppercase tracking-wider">Investimento Estimado</p>
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 shadow-xs col-span-2 sm:col-span-1">
+          <p className="text-[10px] font-mono font-bold text-slate-400 uppercase tracking-wider">Investimento</p>
           <div className="flex items-baseline justify-between mt-1">
-            <span className="text-xl font-black text-slate-800 dark:text-white">R$ {totalInvestido.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+            <span className="text-lg font-black text-slate-800 dark:text-white">R$ {totalInvestido.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
           </div>
         </div>
       </div>
@@ -1160,6 +1291,7 @@ export const PlanosAcaoComponent: React.FC<PlanosAcaoProps> = ({
             <option value="Todos">Todos os Status</option>
             <option value="Planejado">Planejado</option>
             <option value="Em Andamento">Em Andamento</option>
+            <option value="Atrasado">⚠️ Atrasado</option>
             <option value="Concluído">Concluído</option>
             <option value="Cancelada">Cancelado</option>
           </select>
@@ -1397,7 +1529,7 @@ export const PlanosAcaoComponent: React.FC<PlanosAcaoProps> = ({
 
                         {/* Status Geral */}
                         <td className="py-3.5 px-4">
-                          {getStatusBadge(stats.statusConsolidado)}
+                          {getStatusBadge(stats.statusConsolidado, isOverdue)}
                         </td>
 
                         {/* Rastreabilidade */}
@@ -1517,9 +1649,15 @@ export const PlanosAcaoComponent: React.FC<PlanosAcaoProps> = ({
                                 )}
 
                                 <div className="flex flex-wrap items-center justify-between gap-3 text-xs pt-1">
-                                  <div className="flex items-center gap-4">
+                                  <div className="flex flex-wrap items-center gap-3 sm:gap-4">
                                     <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">
                                       Total: <strong className="text-slate-800 dark:text-slate-200 font-bold">{stats.total} ações</strong>
+                                    </span>
+                                    <span className="text-[11px] font-semibold text-blue-600 dark:text-blue-400">
+                                      Planejado: <strong className="font-bold">{stats.planejadas}</strong>
+                                    </span>
+                                    <span className="text-[11px] font-semibold text-amber-600 dark:text-amber-400">
+                                      Em Andamento: <strong className="font-bold">{stats.emAndamento}</strong>
                                     </span>
                                     <span className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">
                                       Concluídas: <strong className="font-bold">{stats.concluidas}</strong>
@@ -1529,9 +1667,6 @@ export const PlanosAcaoComponent: React.FC<PlanosAcaoProps> = ({
                                         Canceladas: <strong className="font-bold">{stats.canceladas}</strong>
                                       </span>
                                     )}
-                                    <span className="text-[11px] font-semibold text-amber-600 dark:text-amber-400">
-                                      Em Andamento: <strong className="font-bold">{stats.emAndamento}</strong>
-                                    </span>
                                     <span className="text-[11px] font-semibold text-slate-700 dark:text-slate-300 font-mono">
                                       Custo Consolidado: <strong className="font-bold">R$ {stats.totalCost.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
                                     </span>
@@ -1612,6 +1747,20 @@ export const PlanosAcaoComponent: React.FC<PlanosAcaoProps> = ({
                                               </span>
                                               {isActOverdue && (
                                                 <span className="block text-[8px] font-extrabold text-rose-500 uppercase">Atrasado</span>
+                                              )}
+                                              {act.historicoPrazos && act.historicoPrazos.length > 0 && (
+                                                <button
+                                                  type="button"
+                                                  onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    setViewingHistoryAction(act);
+                                                  }}
+                                                  className="inline-flex items-center justify-center gap-1 text-[8.5px] font-bold px-1.5 py-0.5 rounded bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800 hover:bg-amber-100 dark:hover:bg-amber-900/60 transition-colors cursor-pointer mt-1"
+                                                  title="Ver justificativas das repactuações de prazo"
+                                                >
+                                                  <History className="w-2.5 h-2.5" />
+                                                  <span>Prorrogado ({act.historicoPrazos.length}x)</span>
+                                                </button>
                                               )}
                                             </td>
                                             <td className="py-2.5 px-3 text-right font-mono font-bold text-emerald-600 dark:text-emerald-400 text-[11px]">
@@ -1761,7 +1910,7 @@ export const PlanosAcaoComponent: React.FC<PlanosAcaoProps> = ({
                   </div>
 
                   <div className="flex items-center gap-2 self-start md:self-center">
-                    {getStatusBadge(stats.statusConsolidado)}
+                    {getStatusBadge(stats.statusConsolidado, isOverdue)}
                     
                     {canCreate && (
                       <button
@@ -1978,13 +2127,29 @@ export const PlanosAcaoComponent: React.FC<PlanosAcaoProps> = ({
                                   {act.onde}
                                 </span>
                               )}
-                              <span className={`flex items-center gap-1 font-mono font-bold ${
-                                isActOverdue ? 'text-rose-600 dark:text-rose-400' : 'text-slate-700 dark:text-slate-300'
-                              }`}>
-                                <Calendar className="w-3 h-3" />
-                                {formatDateBR(act.quando)}
-                                {isActOverdue && <span className="text-[8px] uppercase text-rose-500 font-extrabold ml-0.5">(Atrasado)</span>}
-                              </span>
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className={`flex items-center gap-1 font-mono font-bold ${
+                                  isActOverdue ? 'text-rose-600 dark:text-rose-400' : 'text-slate-700 dark:text-slate-300'
+                                }`}>
+                                  <Calendar className="w-3 h-3" />
+                                  {formatDateBR(act.quando)}
+                                  {isActOverdue && <span className="text-[8px] uppercase text-rose-500 font-extrabold ml-0.5">(Atrasado)</span>}
+                                </span>
+                                {act.historicoPrazos && act.historicoPrazos.length > 0 && (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setViewingHistoryAction(act);
+                                    }}
+                                    className="inline-flex items-center gap-1 text-[8.5px] font-bold px-1.5 py-0.5 rounded bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800 hover:bg-amber-100 dark:hover:bg-amber-900/60 transition-colors cursor-pointer"
+                                    title="Ver justificativas das repactuações de prazo"
+                                  >
+                                    <History className="w-2.5 h-2.5" />
+                                    <span>Prorrogado ({act.historicoPrazos.length}x)</span>
+                                  </button>
+                                )}
+                              </div>
                               <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400 ml-auto">
                                 R$ {(Number(act.quantoCusta) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                               </span>
@@ -2585,6 +2750,60 @@ export const PlanosAcaoComponent: React.FC<PlanosAcaoProps> = ({
                 </div>
               </div>
 
+              {/* ALERTA E JUSTIFICATIVA DE REPACTUAÇÃO DE PRAZO (ISO 9001) */}
+              {editingActionItem && editingActionItem.quando !== actionItemForm.quando && (
+                <div className="p-3.5 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/60 rounded-xl space-y-2.5 animate-scale-in">
+                  <div className="flex items-center gap-2 text-xs font-bold text-amber-800 dark:text-amber-300">
+                    <Clock className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
+                    <span>Repactuação de Prazo Detectada (ISO 9001:2015)</span>
+                  </div>
+                  <p className="text-[11px] text-amber-700 dark:text-amber-400 leading-tight">
+                    Você está alterando o prazo limite desta ação de <strong className="font-mono text-slate-900 dark:text-white line-through">{formatDateBR(editingActionItem.quando)}</strong> para <strong className="font-mono text-emerald-600 dark:text-emerald-400 font-bold">{formatDateBR(actionItemForm.quando)}</strong>. Registre abaixo o motivo formal para auditoria do SGQ.
+                  </p>
+                  <div>
+                    <label className="block text-[10px] font-bold text-amber-900 dark:text-amber-200 uppercase tracking-wider mb-1">
+                      Justificativa Técnica da Alteração de Prazo *
+                    </label>
+                    <textarea
+                      required
+                      rows={2}
+                      value={justificativaPrazo}
+                      onChange={(e) => setJustificativaPrazo(e.target.value)}
+                      className="w-full bg-white dark:bg-slate-900 border border-amber-300 dark:border-amber-700 p-2.5 text-xs font-medium rounded-lg focus:outline-hidden dark:text-slate-100 shadow-2xs"
+                      placeholder="Ex: Atraso na entrega de peças pelo fornecedor homologado; aguardando liberação técnica da manutenção; etc."
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* HISTÓRICO ANTERIOR DE REPACTUAÇÕES SE HOUVER */}
+              {editingActionItem && editingActionItem.historicoPrazos && editingActionItem.historicoPrazos.length > 0 && (
+                <div className="bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800 rounded-xl p-3 space-y-2">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5 text-[11px]">
+                      <History className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+                      Histórico de Repactuações ({editingActionItem.historicoPrazos.length})
+                    </span>
+                    <span className="text-[10px] text-slate-400">Rastreabilidade SGQ</span>
+                  </div>
+                  <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1">
+                    {editingActionItem.historicoPrazos.map((hist, hIdx) => (
+                      <div key={hist.id || hIdx} className="bg-white dark:bg-slate-900 border border-slate-150 dark:border-slate-800 p-2 rounded-lg text-[10px] space-y-0.5">
+                        <div className="flex items-center justify-between font-mono text-slate-500 dark:text-slate-400">
+                          <span>{formatDateBR(hist.alteradoEm)} • {hist.alteradoPor}</span>
+                          <span className="font-bold text-slate-700 dark:text-slate-300">
+                            {formatDateBR(hist.prazoAnterior)} ➔ {formatDateBR(hist.novoPrazo)}
+                          </span>
+                        </div>
+                        <p className="text-slate-700 dark:text-slate-300 italic font-medium">
+                          "{hist.justificativa}"
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* HOW & HOW MUCH */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                 <div className="md:col-span-2">
@@ -2823,6 +3042,11 @@ export const PlanosAcaoComponent: React.FC<PlanosAcaoProps> = ({
                           <td className="p-2 border border-slate-300 font-semibold">{act.quem}</td>
                           <td className="p-2 border border-slate-300 text-center font-mono font-bold">
                             {formatDateBR(act.quando)}
+                            {act.historicoPrazos && act.historicoPrazos.length > 0 && (
+                              <span className="block text-[8.5px] font-sans font-bold text-amber-700">
+                                (Prorrogado {act.historicoPrazos.length}x)
+                              </span>
+                            )}
                           </td>
                           <td className="p-2 border border-slate-300 text-right font-mono font-bold text-emerald-700 whitespace-nowrap">
                             R$ {(Number(act.quantoCusta) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
@@ -3021,6 +3245,84 @@ export const PlanosAcaoComponent: React.FC<PlanosAcaoProps> = ({
                 }`}
               >
                 {actionToDelete.isOnlyAction ? 'Sim, Excluir Plano Completo' : 'Sim, Remover Ação'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: HISTÓRICO DE REPACTUAÇÃO DE PRAZOS DA AÇÃO (ISO 9001) */}
+      {viewingHistoryAction && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl w-full max-w-lg shadow-2xl border border-slate-100 dark:border-slate-800 overflow-hidden animate-scale-in">
+            <div className="px-6 py-4 bg-[#0B3A63] text-white flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <History className="w-5 h-5 text-amber-400" />
+                <div>
+                  <h3 className="text-sm font-extrabold">Histórico de Repactuação de Prazo</h3>
+                  <p className="text-[10px] text-blue-200">ISO 9001:2015 — Cláusulas 6.3 & 7.5 (Rastreabilidade)</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setViewingHistoryAction(null)}
+                className="text-white/60 hover:text-white font-mono text-2xl leading-none cursor-pointer"
+              >
+                &times;
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4 max-h-[75vh] overflow-y-auto">
+              <div className="bg-slate-50 dark:bg-slate-800/60 p-3.5 rounded-xl border border-slate-200 dark:border-slate-700 space-y-1.5">
+                <p className="text-xs font-bold text-slate-900 dark:text-white">
+                  Ação #{viewingHistoryAction.itemNumero || 1}: {viewingHistoryAction.oQue}
+                </p>
+                <div className="flex flex-wrap items-center gap-3 text-[11px] text-slate-500 dark:text-slate-400">
+                  <span>Responsável: <strong className="text-slate-700 dark:text-slate-300">{viewingHistoryAction.quem}</strong></span>
+                  <span>•</span>
+                  <span>Prazo Vigente: <strong className="font-mono text-emerald-600 dark:text-emerald-400 font-bold">{formatDateBR(viewingHistoryAction.quando)}</strong></span>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <h4 className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-400">
+                  Registro Auditável de Prorrogações ({viewingHistoryAction.historicoPrazos?.length || 0})
+                </h4>
+
+                <div className="relative pl-6 space-y-4 before:absolute before:left-2 before:top-2 before:bottom-2 before:w-0.5 before:bg-slate-200 dark:before:bg-slate-700">
+                  {viewingHistoryAction.historicoPrazos && viewingHistoryAction.historicoPrazos.length > 0 ? (
+                    viewingHistoryAction.historicoPrazos.map((hist, idx) => (
+                      <div key={hist.id || idx} className="relative space-y-1.5 text-xs">
+                        <div className="absolute -left-6 top-1 w-3.5 h-3.5 rounded-full bg-amber-500 border-2 border-white dark:border-slate-900"></div>
+                        <div className="flex items-center justify-between text-[11px] font-medium text-slate-500 dark:text-slate-400">
+                          <span className="font-bold text-slate-800 dark:text-slate-200">{hist.alteradoPor}</span>
+                          <span className="font-mono text-[10px]">{new Date(hist.alteradoEm).toLocaleString('pt-BR')}</span>
+                        </div>
+                        <div className="flex items-center gap-2 text-xs font-mono font-bold">
+                          <span className="text-slate-400 line-through">{formatDateBR(hist.prazoAnterior)}</span>
+                          <span className="text-slate-400">➔</span>
+                          <span className="text-emerald-600 dark:text-emerald-400">{formatDateBR(hist.novoPrazo)}</span>
+                        </div>
+                        <div className="p-3 bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/40 rounded-xl text-slate-700 dark:text-slate-300 text-xs">
+                          <span className="text-[9px] font-bold text-amber-800 dark:text-amber-400 block uppercase">Motivo / Justificativa Técnica:</span>
+                          <p className="mt-1 font-medium leading-relaxed">"{hist.justificativa}"</p>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-xs text-slate-400 italic">Nenhuma repactuação registrada nesta ação.</p>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="px-6 py-3 bg-slate-50 dark:bg-slate-800/50 border-t border-slate-150 dark:border-slate-800 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setViewingHistoryAction(null)}
+                className="px-4 py-2 bg-[#0B3A63] hover:bg-blue-900 text-white rounded-xl text-xs font-bold transition-colors cursor-pointer"
+              >
+                Fechar
               </button>
             </div>
           </div>

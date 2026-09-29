@@ -5,6 +5,15 @@
 
 import { SectorType } from './department';
 
+export interface HistoricoPrazoAcao {
+  id: string;
+  prazoAnterior: string;
+  novoPrazo: string;
+  justificativa: string;
+  alteradoEm: string; // ISO string data/hora
+  alteradoPor: string; // Nome do usuário / responsável
+}
+
 export interface ItemAcao5W2H {
   id: string;
   itemNumero?: number; // 1, 2, 3...
@@ -19,6 +28,7 @@ export interface ItemAcao5W2H {
   status: 'Planejado' | 'Em Andamento' | 'Concluído' | 'Cancelada';
   observacoes?: string;
   concluidoEm?: string;
+  historicoPrazos?: HistoricoPrazoAcao[];
 }
 
 export interface PlanoAcao {
