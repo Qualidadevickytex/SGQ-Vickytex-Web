@@ -16,6 +16,19 @@ class ActionPlanRepositoryClass extends BaseRepository<PlanoAcao> {
   protected saveLocalData(_data: PlanoAcao[]): void {}
 
   protected mapRecord(rec: any): PlanoAcao {
+    const acoes = Array.isArray(rec.acoes) ? rec.acoes : (rec.oQue ? [{
+      id: `${rec.id}-1`,
+      itemNumero: 1,
+      oQue: rec.oQue || rec.o_que || '',
+      porQue: rec.porQue || rec.por_que || '',
+      onde: rec.onde || '',
+      quando: rec.quando || '',
+      quem: rec.quem || rec.coordenador || '',
+      como: rec.como || '',
+      quantoCusta: rec.quantoCusta ?? rec.quanto_custa ?? 0,
+      status: rec.status || 'Planejado'
+    }] : []);
+
     return {
       id: rec.id,
       codigo: rec.codigo || `PA-${rec.id}`,
@@ -23,13 +36,17 @@ class ActionPlanRepositoryClass extends BaseRepository<PlanoAcao> {
       setor: rec.setor || rec.sector || 'Geral',
       status: rec.status || 'Planejado',
       dataCriacao: rec.dataCriacao || rec.data_criacao || new Date().toISOString().split('T')[0],
-      oQue: rec.oQue || rec.o_que || '',
-      porQue: rec.porQue || rec.por_que || '',
-      onde: rec.onde || '',
-      quando: rec.quando || '',
-      quem: rec.quem || '',
-      como: rec.como || '',
-      quantoCusta: rec.quantoCusta ?? rec.quanto_custa ?? 0,
+      coordenador: rec.coordenador || rec.quem || '',
+      objetivo: rec.objetivo || '',
+      prazoGeral: rec.prazoGeral || rec.quando || '',
+      acoes: acoes,
+      oQue: rec.oQue || (acoes[0]?.oQue) || '',
+      porQue: rec.porQue || (acoes[0]?.porQue) || '',
+      onde: rec.onde || (acoes[0]?.onde) || '',
+      quando: rec.quando || (acoes[0]?.quando) || '',
+      quem: rec.quem || rec.coordenador || (acoes[0]?.quem) || '',
+      como: rec.como || (acoes[0]?.como) || '',
+      quantoCusta: rec.quantoCusta ?? (acoes.reduce((acc: number, a: any) => acc + (Number(a.quantoCusta) || 0), 0)),
       documentoId: rec.documentoId,
       auditoriaId: rec.auditoriaId,
       naoConformidadeId: rec.naoConformidadeId
@@ -43,11 +60,15 @@ class ActionPlanRepositoryClass extends BaseRepository<PlanoAcao> {
       setor: data.setor,
       status: data.status,
       dataCriacao: data.dataCriacao,
+      coordenador: data.coordenador || data.quem,
+      objetivo: data.objetivo || '',
+      prazoGeral: data.prazoGeral || data.quando,
+      acoes: Array.isArray(data.acoes) ? data.acoes : [],
       oQue: data.oQue,
       porQue: data.porQue,
       onde: data.onde,
       quando: data.quando,
-      quem: data.quem,
+      quem: data.quem || data.coordenador,
       como: data.como,
       quantoCusta: data.quantoCusta,
       documentoId: data.documentoId,

@@ -405,33 +405,103 @@ export const INITIAL_PLANOS_ACAO: PlanoAcao[] = [
     setor: 'Estamparia',
     status: 'Em Andamento',
     dataCriacao: '2026-07-07',
-    oQue: 'Instalar termômetros digitais infravermelhos nas garras do carrossel.',
-    porQue: 'Garantir que a temperatura de cura esteja controlada a 140°C, avoiding borrões e perda de peças.',
-    onde: 'Setor de Estamparia (Carrossel 1 e 2).',
+    coordenador: 'Jorge Dias (Estamparia)',
+    objetivo: 'Garantir a cura uniforme das tintas a 140°C eliminando perda de solidez à lavagem e manchas.',
+    prazoGeral: '2026-08-15',
+    oQue: 'Instalar sensores e calibrar parâmetros de cura do Flash Cure.',
+    porQue: 'Garantir que a temperatura de cura esteja controlada a 140°C, evitando borrões e perda de peças.',
+    onde: 'Setor de Estamparia (Carrosséis 1 e 2).',
     quando: '2026-08-15',
     quem: 'Jorge Dias (Estamparia)',
-    como: 'Adquirir e fixar sensores infravermelhos com display digital e treinar os operadores.',
-    quantoCusta: 1200.00,
+    como: 'Aquisição de sensores, calibração e treinamento de operadores.',
+    quantoCusta: 1650.00,
     documentoId: 'IT-EST-001',
     auditoriaId: 'aud-003',
-    naoConformidadeId: 'nc-002'
+    naoConformidadeId: 'nc-002',
+    acoes: [
+      {
+        id: 'pa-001-a1',
+        itemNumero: 1,
+        oQue: 'Adquirir e fixar sensores infravermelhos digitais nas garras dos carrosséis 1 e 2.',
+        porQue: 'Permitir medição em tempo real da temperatura da estufa rápida.',
+        onde: 'Carrosséis 1 e 2 (Estamparia)',
+        quando: '2026-07-20',
+        quem: 'Jorge Dias (Estamparia)',
+        como: 'Instalação física com suporte regulável e fiação protegida contra calor.',
+        quantoCusta: 1200.00,
+        status: 'Concluído'
+      },
+      {
+        id: 'pa-001-a2',
+        itemNumero: 2,
+        oQue: 'Calibrar leituras térmicas utilizando termômetro de contato com calibração RBC.',
+        porQue: 'Evitar erro de leitura por emissividade das tintas sintéticas.',
+        onde: 'Laboratório de Qualidade / Estamparia',
+        quando: '2026-08-05',
+        quem: 'Mariana Silva (Qualidade)',
+        como: 'Comparação de curva de aquecimento com sensor padrão e ajuste de offset.',
+        quantoCusta: 450.00,
+        status: 'Em Andamento'
+      },
+      {
+        id: 'pa-001-a3',
+        itemNumero: 3,
+        oQue: 'Treinar os operadores de estamparia no registro diário de controle térmico.',
+        porQue: 'Criar histórico auditável e alertar o líder a cada lote sensível.',
+        onde: 'Linha de Estamparia',
+        quando: '2026-08-15',
+        quem: 'Jorge Dias (Estamparia)',
+        como: 'Instrução prática no início do turno e preenchimento de checklist diário.',
+        quantoCusta: 0.00,
+        status: 'Planejado'
+      }
+    ]
   },
   {
     id: 'pa-002',
     codigo: 'PA-2026-002',
-    titulo: 'Treinamento sobre Descanso de Malha PV',
+    titulo: 'Padronização e Descanso de Malha PV',
     setor: 'Corte',
-    status: 'Planejado',
+    status: 'Em Andamento',
     dataCriacao: '2026-07-03',
-    oQue: 'Ministrar treinamento operacional sobre a importância das 24h de descanso para malha PV.',
+    coordenador: 'Roberto Costa (Supervisor Corte)',
+    objetivo: 'Eliminar encolhimento pós-costura através do cumprimento do descanso mínimo de 24h.',
+    prazoGeral: '2026-07-25',
+    oQue: 'Padronização de descanso de malha e treinamento operacional no setor de corte.',
     porQue: 'Evitar encolhimento de tecidos de poliéster-viscose após o corte.',
     onde: 'Setor de Corte / Sala de Treinamento.',
     quando: '2026-07-25',
     quem: 'Roberto Costa (Supervisor Corte)',
-    como: 'Elaborar apresentação técnica com exemplos reais de encolhimento, aplicar lista de presença e avaliação de eficácia.',
+    como: 'Revisão de POP, criação de etiquetagem de tempo e capacitação da equipe.',
     quantoCusta: 300.00,
     documentoId: 'POP-COR-001',
-    naoConformidadeId: 'nc-001'
+    naoConformidadeId: 'nc-001',
+    acoes: [
+      {
+        id: 'pa-002-a1',
+        itemNumero: 1,
+        oQue: 'Revisar POP de enfesto implementando controle de etiquetas com hora exata de desenrolamento.',
+        porQue: 'Impedir visualmente que rolos sejam cortados antes das 24 horas obrigatórias.',
+        onde: 'Mesa de Enfesto (Corte)',
+        quando: '2026-07-12',
+        quem: 'Roberto Costa (Supervisor Corte)',
+        como: 'Adicionar campo "Liberado para corte às:" nas etiquetas de identificação de rolo.',
+        quantoCusta: 0.00,
+        status: 'Concluído'
+      },
+      {
+        id: 'pa-002-a2',
+        itemNumero: 2,
+        oQue: 'Ministrar treinamento operacional para todos os enfestadores e cortadores da equipe.',
+        porQue: 'Conscientizar os operadores dos custos de retrabalho com encolhimento.',
+        onde: 'Sala de Treinamento / Corte',
+        quando: '2026-07-25',
+        quem: 'Roberto Costa (Supervisor Corte)',
+        como: 'Apresentação técnica de 40 minutos com lista de presença e avaliação de eficácia prática.',
+        quantoCusta: 300.00,
+        status: 'Em Andamento'
+      }
+    ]
   }
 ];
 

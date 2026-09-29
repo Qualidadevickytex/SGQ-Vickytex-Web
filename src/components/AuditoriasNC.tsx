@@ -338,15 +338,32 @@ export const AuditoriasNC: React.FC<AuditoriasNCProps> = ({
       setor: nc.setor,
       status: 'Planejado',
       dataCriacao: new Date().toISOString().split('T')[0],
+      coordenador: nc.responsavel || user?.name || 'Rodrigo Berto (Qualidade)',
+      objetivo: `Eliminar causa-raiz e prevenir reincidência da NC ${nc.codigo}. Avaliação de eficácia em 30 dias após implementação.`,
+      prazoGeral: deadlineStr,
       oQue: `Eliminar a causa-raiz da Não Conformidade (${nc.codigo}): ${nc.descricao}`,
       porQue: `Garantir a conformidade dos processos com a norma ISO 9001 e evitar reincidência de falhas no setor de ${nc.setor}.`,
       onde: `Setor de ${nc.setor} - Instalações da Vickytex`,
       quando: deadlineStr,
       quem: nc.responsavel || user?.name || 'Rodrigo Berto (Qualidade)',
-      como: `1. Realizar análise de causa raiz (Ishikawa/5 Porquês);\n2. Definir e executar plano de correção;\n3. Revisar procedimentos operacionais;\n4. Validar eficácia da ação após conclusão.`,
+      como: `1. Análise de causa-raiz;\n2. Executar correção;\n3. Revisar procedimentos;\n4. Validação de eficácia.`,
       quantoCusta: 0,
       documentoId: nc.documentoRelacionadoId,
-      naoConformidadeId: nc.id
+      naoConformidadeId: nc.id,
+      acoes: [
+        {
+          id: `act_${Date.now()}_1`,
+          itemNumero: 1,
+          oQue: `Análise e contenção imediata do problema detectado na NC ${nc.codigo}.`,
+          porQue: `Evitar propagação do lote ou retrabalho imediato.`,
+          onde: `Setor de ${nc.setor}`,
+          quando: deadlineStr,
+          quem: nc.responsavel || user?.name || 'Rodrigo Berto (Qualidade)',
+          como: `Reunião rápida com os operadores e contenção preventiva das peças envolvidas.`,
+          quantoCusta: 0,
+          status: 'Planejado'
+        }
+      ]
     };
 
     if (onAddPlano) {

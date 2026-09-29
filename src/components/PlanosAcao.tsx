@@ -27,13 +27,54 @@ import {
   User,
   Activity,
   ArrowRight,
-  Award
+  Award,
+  ChevronDown,
+  ChevronUp,
+  ChevronRight,
+  LayoutList,
+  LayoutGrid,
+  ListPlus,
+  Layers,
+  PlusCircle,
+  Target
 } from 'lucide-react';
-import { Documento, Auditoria, NaoConformidade, SectorType, PlanoAcao } from '../types';
+import { Documento, Auditoria, NaoConformidade, SectorType, PlanoAcao, ItemAcao5W2H } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { useSectors } from '../hooks/useSectors';
 import { SECTORS, getSectors, PersonalizacaoGeral } from '../utils/mockData';
 import { useModulePermission } from '../utils/permissionManager';
+
+export const getLocalDateISO = (): string => {
+  const d = new Date();
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+export const formatDateBR = (dateStr?: string): string => {
+  if (!dateStr) return '-';
+  const clean = dateStr.includes('T') ? dateStr.split('T')[0] : dateStr;
+  const parts = clean.split('-');
+  if (parts.length === 3 && parts[0].length === 4) {
+    const [y, m, d] = parts;
+    return `${d}/${m}/${y}`;
+  }
+  if (clean.includes('/')) return clean;
+  try {
+    return new Date(dateStr).toLocaleDateString('pt-BR');
+  } catch {
+    return dateStr;
+  }
+};
+
+export const isDateOverdue = (deadlineStr?: string, status?: string): boolean => {
+  if (!deadlineStr) return false;
+  if (status === 'Concluído' || status === 'Cancelada') return false;
+  const todayISO = getLocalDateISO();
+  const cleanDeadline = deadlineStr.includes('T') ? deadlineStr.split('T')[0] : deadlineStr;
+  return cleanDeadline < todayISO;
+};
 
 interface PlanosAcaoProps {
   planos: PlanoAcao[];
@@ -65,16 +106,134 @@ export const PlanosAcaoComponent: React.FC<PlanosAcaoProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedSector, setSelectedSector] = useState<string>('Todos');
   const [selectedStatus, setSelectedStatus] = useState<string>('Todos');
+  const [viewMode, setViewMode] = useState<'lista' | 'cards'>('lista');
+  const [expandedIds, setExpandedIds] = useState<Record<string, boolean>>({});
+
+  const toggleExpand = (id: string) => {
+    setExpandedIds(prev => ({
+      ...prev,
+      [id]: !prev[id]
+    }));
+  };
+
+  const toggleExpandAll = () => {
+    const allExpanded = filteredPlanos.length > 0 && filteredPlanos.every(p => expandedIds[p.id]);
+    if (allExpanded) {
+      setExpandedIds({});
+    } else {
+      const next: Record<string, boolean> = {};
+      filteredPlanos.forEach(p => {
+        next[p.id] = true;
+      });
+      setExpandedIds(next);
+    }
+  };
 
   // Modais
   const [isPlanoModalOpen, setIsPlanoModalOpen] = useState(false);
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
   const [is5W2HGuideOpen, setIs5W2HGuideOpen] = useState(false);
+  const [isActionItemModalOpen, setIsActionItemModalOpen] = useState(false);
 
   // Estados de edição / impressão
   const [editingPlano, setEditingPlano] = useState<PlanoAcao | null>(null);
   const [selectedPrintPlano, setSelectedPrintPlano] = useState<PlanoAcao | null>(null);
   const [planoToDelete, setPlanoToDelete] = useState<PlanoAcao | null>(null);
+  const [actionToDelete, setActionToDelete] = useState<{
+    plano: PlanoAcao;
+    action: ItemAcao5W2H;
+    isOnlyAction: boolean;
+  } | null>(null);
+  const [capaFormFeedback, setCapaFormFeedback] = useState<string | null>(null);
+  const [actionItemModalError, setActionItemModalError] = useState<string | null>(null);
+  const [actionItemTargetPlanoId, setActionItemTargetPlanoId] = useState<string | null>(null);
+  const [editingActionItem, setEditingActionItem] = useState<ItemAcao5W2H | null>(null);
+  const [actionItemForm, setActionItemForm] = useState({
+    oQue: '',
+    porQue: '',
+    onde: '',
+    quando: getLocalDateISO(),
+    quem: '',
+    como: '',
+    quantoCusta: 0,
+    status: 'Planejado' as 'Planejado' | 'Em Andamento' | 'Concluído' | 'Cancelada'
+  });
+
+  // Obter ações filhas da Capa (com fallback para planos legados de ação única)
+  const getPlanActions = (plano: PlanoAcao): ItemAcao5W2H[] => {
+    if (Array.isArray(plano.acoes) && plano.acoes.length > 0) {
+      return plano.acoes;
+    }
+    if (plano.oQue) {
+      return [{
+        id: `${plano.id}-1`,
+        itemNumero: 1,
+        oQue: plano.oQue,
+        porQue: plano.porQue || '',
+        onde: plano.onde || '',
+        quando: plano.quando || plano.dataCriacao,
+        quem: plano.quem || plano.coordenador || 'Responsável',
+        como: plano.como || '',
+        quantoCusta: plano.quantoCusta || 0,
+        status: plano.status || 'Planejado'
+      }];
+    }
+    return [];
+  };
+
+  // Obter estatísticas consolidadas da Capa
+  const getPlanStats = (plano: PlanoAcao) => {
+    const actions = getPlanActions(plano);
+    const total = actions.length;
+    const concluidas = actions.filter(a => a.status === 'Concluído').length;
+    const emAndamento = actions.filter(a => a.status === 'Em Andamento').length;
+    const canceladas = actions.filter(a => a.status === 'Cancelada').length;
+    const planejadas = actions.filter(a => a.status === 'Planejado').length;
+
+    // Ações ativas que demandam execução (excluindo ações canceladas)
+    const acoesAtivas = total - canceladas;
+    let percent = 0;
+    if (acoesAtivas > 0) {
+      percent = Math.round((concluidas / acoesAtivas) * 100);
+    } else if (total > 0) {
+      // Quando todas as ações foram canceladas ou resolvidas, o ciclo está finalizado
+      percent = 100;
+    } else {
+      percent = plano.status === 'Concluído' ? 100 : 0;
+    }
+
+    const totalCost = actions.length > 0 
+      ? actions.reduce((acc, a) => acc + (Number(a.quantoCusta) || 0), 0)
+      : (plano.quantoCusta || 0);
+    const prazoFinal = plano.prazoGeral || (actions.length > 0 ? [...actions].map(a => a.quando).sort().reverse()[0] : (plano.quando || plano.dataCriacao));
+    
+    // Status consolidado da Capa
+    let statusConsolidado = plano.status;
+    if (total > 0) {
+      const allResolved = actions.every(a => a.status === 'Concluído' || a.status === 'Cancelada');
+      if (allResolved) {
+        statusConsolidado = canceladas === total ? 'Cancelada' : 'Concluído';
+      } else if (emAndamento > 0 || concluidas > 0) {
+        statusConsolidado = 'Em Andamento';
+      } else {
+        statusConsolidado = 'Planejado';
+      }
+    }
+
+    return {
+      actions,
+      total,
+      acoesAtivas,
+      concluidas,
+      emAndamento,
+      canceladas,
+      planejadas,
+      percent,
+      totalCost,
+      prazoFinal,
+      statusConsolidado
+    };
+  };
 
   const handlePrintPlano = () => {
     if (!selectedPrintPlano) return;
@@ -88,6 +247,37 @@ export const PlanosAcaoComponent: React.FC<PlanosAcaoProps> = ({
     const printContainer = document.createElement('div');
     printContainer.className = 'print-container';
     
+    const stats = getPlanStats(selectedPrintPlano);
+    const actions = stats.actions;
+    const relDoc = documents.find(d => d.id === selectedPrintPlano.documentoId);
+    const relAudit = audits.find(a => a.id === selectedPrintPlano.auditoriaId);
+    const relNC = ncs.find(n => n.id === selectedPrintPlano.naoConformidadeId);
+
+    const actionsHtml = actions.map((act, idx) => `
+      <tr>
+        <td style="padding: 8px; border: 1px solid #cbd5e1; text-align: center; font-family: monospace; font-weight: bold; background: #f8fafc;">${act.itemNumero || idx + 1}</td>
+        <td style="padding: 8px; border: 1px solid #cbd5e1; font-weight: 600;">
+          ${act.oQue}
+          ${act.porQue ? `<div style="font-size: 10px; color: #64748b; font-weight: normal; margin-top: 2px;"><strong>Por quê:</strong> ${act.porQue}</div>` : ''}
+          ${act.como ? `<div style="font-size: 10px; color: #64748b; font-weight: normal; margin-top: 2px;"><strong>Como:</strong> ${act.como}</div>` : ''}
+        </td>
+        <td style="padding: 8px; border: 1px solid #cbd5e1; font-size: 11px;">${act.onde || '-'}</td>
+        <td style="padding: 8px; border: 1px solid #cbd5e1; font-weight: 600; font-size: 11px;">${act.quem}</td>
+        <td style="padding: 8px; border: 1px solid #cbd5e1; text-align: center; font-size: 11px; white-space: nowrap;">${formatDateBR(act.quando)}</td>
+        <td style="padding: 8px; border: 1px solid #cbd5e1; text-align: right; font-family: monospace; font-size: 11px;">R$ ${(Number(act.quantoCusta) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+        <td style="padding: 8px; border: 1px solid #cbd5e1; text-align: center; font-size: 10px; font-weight: bold;">
+          <span style="display: inline-block; padding: 2px 6px; border-radius: 4px; ${
+            act.status === 'Concluído' ? 'background: #dcfce7; color: #15803d;' :
+            act.status === 'Em Andamento' ? 'background: #fef3c7; color: #b45309;' :
+            act.status === 'Cancelada' ? 'background: #ffe4e6; color: #be123c;' :
+            'background: #eff6ff; color: #1d4ed8;'
+          }">
+            ${act.status}
+          </span>
+        </td>
+      </tr>
+    `).join('');
+
     const content = `
       <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap');
@@ -287,73 +477,68 @@ export const PlanosAcaoComponent: React.FC<PlanosAcaoProps> = ({
         </div>
         
         <div class="grid-container">
-          <div class="grid-cell grid-label">Código do Plano:</div>
+          <div class="grid-cell grid-label">Código Mestre:</div>
           <div class="grid-cell grid-val-mono">${selectedPrintPlano.codigo}</div>
-          <div class="grid-cell grid-label">Data de Emissão:</div>
-          <div class="grid-cell grid-val">${new Date(selectedPrintPlano.dataCriacao).toLocaleDateString('pt-BR')}</div>
+          <div class="grid-cell grid-label">Data de Registro:</div>
+          <div class="grid-cell grid-val">${formatDateBR(selectedPrintPlano.dataCriacao)}</div>
           
-          <div class="grid-cell grid-label">Título do Plano:</div>
+          <div class="grid-cell grid-label">Título da Capa:</div>
           <div class="grid-cell grid-val-bold" style="grid-column: span 3;">${selectedPrintPlano.titulo}</div>
+
+          <div class="grid-cell grid-label">Setor Responsável:</div>
+          <div class="grid-cell grid-val-bold">${selectedPrintPlano.setor}</div>
+          <div class="grid-cell grid-label">Coordenador do Plano:</div>
+          <div class="grid-cell grid-val-bold">${selectedPrintPlano.coordenador || selectedPrintPlano.quem || 'Líder SGQ'}</div>
+
+          <div class="grid-cell grid-label">Prazo Limite:</div>
+          <div class="grid-cell grid-val">${stats.prazoFinal ? formatDateBR(stats.prazoFinal) : '-'}</div>
+          <div class="grid-cell grid-label">Custo Consolidado:</div>
+          <div class="grid-cell grid-val-mono" style="color: #16a34a;">R$ ${stats.totalCost.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+
+          ${selectedPrintPlano.objetivo ? `
+            <div style="grid-column: span 4; padding: 10px 12px; background-color: #f1f5f9; border-bottom: 1px solid #cbd5e1; font-size: 11px;">
+              <strong>Objetivo & Avaliação de Eficácia da Tratativa:</strong><br/>
+              <span style="color: #1e293b;">${selectedPrintPlano.objetivo}</span>
+            </div>
+          ` : ''}
+
+          ${(relDoc || relAudit || relNC) ? `
+            <div style="grid-column: span 4; padding: 8px 12px; background-color: #ffffff; font-size: 10px;">
+              <strong>Rastreabilidade SGQ:</strong>
+              ${relDoc ? `<span style="display:inline-block; margin-right: 12px;">📄 Doc: ${relDoc.codigo} (${relDoc.titulo})</span>` : ''}
+              ${relAudit ? `<span style="display:inline-block; margin-right: 12px;">🔍 Auditoria: ${relAudit.codigo} (${relAudit.titulo})</span>` : ''}
+              ${relNC ? `<span style="display:inline-block;">⚠️ RNC: ${relNC.codigo} (${relNC.titulo})</span>` : ''}
+            </div>
+          ` : ''}
         </div>
         
-        <table class="table-5w2h">
+        <h3 style="font-size: 11px; font-weight: 800; color: #0f172a; margin: 20px 0 8px 0; text-transform: uppercase; letter-spacing: 0.05em;">
+          Ações Executivas 5W2H (${actions.length} ${actions.length === 1 ? 'Ação Vinculada' : 'Ações Vinculadas'})
+        </h3>
+
+        <table style="width: 100%; border-collapse: collapse; border: 1px solid #0f172a; margin-bottom: 24px; font-size: 11px;">
           <thead>
             <tr>
-              <th>Perguntas (Questões)</th>
-              <th>Planejamento e Ação Executiva</th>
+              <th style="width: 35px; text-align: center; background-color: #0f172a; color: #ffffff; padding: 8px 10px; font-size: 9px; text-transform: uppercase; border: 1px solid #334155;">#</th>
+              <th style="background-color: #0f172a; color: #ffffff; padding: 8px 10px; font-size: 9px; text-transform: uppercase; border: 1px solid #334155;">O quê / Por quê / Como</th>
+              <th style="width: 100px; background-color: #0f172a; color: #ffffff; padding: 8px 10px; font-size: 9px; text-transform: uppercase; border: 1px solid #334155;">Onde</th>
+              <th style="width: 120px; background-color: #0f172a; color: #ffffff; padding: 8px 10px; font-size: 9px; text-transform: uppercase; border: 1px solid #334155;">Quem</th>
+              <th style="width: 80px; text-align: center; background-color: #0f172a; color: #ffffff; padding: 8px 10px; font-size: 9px; text-transform: uppercase; border: 1px solid #334155;">Quando</th>
+              <th style="width: 90px; text-align: right; background-color: #0f172a; color: #ffffff; padding: 8px 10px; font-size: 9px; text-transform: uppercase; border: 1px solid #334155;">Custo (R$)</th>
+              <th style="width: 90px; text-align: center; background-color: #0f172a; color: #ffffff; padding: 8px 10px; font-size: 9px; text-transform: uppercase; border: 1px solid #334155;">Status</th>
             </tr>
           </thead>
           <tbody>
-            <tr>
-              <td class="question-col">
-                WHAT (O quê?)
-                <span class="question-sub">Qual ação será executada?</span>
-              </td>
-              <td class="value-col val-bold">${selectedPrintPlano.oQue}</td>
-            </tr>
-            <tr>
-              <td class="question-col">
-                WHY (Por quê?)
-                <span class="question-sub">Qual a justificativa / motivo?</span>
-              </td>
-              <td class="value-col">${selectedPrintPlano.porQue || '-'}</td>
-            </tr>
-            <tr>
-              <td class="question-col">
-                WHERE (Onde?)
-                <span class="question-sub">Onde será aplicada?</span>
-              </td>
-              <td class="value-col">${selectedPrintPlano.onde || '-'}</td>
-            </tr>
-            <tr>
-              <td class="question-col">
-                WHEN (Quando?)
-                <span class="question-sub">Qual o prazo limite?</span>
-              </td>
-              <td class="value-col val-bold">${new Date(selectedPrintPlano.quando).toLocaleDateString('pt-BR')}</td>
-            </tr>
-            <tr>
-              <td class="question-col">
-                WHO (Quem?)
-                <span class="question-sub">Quem é o executor?</span>
-              </td>
-              <td class="value-col val-bold">${selectedPrintPlano.quem}</td>
-            </tr>
-            <tr>
-              <td class="question-col">
-                HOW (Como?)
-                <span class="question-sub">Qual método de execução?</span>
-              </td>
-              <td class="value-col">${selectedPrintPlano.como || '-'}</td>
-            </tr>
-            <tr>
-              <td class="question-col">
-                HOW MUCH (Quanto?)
-                <span class="question-sub">Custos estimados?</span>
-              </td>
-              <td class="value-col val-heavy">R$ ${selectedPrintPlano.quantoCusta.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-            </tr>
+            ${actionsHtml}
           </tbody>
+          <tfoot>
+            <tr style="background-color: #f8fafc; font-weight: bold; border-top: 2px solid #0f172a;">
+              <td colspan="4" style="padding: 8px; text-align: right; border: 1px solid #cbd5e1;">Totais Consolidados:</td>
+              <td style="padding: 8px; text-align: center; border: 1px solid #cbd5e1;">${stats.total} ações</td>
+              <td style="padding: 8px; text-align: right; font-family: monospace; border: 1px solid #cbd5e1;">R$ ${stats.totalCost.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+              <td style="padding: 8px; text-align: center; color: #16a34a; border: 1px solid #cbd5e1;">${stats.concluidas}/${stats.acoesAtivas > 0 ? stats.acoesAtivas : stats.total} concluídas (${stats.percent}%)${stats.planejadas > 0 ? ` <span style="color: #2563eb; font-size: 10px;">[${stats.planejadas} plan.]</span>` : ''}${stats.canceladas > 0 ? ` <span style="color: #64748b; font-size: 10px;">[${stats.canceladas} canc.]</span>` : ''}</td>
+            </tr>
+          </tfoot>
         </table>
         
         <div class="sign-container">
@@ -400,79 +585,173 @@ export const PlanosAcaoComponent: React.FC<PlanosAcaoProps> = ({
     }, 300);
   };
 
-  // Formulário
+  // Formulário da Capa
   const [formPlano, setFormPlano] = useState({
     codigo: '',
     titulo: '',
     setor: 'Corte' as SectorType,
     status: 'Planejado' as 'Planejado' | 'Em Andamento' | 'Concluído' | 'Cancelada',
-    oQue: '',
-    porQue: '',
-    onde: '',
-    quando: '',
-    quem: '',
-    como: '',
-    quantoCusta: 0,
+    dataCriacao: getLocalDateISO(),
+    coordenador: '',
+    objetivo: '',
+    prazoGeral: '',
+    acoes: [] as ItemAcao5W2H[],
     documentoId: '',
     auditoriaId: '',
     naoConformidadeId: ''
   });
 
-  // Limpar formulário para novo plano
+  // Estado para adicionar ação inline dentro do modal da Capa
+  const [showAddActionInCapaModal, setShowAddActionInCapaModal] = useState(false);
+  const [inlineActionForm, setInlineActionForm] = useState({
+    oQue: '',
+    porQue: '',
+    onde: '',
+    quando: getLocalDateISO(),
+    quem: '',
+    como: '',
+    quantoCusta: 0,
+    status: 'Planejado' as 'Planejado' | 'Em Andamento' | 'Concluído' | 'Cancelada'
+  });
+
+  // Limpar formulário para novo plano (Capa)
   const handleOpenNewPlano = () => {
     const nextNum = planos.length + 1;
     const formattedNum = String(nextNum).padStart(3, '0');
     const autoCodigo = `PA-2026-${formattedNum}`;
+    const today = getLocalDateISO();
 
     setEditingPlano(null);
+    setShowAddActionInCapaModal(false);
     setFormPlano({
       codigo: autoCodigo,
       titulo: '',
       setor: user?.sector || 'Corte',
       status: 'Planejado',
-      oQue: '',
-      porQue: '',
-      onde: '',
-      quando: new Date().toISOString().split('T')[0],
-      quem: user?.name || '',
-      como: '',
-      quantoCusta: 0,
+      dataCriacao: today,
+      coordenador: user?.name || '',
+      objetivo: '',
+      prazoGeral: today,
+      acoes: [
+        {
+          id: `act_${Date.now()}_1`,
+          itemNumero: 1,
+          oQue: '',
+          porQue: '',
+          onde: '',
+          quando: today,
+          quem: user?.name || '',
+          como: '',
+          quantoCusta: 0,
+          status: 'Planejado'
+        }
+      ],
       documentoId: '',
       auditoriaId: '',
       naoConformidadeId: ''
     });
+    setInlineActionForm({
+      oQue: '',
+      porQue: '',
+      onde: '',
+      quando: today,
+      quem: user?.name || '',
+      como: '',
+      quantoCusta: 0,
+      status: 'Planejado'
+    });
     setIsPlanoModalOpen(true);
   };
 
-  // Abrir modal com dados de edição
+  // Abrir modal com dados de edição da Capa
   const handleOpenEditPlano = (plano: PlanoAcao) => {
     setEditingPlano(plano);
+    setShowAddActionInCapaModal(false);
+    const existingActions = getPlanActions(plano);
     setFormPlano({
       codigo: plano.codigo,
       titulo: plano.titulo,
       setor: plano.setor,
       status: plano.status,
-      oQue: plano.oQue,
-      porQue: plano.porQue,
-      onde: plano.onde,
-      quando: plano.quando,
-      quem: plano.quem,
-      como: plano.como,
-      quantoCusta: plano.quantoCusta,
+      dataCriacao: plano.dataCriacao || getLocalDateISO(),
+      coordenador: plano.coordenador || plano.quem || '',
+      objetivo: plano.objetivo || '',
+      prazoGeral: plano.prazoGeral || plano.quando || '',
+      acoes: existingActions,
       documentoId: plano.documentoId || '',
       auditoriaId: plano.auditoriaId || '',
       naoConformidadeId: plano.naoConformidadeId || ''
     });
+    setInlineActionForm({
+      oQue: '',
+      porQue: '',
+      onde: '',
+      quando: getLocalDateISO(),
+      quem: plano.coordenador || plano.quem || user?.name || '',
+      como: '',
+      quantoCusta: 0,
+      status: 'Planejado'
+    });
     setIsPlanoModalOpen(true);
   };
 
-  // Salvar novo ou editado
-  const handleSubmitPlano = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!formPlano.codigo || !formPlano.titulo || !formPlano.oQue || !formPlano.quem || !formPlano.quando) {
-      alert('Por favor, preencha todos os campos obrigatórios (*).');
+  // Funções de manipulação das ações dentro da Capa do Plano
+  const handleUpdateCapaAction = (index: number, field: keyof ItemAcao5W2H, val: any) => {
+    const newAcoes = [...formPlano.acoes];
+    newAcoes[index] = { ...newAcoes[index], [field]: val };
+    setFormPlano({ ...formPlano, acoes: newAcoes });
+  };
+
+  const handleAddCapaAction = () => {
+    const nextIdx = formPlano.acoes.length + 1;
+    const newAct: ItemAcao5W2H = {
+      id: `act_${Date.now()}_${nextIdx}`,
+      itemNumero: nextIdx,
+      oQue: '',
+      porQue: '',
+      onde: formPlano.setor,
+      quando: formPlano.prazoGeral || new Date().toISOString().split('T')[0],
+      quem: formPlano.coordenador || user?.name || '',
+      como: '',
+      quantoCusta: 0,
+      status: 'Planejado'
+    };
+    setFormPlano({ ...formPlano, acoes: [...formPlano.acoes, newAct] });
+  };
+
+  const handleRemoveCapaAction = (index: number) => {
+    if (formPlano.acoes.length <= 1) {
+      setCapaFormFeedback('A Capa do Plano deve conter pelo menos uma ação 5W2H.');
       return;
     }
+    setCapaFormFeedback(null);
+    const newAcoes = formPlano.acoes.filter((_, idx) => idx !== index);
+    setFormPlano({ ...formPlano, acoes: newAcoes });
+  };
+
+  // Salvar Capa (novo ou editado)
+  const handleSubmitPlano = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formPlano.codigo || !formPlano.titulo || !formPlano.coordenador) {
+      setCapaFormFeedback('Por favor, preencha o Código, Título da Capa e Coordenador Responsável (*).');
+      return;
+    }
+
+    // Filtrar ações válidas
+    const validActions = formPlano.acoes.filter(a => a.oQue.trim().length > 0);
+    if (validActions.length === 0) {
+      setCapaFormFeedback('Por favor, adicione pelo menos uma ação 5W2H com descrição no plano.');
+      return;
+    }
+    setCapaFormFeedback(null);
+
+    const firstAction = validActions[0];
+    const totalCost = validActions.reduce((acc, a) => acc + (Number(a.quantoCusta) || 0), 0);
+    const latestDeadline = [...validActions].map(a => a.quando).sort().reverse()[0] || formPlano.prazoGeral;
+    const allCancelled = validActions.length > 0 && validActions.every(a => a.status === 'Cancelada');
+    const allConcluded = validActions.length > 0 && validActions.every(a => a.status === 'Concluído' || a.status === 'Cancelada');
+    const isUnderway = validActions.some(a => a.status === 'Em Andamento' || a.status === 'Concluído');
+    const statusFinal = allCancelled ? 'Cancelada' : (allConcluded ? 'Concluído' : (isUnderway ? 'Em Andamento' : formPlano.status));
 
     if (editingPlano) {
       const updated: PlanoAcao = {
@@ -480,45 +759,230 @@ export const PlanosAcaoComponent: React.FC<PlanosAcaoProps> = ({
         codigo: formPlano.codigo.toUpperCase().trim(),
         titulo: formPlano.titulo.trim(),
         setor: formPlano.setor,
-        status: formPlano.status,
-        oQue: formPlano.oQue.trim(),
-        porQue: formPlano.porQue.trim(),
-        onde: formPlano.onde.trim(),
-        quando: formPlano.quando,
-        quem: formPlano.quem.trim(),
-        como: formPlano.como.trim(),
-        quantoCusta: Number(formPlano.quantoCusta),
+        status: statusFinal,
+        dataCriacao: formPlano.dataCriacao || editingPlano.dataCriacao || getLocalDateISO(),
+        coordenador: formPlano.coordenador.trim(),
+        objetivo: formPlano.objetivo.trim(),
+        prazoGeral: latestDeadline,
+        acoes: validActions,
+        // Sincronizar campos legados com a primeira ação
+        oQue: firstAction.oQue,
+        porQue: firstAction.porQue,
+        onde: firstAction.onde,
+        quando: latestDeadline,
+        quem: formPlano.coordenador.trim(),
+        como: firstAction.como,
+        quantoCusta: totalCost,
         documentoId: formPlano.documentoId || undefined,
         auditoriaId: formPlano.auditoriaId || undefined,
         naoConformidadeId: formPlano.naoConformidadeId || undefined
       };
       onUpdatePlano(updated);
-      onAddLog('Editou Plano de Ação', `O Plano de Ação 5W2H ${updated.codigo} foi atualizado com sucesso.`, updated.documentoId);
+      onAddLog('Editou Plano de Ação', `O Plano Mestre ${updated.codigo} com ${validActions.length} ações foi atualizado com sucesso.`, updated.documentoId);
     } else {
       const novo: PlanoAcao = {
         id: `pa_${Date.now()}`,
         codigo: formPlano.codigo.toUpperCase().trim(),
         titulo: formPlano.titulo.trim(),
         setor: formPlano.setor,
-        status: formPlano.status,
-        dataCriacao: new Date().toISOString().split('T')[0],
-        oQue: formPlano.oQue.trim(),
-        porQue: formPlano.porQue.trim(),
-        onde: formPlano.onde.trim(),
-        quando: formPlano.quando,
-        quem: formPlano.quem.trim(),
-        como: formPlano.como.trim(),
-        quantoCusta: Number(formPlano.quantoCusta),
+        status: statusFinal,
+        dataCriacao: formPlano.dataCriacao || getLocalDateISO(),
+        coordenador: formPlano.coordenador.trim(),
+        objetivo: formPlano.objetivo.trim(),
+        prazoGeral: latestDeadline,
+        acoes: validActions,
+        oQue: firstAction.oQue,
+        porQue: firstAction.porQue,
+        onde: firstAction.onde,
+        quando: latestDeadline,
+        quem: formPlano.coordenador.trim(),
+        como: firstAction.como,
+        quantoCusta: totalCost,
         documentoId: formPlano.documentoId || undefined,
         auditoriaId: formPlano.auditoriaId || undefined,
         naoConformidadeId: formPlano.naoConformidadeId || undefined
       };
       onAddPlano(novo);
-      onAddLog('Criou Plano de Ação', `Novo Plano de Ação 5W2H ${novo.codigo} registrado no SGQ.`, novo.documentoId);
+      onAddLog('Criou Plano de Ação', `Novo Plano Mestre ${novo.codigo} com ${validActions.length} ações registrado no SGQ.`, novo.documentoId);
     }
 
     setIsPlanoModalOpen(false);
     setEditingPlano(null);
+  };
+
+  // Alternar rapidamente o status de uma ação individual
+  const handleToggleActionStatus = (planoId: string, actionId: string, newStatus: 'Planejado' | 'Em Andamento' | 'Concluído' | 'Cancelada') => {
+    const plano = planos.find(p => p.id === planoId);
+    if (!plano) return;
+    const currentActions = getPlanActions(plano);
+    const updatedActions = currentActions.map(a => a.id === actionId ? { 
+      ...a, 
+      status: newStatus,
+      concluidoEm: newStatus === 'Concluído' ? new Date().toISOString().split('T')[0] : undefined
+    } : a);
+
+    const allCancelled = updatedActions.length > 0 && updatedActions.every(a => a.status === 'Cancelada');
+    const allConcluded = updatedActions.length > 0 && updatedActions.every(a => a.status === 'Concluído' || a.status === 'Cancelada');
+    const isUnderway = updatedActions.some(a => a.status === 'Em Andamento' || a.status === 'Concluído');
+    const statusFinal = allCancelled ? 'Cancelada' : (allConcluded ? 'Concluído' : (isUnderway ? 'Em Andamento' : 'Planejado'));
+
+    const updatedPlano: PlanoAcao = {
+      ...plano,
+      acoes: updatedActions,
+      status: statusFinal
+    };
+
+    onUpdatePlano(updatedPlano);
+    onAddLog('Atualizou Ação 5W2H', `Status da ação no plano ${plano.codigo} alterado para "${newStatus}".`, plano.documentoId);
+  };
+
+  // Iniciar fluxo de exclusão de ação 5W2H (com modal de confirmação)
+  const handleDeleteActionClick = (plano: PlanoAcao, action: ItemAcao5W2H) => {
+    const currentActions = getPlanActions(plano);
+    const isOnlyAction = currentActions.length <= 1;
+    setActionToDelete({
+      plano,
+      action,
+      isOnlyAction
+    });
+  };
+
+  // Confirmar exclusão da ação (ou do plano caso seja a única)
+  const handleConfirmDeleteAction = () => {
+    if (!actionToDelete) return;
+    const { plano, action, isOnlyAction } = actionToDelete;
+
+    if (isOnlyAction) {
+      onDeletePlano(plano.id);
+      onAddLog('Excluiu Plano de Ação', `Removeu o Plano de Ação ${plano.codigo} do SGQ após exclusão de sua única ação.`, plano.documentoId);
+      setActionToDelete(null);
+      return;
+    }
+
+    const currentActions = getPlanActions(plano);
+    const updatedActions = currentActions.filter(a => a.id !== action.id);
+    const firstAct = updatedActions[0];
+    const totalCost = updatedActions.reduce((acc, a) => acc + (Number(a.quantoCusta) || 0), 0);
+    const allCancelled = updatedActions.length > 0 && updatedActions.every(a => a.status === 'Cancelada');
+    const allConcluded = updatedActions.length > 0 && updatedActions.every(a => a.status === 'Concluído' || a.status === 'Cancelada');
+    const isUnderway = updatedActions.some(a => a.status === 'Em Andamento' || a.status === 'Concluído');
+    const statusFinal = allCancelled ? 'Cancelada' : (allConcluded ? 'Concluído' : (isUnderway ? 'Em Andamento' : plano.status));
+
+    const updatedPlano: PlanoAcao = {
+      ...plano,
+      acoes: updatedActions,
+      status: statusFinal,
+      quantoCusta: totalCost,
+      oQue: firstAct?.oQue || '',
+      porQue: firstAct?.porQue || '',
+      onde: firstAct?.onde || '',
+      quando: firstAct?.quando || '',
+      quem: firstAct?.quem || plano.coordenador || '',
+      como: firstAct?.como || ''
+    };
+
+    onUpdatePlano(updatedPlano);
+    onAddLog('Removeu Ação 5W2H', `Uma ação foi removida do plano ${plano.codigo}.`, plano.documentoId);
+    setActionToDelete(null);
+  };
+
+  // Abrir modal de inclusão rápida de ação
+  const handleOpenAddActionModal = (planoId: string) => {
+    const plano = planos.find(p => p.id === planoId);
+    setActionItemTargetPlanoId(planoId);
+    setEditingActionItem(null);
+    setActionItemModalError(null);
+    setActionItemForm({
+      oQue: '',
+      porQue: '',
+      onde: plano?.onde || '',
+      quando: getLocalDateISO(),
+      quem: plano?.coordenador || user?.name || '',
+      como: '',
+      quantoCusta: 0,
+      status: 'Planejado'
+    });
+    setIsActionItemModalOpen(true);
+  };
+
+  // Abrir modal para editar ação existente
+  const handleOpenEditActionModal = (planoId: string, item: ItemAcao5W2H) => {
+    setActionItemTargetPlanoId(planoId);
+    setEditingActionItem(item);
+    setActionItemModalError(null);
+    setActionItemForm({
+      oQue: item.oQue,
+      porQue: item.porQue || '',
+      onde: item.onde || '',
+      quando: item.quando,
+      quem: item.quem,
+      como: item.como || '',
+      quantoCusta: item.quantoCusta,
+      status: item.status
+    });
+    setIsActionItemModalOpen(true);
+  };
+
+  // Salvar ação filha no modal rápido
+  const handleSaveActionItemModal = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!actionItemTargetPlanoId) return;
+    const plano = planos.find(p => p.id === actionItemTargetPlanoId);
+    if (!plano) return;
+
+    if (!actionItemForm.oQue || !actionItemForm.quem || !actionItemForm.quando) {
+      setActionItemModalError('Preencha os campos obrigatórios da ação (O quê, Quem, Quando).');
+      return;
+    }
+    setActionItemModalError(null);
+
+    const currentActions = getPlanActions(plano);
+    let updatedActions: ItemAcao5W2H[];
+
+    if (editingActionItem) {
+      updatedActions = currentActions.map(a => a.id === editingActionItem.id ? {
+        ...a,
+        oQue: actionItemForm.oQue.trim(),
+        porQue: actionItemForm.porQue.trim(),
+        onde: actionItemForm.onde.trim(),
+        quando: actionItemForm.quando,
+        quem: actionItemForm.quem.trim(),
+        como: actionItemForm.como.trim(),
+        quantoCusta: Number(actionItemForm.quantoCusta) || 0,
+        status: actionItemForm.status
+      } : a);
+    } else {
+      const newAction: ItemAcao5W2H = {
+        id: `act_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+        itemNumero: currentActions.length + 1,
+        oQue: actionItemForm.oQue.trim(),
+        porQue: actionItemForm.porQue.trim(),
+        onde: actionItemForm.onde.trim(),
+        quando: actionItemForm.quando,
+        quem: actionItemForm.quem.trim(),
+        como: actionItemForm.como.trim(),
+        quantoCusta: Number(actionItemForm.quantoCusta) || 0,
+        status: actionItemForm.status
+      };
+      updatedActions = [...currentActions, newAction];
+    }
+
+    const totalCost = updatedActions.reduce((acc, a) => acc + (Number(a.quantoCusta) || 0), 0);
+    const allCancelled = updatedActions.length > 0 && updatedActions.every(a => a.status === 'Cancelada');
+    const allConcluded = updatedActions.length > 0 && updatedActions.every(a => a.status === 'Concluído' || a.status === 'Cancelada');
+    const isUnderway = updatedActions.some(a => a.status === 'Em Andamento' || a.status === 'Concluído');
+    const statusFinal = allCancelled ? 'Cancelada' : (allConcluded ? 'Concluído' : (isUnderway ? 'Em Andamento' : plano.status));
+
+    const updatedPlano: PlanoAcao = {
+      ...plano,
+      acoes: updatedActions,
+      quantoCusta: totalCost,
+      status: statusFinal
+    };
+
+    onUpdatePlano(updatedPlano);
+    setIsActionItemModalOpen(false);
+    onAddLog('Ação 5W2H Salva', `Ação ${editingActionItem ? 'atualizada' : 'adicionada'} no plano ${plano.codigo}.`, plano.documentoId);
   };
 
   // Excluir plano de ação
@@ -528,23 +992,31 @@ export const PlanosAcaoComponent: React.FC<PlanosAcaoProps> = ({
 
   // Filtros aplicados
   const filteredPlanos = planos.filter(plano => {
+    const stats = getPlanStats(plano);
+    const searchLower = searchTerm.toLowerCase();
     const matchesSearch = 
-      plano.codigo.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      plano.titulo.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      plano.oQue.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      plano.quem.toLowerCase().includes(searchTerm.toLowerCase());
+      plano.codigo.toLowerCase().includes(searchLower) ||
+      plano.titulo.toLowerCase().includes(searchLower) ||
+      (plano.coordenador && plano.coordenador.toLowerCase().includes(searchLower)) ||
+      (plano.objetivo && plano.objetivo.toLowerCase().includes(searchLower)) ||
+      stats.actions.some(a => 
+        a.oQue.toLowerCase().includes(searchLower) ||
+        a.quem.toLowerCase().includes(searchLower) ||
+        (a.onde && a.onde.toLowerCase().includes(searchLower))
+      );
     
     const matchesSector = selectedSector === 'Todos' || plano.setor === selectedSector;
-    const matchesStatus = selectedStatus === 'Todos' || plano.status === selectedStatus;
+    const matchesStatus = selectedStatus === 'Todos' || stats.statusConsolidado === selectedStatus || plano.status === selectedStatus;
 
     return matchesSearch && matchesSector && matchesStatus;
   });
 
   // Métricas
-  const totalInvestido = filteredPlanos.reduce((acc, p) => acc + p.quantoCusta, 0);
-  const planejados = filteredPlanos.filter(p => p.status === 'Planejado').length;
-  const emAndamento = filteredPlanos.filter(p => p.status === 'Em Andamento').length;
-  const concluidos = filteredPlanos.filter(p => p.status === 'Concluído').length;
+  const totalInvestido = filteredPlanos.reduce((acc, p) => acc + getPlanStats(p).totalCost, 0);
+  const totalAcoesCount = filteredPlanos.reduce((acc, p) => acc + getPlanStats(p).total, 0);
+  const planejados = filteredPlanos.filter(p => getPlanStats(p).statusConsolidado === 'Planejado').length;
+  const emAndamento = filteredPlanos.filter(p => getPlanStats(p).statusConsolidado === 'Em Andamento').length;
+  const concluidos = filteredPlanos.filter(p => getPlanStats(p).statusConsolidado === 'Concluído').length;
 
   // Renderizar badge de status
   const getStatusBadge = (status: string) => {
@@ -692,9 +1164,65 @@ export const PlanosAcaoComponent: React.FC<PlanosAcaoProps> = ({
             <option value="Cancelada">Cancelado</option>
           </select>
         </div>
+
+        {/* View Mode Toggle */}
+        <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-1 rounded-xl border border-slate-200 dark:border-slate-700 shrink-0">
+          <button
+            type="button"
+            onClick={() => setViewMode('lista')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+              viewMode === 'lista'
+                ? 'bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-2xs'
+                : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+            }`}
+            title="Visualização em Lista / Tabela"
+          >
+            <LayoutList className="w-3.5 h-3.5" />
+            <span>Lista</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setViewMode('cards')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+              viewMode === 'cards'
+                ? 'bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-2xs'
+                : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+            }`}
+            title="Visualização em Cards"
+          >
+            <LayoutGrid className="w-3.5 h-3.5" />
+            <span>Cards</span>
+          </button>
+        </div>
       </div>
 
-      {/* Main List Grid */}
+      {/* Sub-bar with count and actions */}
+      {filteredPlanos.length > 0 && viewMode === 'lista' && (
+        <div className="flex items-center justify-between text-xs px-1 text-slate-500 dark:text-slate-400">
+          <span>
+            Exibindo <strong className="text-slate-800 dark:text-slate-200 font-extrabold">{filteredPlanos.length}</strong> {filteredPlanos.length === 1 ? 'plano de ação' : 'planos de ação'}
+          </span>
+          <button
+            type="button"
+            onClick={toggleExpandAll}
+            className="flex items-center gap-1 text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline cursor-pointer"
+          >
+            {filteredPlanos.every(p => expandedIds[p.id]) ? (
+              <>
+                <ChevronUp className="w-3.5 h-3.5" />
+                <span>Recolher todos os 5W2H</span>
+              </>
+            ) : (
+              <>
+                <ChevronDown className="w-3.5 h-3.5" />
+                <span>Expandir todos os 5W2H</span>
+              </>
+            )}
+          </button>
+        </div>
+      )}
+
+      {/* Main List / Table / Grid */}
       {filteredPlanos.length === 0 ? (
         <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl py-12 px-6 text-center">
           <div className="w-12 h-12 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center mx-auto mb-4 text-slate-400">
@@ -713,62 +1241,564 @@ export const PlanosAcaoComponent: React.FC<PlanosAcaoProps> = ({
             </button>
           )}
         </div>
+      ) : viewMode === 'lista' ? (
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xs overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs border-collapse">
+              <thead className="bg-slate-50 dark:bg-slate-950/80 text-slate-500 dark:text-slate-400 font-bold border-b border-slate-200 dark:border-slate-800 uppercase text-[10px] tracking-wider">
+                <tr>
+                  <th className="py-3.5 px-3 w-10 text-center"></th>
+                  <th className="py-3.5 px-4 min-w-[280px]">Plano Mestre (Capa) & Escopo</th>
+                  <th className="py-3.5 px-4 min-w-[120px]">Setor</th>
+                  <th className="py-3.5 px-4 min-w-[140px]">Coordenador</th>
+                  <th className="py-3.5 px-4 min-w-[150px]">Ações & Progresso</th>
+                  <th className="py-3.5 px-4 min-w-[120px]">Prazo Limite</th>
+                  <th className="py-3.5 px-4 min-w-[120px]">Investimento Total</th>
+                  <th className="py-3.5 px-4 min-w-[110px]">Status Geral</th>
+                  <th className="py-3.5 px-4 min-w-[130px]">Rastreabilidade</th>
+                  <th className="py-3.5 px-4 text-right min-w-[140px]">Ações</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-150 dark:divide-slate-800 font-medium text-slate-700 dark:text-slate-300">
+                {filteredPlanos.map((plano) => {
+                  const isExpanded = !!expandedIds[plano.id];
+                  const stats = getPlanStats(plano);
+                  const actions = stats.actions;
+                  const relDoc = documents.find(d => d.id === plano.documentoId);
+                  const relAudit = audits.find(a => a.id === plano.auditoriaId);
+                  const relNC = ncs.find(n => n.id === plano.naoConformidadeId);
+                  const isOverdue = isDateOverdue(stats.prazoFinal, stats.statusConsolidado);
+
+                  return (
+                    <React.Fragment key={plano.id}>
+                      <tr 
+                        className={`hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors cursor-pointer ${
+                          isExpanded ? 'bg-blue-50/30 dark:bg-blue-950/20' : ''
+                        }`}
+                        onClick={() => toggleExpand(plano.id)}
+                      >
+                        {/* Expand toggle */}
+                        <td className="py-3.5 px-3 text-center" onClick={(e) => { e.stopPropagation(); toggleExpand(plano.id); }}>
+                          <button
+                            type="button"
+                            className="p-1 hover:bg-slate-200 dark:hover:bg-slate-700 rounded text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors cursor-pointer"
+                            title={isExpanded ? 'Recolher ações 5W2H' : 'Expandir ações 5W2H'}
+                          >
+                            <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${isExpanded ? 'rotate-180 text-blue-600 dark:text-blue-400' : ''}`} />
+                          </button>
+                        </td>
+
+                        {/* Código & Título & Escopo */}
+                        <td className="py-3.5 px-4">
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono text-[10px] font-extrabold bg-[#0B3A63] text-white px-2 py-0.5 rounded tracking-wider shrink-0 shadow-2xs">
+                              {plano.codigo}
+                            </span>
+                            <span className="font-extrabold text-xs text-slate-900 dark:text-white line-clamp-1">
+                              {plano.titulo}
+                            </span>
+                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 shrink-0" title={`${actions.length} ações vinculadas`}>
+                              {actions.length} {actions.length === 1 ? 'ação' : 'ações'}
+                            </span>
+                          </div>
+                          {plano.objetivo ? (
+                            <p className="text-[11px] text-slate-500 dark:text-slate-400 line-clamp-1 mt-0.5 pl-0.5 italic">
+                              {plano.objetivo}
+                            </p>
+                          ) : plano.oQue ? (
+                            <p className="text-[11px] text-slate-500 dark:text-slate-400 line-clamp-1 mt-0.5 pl-0.5">
+                              {plano.oQue}
+                            </p>
+                          ) : null}
+                        </td>
+
+                        {/* Setor */}
+                        <td className="py-3.5 px-4">
+                          <span className="inline-block text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-2 py-0.5 rounded">
+                            {plano.setor}
+                          </span>
+                        </td>
+
+                        {/* Coordenador */}
+                        <td className="py-3.5 px-4">
+                          <div className="flex items-center gap-1.5">
+                            <User className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400 shrink-0" />
+                            <span className="font-bold text-slate-800 dark:text-slate-200 text-xs truncate max-w-[140px]" title={plano.coordenador || plano.quem}>
+                              {plano.coordenador || plano.quem || 'Líder SGQ'}
+                            </span>
+                          </div>
+                        </td>
+
+                        {/* Ações & Progresso */}
+                        <td className="py-3.5 px-4 min-w-[150px]">
+                          <div className="space-y-1">
+                            <div className="flex items-center justify-between text-[10px]">
+                              <span className="font-bold text-slate-700 dark:text-slate-300">
+                                {stats.concluidas}/{stats.acoesAtivas > 0 ? stats.acoesAtivas : stats.total} concluídas
+                                {stats.canceladas > 0 && (
+                                  <span className="text-slate-400 dark:text-slate-500 font-normal ml-1">
+                                    ({stats.canceladas} canc.)
+                                  </span>
+                                )}
+                              </span>
+                              <span className={`font-extrabold font-mono ${stats.percent === 100 ? 'text-emerald-600 dark:text-emerald-400' : 'text-blue-600 dark:text-blue-400'}`}>
+                                {stats.percent}%
+                              </span>
+                            </div>
+                            <div className="w-full bg-slate-150 dark:bg-slate-800 rounded-full h-1.5 overflow-hidden">
+                              <div 
+                                className={`h-1.5 rounded-full transition-all duration-300 ${
+                                  stats.percent === 100 
+                                    ? 'bg-emerald-500' 
+                                    : stats.percent > 0 
+                                      ? 'bg-blue-600' 
+                                      : 'bg-slate-300 dark:bg-slate-700'
+                                }`}
+                                style={{ width: `${stats.percent}%` }}
+                              />
+                            </div>
+                            <div className="flex items-center gap-1.5 text-[9px] text-slate-400 dark:text-slate-500 font-medium">
+                              <span title="Planejadas" className="text-blue-600 dark:text-blue-400 font-semibold">{stats.planejadas} plan.</span>
+                              <span>•</span>
+                              <span title="Em Andamento" className="text-amber-600 dark:text-amber-400 font-semibold">{stats.emAndamento} and.</span>
+                              <span>•</span>
+                              <span title="Concluídas" className="text-emerald-600 dark:text-emerald-400 font-semibold">{stats.concluidas} conc.</span>
+                            </div>
+                          </div>
+                        </td>
+
+                        {/* Prazo Limite */}
+                        <td className="py-3.5 px-4">
+                          <div className="flex items-center gap-1.5">
+                            <Calendar className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                            <span className={`font-mono text-xs font-bold ${
+                              isOverdue 
+                                ? 'text-rose-600 dark:text-rose-400' 
+                                : 'text-slate-800 dark:text-slate-200'
+                            }`}>
+                              {stats.prazoFinal ? formatDateBR(stats.prazoFinal) : '-'}
+                            </span>
+                          </div>
+                          {isOverdue && (
+                            <span className="inline-block text-[9px] font-extrabold text-rose-500 uppercase tracking-tight mt-0.5">
+                              Atrasado
+                            </span>
+                          )}
+                        </td>
+
+                        {/* Investimento Total */}
+                        <td className="py-3.5 px-4 font-mono font-bold text-emerald-600 dark:text-emerald-400 text-xs">
+                          {stats.totalCost > 0 ? (
+                            `R$ ${stats.totalCost.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                          ) : (
+                            <span className="text-slate-400 font-normal">R$ 0,00</span>
+                          )}
+                        </td>
+
+                        {/* Status Geral */}
+                        <td className="py-3.5 px-4">
+                          {getStatusBadge(stats.statusConsolidado)}
+                        </td>
+
+                        {/* Rastreabilidade */}
+                        <td className="py-3.5 px-4">
+                          {plano.documentoId || plano.auditoriaId || plano.naoConformidadeId ? (
+                            <div className="flex items-center gap-1 flex-wrap">
+                              {plano.documentoId && (
+                                <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-bold bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-900" title={`Documento: ${relDoc ? relDoc.codigo : plano.documentoId}`}>
+                                  <FileText className="w-2.5 h-2.5" />
+                                  <span>{relDoc?.codigo || 'Doc'}</span>
+                                </span>
+                              )}
+                              {plano.auditoriaId && (
+                                <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-bold bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-900" title={`Auditoria: ${relAudit ? relAudit.codigo : plano.auditoriaId}`}>
+                                  <CheckSquare className="w-2.5 h-2.5" />
+                                  <span>{relAudit?.codigo || 'Aud'}</span>
+                                </span>
+                              )}
+                              {plano.naoConformidadeId && (
+                                <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-bold bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-900" title={`RNC: ${relNC ? relNC.codigo : plano.naoConformidadeId}`}>
+                                  <AlertCircle className="w-2.5 h-2.5" />
+                                  <span>{relNC?.codigo || 'RNC'}</span>
+                                </span>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="text-slate-400 text-[10px]">—</span>
+                          )}
+                        </td>
+
+                        {/* Ações */}
+                        <td className="py-3.5 px-4 text-right" onClick={(e) => e.stopPropagation()}>
+                          <div className="flex items-center justify-end gap-1">
+                            {canCreate && (
+                              <button
+                                onClick={() => handleOpenAddActionModal(plano.id)}
+                                className="px-2 py-1 bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/50 dark:hover:bg-blue-900/60 text-blue-600 dark:text-blue-400 rounded-md text-[10px] font-extrabold flex items-center gap-1 transition-colors cursor-pointer"
+                                title="Adicionar Nova Ação 5W2H nesta Capa"
+                              >
+                                <PlusCircle className="w-3.5 h-3.5" />
+                                <span className="hidden xl:inline">+ Ação</span>
+                              </button>
+                            )}
+
+                            <button
+                              onClick={() => {
+                                setSelectedPrintPlano(plano);
+                                setIsPrintModalOpen(true);
+                              }}
+                              className="p-1.5 hover:bg-slate-150 dark:hover:bg-slate-800 rounded text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors cursor-pointer"
+                              title="Imprimir Folha Mestre 5W2H"
+                            >
+                              <Printer className="w-3.5 h-3.5" />
+                            </button>
+
+                            {canEdit && (!canModifyItem || canModifyItem(plano.onde)) && (
+                              <button
+                                onClick={() => handleOpenEditPlano(plano)}
+                                className="p-1.5 hover:bg-slate-150 dark:hover:bg-slate-800 rounded text-slate-400 hover:text-blue-500 transition-colors cursor-pointer"
+                                title="Editar Plano Mestre (Capa)"
+                              >
+                                <Pencil className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+
+                            {canDelete && (!canDeleteItem || canDeleteItem(plano.onde)) && (
+                              <button
+                                onClick={() => handleDeletePlanoClick(plano)}
+                                className="p-1.5 hover:bg-slate-150 dark:hover:bg-slate-800 rounded text-slate-400 hover:text-rose-500 transition-colors cursor-pointer"
+                                title="Excluir Plano de Ação"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+
+                      {/* Accordion 5W2H Details row (Capa com Tabela de Ações) */}
+                      {isExpanded && (
+                        <tr className="bg-slate-50/70 dark:bg-slate-950/40 border-b border-slate-200 dark:border-slate-800">
+                          <td colSpan={10} className="p-5">
+                            <div className="space-y-4 max-w-7xl mx-auto">
+                              
+                              {/* Cabeçalho do Escopo da Capa */}
+                              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-2xs space-y-3">
+                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-150 dark:border-slate-800 pb-3">
+                                  <div className="flex items-center gap-2">
+                                    <span className="font-mono text-xs font-black bg-[#0B3A63] text-white px-2.5 py-1 rounded">
+                                      {plano.codigo}
+                                    </span>
+                                    <h4 className="font-extrabold text-sm text-slate-900 dark:text-white">
+                                      {plano.titulo}
+                                    </h4>
+                                  </div>
+                                  <div className="flex items-center gap-3 text-xs text-slate-500 dark:text-slate-400">
+                                    <span>Setor: <strong className="text-slate-800 dark:text-slate-200">{plano.setor}</strong></span>
+                                    <span>•</span>
+                                    <span>Coordenador: <strong className="text-slate-800 dark:text-slate-200">{plano.coordenador || plano.quem || 'Líder'}</strong></span>
+                                    <span>•</span>
+                                    <span>Registrado em: <strong className="text-slate-800 dark:text-slate-200 font-mono">{formatDateBR(plano.dataCriacao)}</strong></span>
+                                  </div>
+                                </div>
+
+                                {plano.objetivo && (
+                                  <div className="flex items-start gap-2 bg-blue-50/50 dark:bg-blue-950/20 border border-blue-100 dark:border-blue-900/40 p-3 rounded-lg">
+                                    <Target className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
+                                    <div>
+                                      <p className="text-[10px] font-bold text-blue-800 dark:text-blue-300 uppercase tracking-wider">
+                                        Objetivo Geral & Avaliação de Eficácia da Tratativa:
+                                      </p>
+                                      <p className="text-xs text-slate-700 dark:text-slate-300 mt-0.5">
+                                        {plano.objetivo}
+                                      </p>
+                                    </div>
+                                  </div>
+                                )}
+
+                                <div className="flex flex-wrap items-center justify-between gap-3 text-xs pt-1">
+                                  <div className="flex items-center gap-4">
+                                    <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">
+                                      Total: <strong className="text-slate-800 dark:text-slate-200 font-bold">{stats.total} ações</strong>
+                                    </span>
+                                    <span className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">
+                                      Concluídas: <strong className="font-bold">{stats.concluidas}</strong>
+                                    </span>
+                                    {stats.canceladas > 0 && (
+                                      <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">
+                                        Canceladas: <strong className="font-bold">{stats.canceladas}</strong>
+                                      </span>
+                                    )}
+                                    <span className="text-[11px] font-semibold text-amber-600 dark:text-amber-400">
+                                      Em Andamento: <strong className="font-bold">{stats.emAndamento}</strong>
+                                    </span>
+                                    <span className="text-[11px] font-semibold text-slate-700 dark:text-slate-300 font-mono">
+                                      Custo Consolidado: <strong className="font-bold">R$ {stats.totalCost.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
+                                    </span>
+                                  </div>
+                                  
+                                  {canCreate && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleOpenAddActionModal(plano.id)}
+                                      className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all shadow-xs cursor-pointer"
+                                    >
+                                      <Plus className="w-3.5 h-3.5" />
+                                      <span>Adicionar Ação 5W2H</span>
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+
+                              {/* Tabela de Ações Filhas */}
+                              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden shadow-2xs">
+                                <div className="px-4 py-2.5 bg-slate-100/70 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
+                                  <span className="text-[10px] font-mono font-black text-[#0B3A63] dark:text-blue-400 uppercase tracking-widest">
+                                    AÇÕES EXECUTIVAS 5W2H ({actions.length})
+                                  </span>
+                                  <span className="text-[10px] text-slate-400">
+                                    Selecione o status para alteração rápida
+                                  </span>
+                                </div>
+
+                                <div className="overflow-x-auto">
+                                  <table className="w-full text-left text-xs border-collapse">
+                                    <thead className="bg-slate-50 dark:bg-slate-950/50 text-slate-500 dark:text-slate-400 text-[9px] uppercase tracking-wider font-bold border-b border-slate-200 dark:border-slate-800">
+                                      <tr>
+                                        <th className="py-2.5 px-3 w-10 text-center">#</th>
+                                        <th className="py-2.5 px-3 min-w-[220px]">O quê (What) / Por quê (Why) / Como (How)</th>
+                                        <th className="py-2.5 px-3 min-w-[110px]">Onde (Where)</th>
+                                        <th className="py-2.5 px-3 min-w-[120px]">Quem (Who)</th>
+                                        <th className="py-2.5 px-3 min-w-[95px] text-center">Quando (When)</th>
+                                        <th className="py-2.5 px-3 min-w-[95px] text-right">Custo (R$)</th>
+                                        <th className="py-2.5 px-3 min-w-[110px] text-center">Status</th>
+                                        <th className="py-2.5 px-3 text-right min-w-[80px]">Ações</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-150 dark:divide-slate-800">
+                                      {actions.map((act, idx) => {
+                                        const isActOverdue = isDateOverdue(act.quando, act.status);
+                                        return (
+                                          <tr key={act.id || idx} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/30 transition-colors">
+                                            <td className="py-2.5 px-3 text-center font-mono font-bold text-slate-500 text-[11px]">
+                                              {act.itemNumero || idx + 1}
+                                            </td>
+                                            <td className="py-2.5 px-3">
+                                              <p className="font-extrabold text-slate-800 dark:text-slate-100 text-xs">
+                                                {act.oQue}
+                                              </p>
+                                              {act.porQue && (
+                                                <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">
+                                                  <span className="font-semibold text-slate-600 dark:text-slate-300">Por quê:</span> {act.porQue}
+                                                </p>
+                                              )}
+                                              {act.como && (
+                                                <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">
+                                                  <span className="font-semibold text-slate-600 dark:text-slate-300">Como:</span> {act.como}
+                                                </p>
+                                              )}
+                                            </td>
+                                            <td className="py-2.5 px-3 text-slate-600 dark:text-slate-300 text-[11px]">
+                                              {act.onde || '—'}
+                                            </td>
+                                            <td className="py-2.5 px-3 font-semibold text-slate-800 dark:text-slate-200 text-[11px]">
+                                              {act.quem}
+                                            </td>
+                                            <td className="py-2.5 px-3 text-center whitespace-nowrap">
+                                              <span className={`font-mono text-[11px] font-bold ${
+                                                isActOverdue ? 'text-rose-600 dark:text-rose-400' : 'text-slate-700 dark:text-slate-300'
+                                              }`}>
+                                                {formatDateBR(act.quando)}
+                                              </span>
+                                              {isActOverdue && (
+                                                <span className="block text-[8px] font-extrabold text-rose-500 uppercase">Atrasado</span>
+                                              )}
+                                            </td>
+                                            <td className="py-2.5 px-3 text-right font-mono font-bold text-emerald-600 dark:text-emerald-400 text-[11px]">
+                                              R$ {(Number(act.quantoCusta) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                            </td>
+                                            <td className="py-2.5 px-3 text-center">
+                                              <select
+                                                value={act.status}
+                                                onChange={(e) => handleToggleActionStatus(plano.id, act.id, e.target.value as any)}
+                                                className={`text-[10px] font-bold px-2 py-1 rounded-md border focus:outline-hidden cursor-pointer ${
+                                                  act.status === 'Concluído' ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800' :
+                                                  act.status === 'Em Andamento' ? 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-800' :
+                                                  act.status === 'Cancelada' ? 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/40 dark:text-rose-400 dark:border-rose-800' :
+                                                  'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/40 dark:text-blue-400 dark:border-blue-800'
+                                                }`}
+                                              >
+                                                <option value="Planejado">Planejado</option>
+                                                <option value="Em Andamento">Em Andamento</option>
+                                                <option value="Concluído">Concluído</option>
+                                                <option value="Cancelada">Cancelada</option>
+                                              </select>
+                                            </td>
+                                            <td className="py-2.5 px-3 text-right">
+                                              <div className="flex items-center justify-end gap-1">
+                                                {canEdit && (
+                                                  <button
+                                                    onClick={(e) => {
+                                                      e.stopPropagation();
+                                                      handleOpenEditActionModal(plano.id, act);
+                                                    }}
+                                                    className="p-1 hover:bg-slate-150 dark:hover:bg-slate-800 rounded text-slate-400 hover:text-blue-500 transition-colors cursor-pointer"
+                                                    title="Editar esta ação 5W2H"
+                                                  >
+                                                    <Pencil className="w-3 h-3" />
+                                                  </button>
+                                                )}
+                                                {canDelete && (
+                                                  <button
+                                                    onClick={(e) => {
+                                                      e.stopPropagation();
+                                                      handleDeleteActionClick(plano, act);
+                                                    }}
+                                                    className="p-1 hover:bg-slate-150 dark:hover:bg-slate-800 rounded text-slate-400 hover:text-rose-500 transition-colors cursor-pointer"
+                                                    title="Remover esta ação"
+                                                  >
+                                                    <Trash2 className="w-3 h-3" />
+                                                  </button>
+                                                )}
+                                              </div>
+                                            </td>
+                                          </tr>
+                                        );
+                                      })}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              </div>
+
+                              {/* Integrations Badges Footer */}
+                              {(plano.documentoId || plano.auditoriaId || plano.naoConformidadeId) && (
+                                <div className="pt-2 border-t border-slate-200 dark:border-slate-800 flex flex-wrap gap-2 items-center">
+                                  <span className="text-[9px] font-mono font-bold text-slate-400 uppercase tracking-wider mr-1">Rastreabilidade SGQ:</span>
+                                  
+                                  {plano.documentoId && (
+                                    <div className="flex items-center bg-blue-50/60 dark:bg-blue-950/20 border border-blue-100 dark:border-blue-900 px-2 py-1 rounded text-[10px] font-bold text-blue-600 dark:text-blue-400 space-x-1">
+                                      <FileText className="w-3 h-3" />
+                                      <span>Doc: {relDoc ? `${relDoc.codigo} - ${relDoc.titulo.substring(0, 20)}...` : plano.documentoId}</span>
+                                    </div>
+                                  )}
+
+                                  {plano.auditoriaId && (
+                                    <div className="flex items-center bg-indigo-50/60 dark:bg-indigo-950/20 border border-indigo-100 dark:border-indigo-900 px-2 py-1 rounded text-[10px] font-bold text-indigo-600 dark:text-indigo-400 space-x-1">
+                                      <CheckSquare className="w-3 h-3" />
+                                      <span>Auditoria: {relAudit ? `${relAudit.codigo} - ${relAudit.titulo.substring(0, 20)}...` : plano.auditoriaId}</span>
+                                    </div>
+                                  )}
+
+                                  {plano.naoConformidadeId && (
+                                    <div className="flex items-center bg-rose-50/60 dark:bg-rose-950/20 border border-rose-100 dark:border-rose-900 px-2 py-1 rounded text-[10px] font-bold text-rose-600 dark:text-rose-400 space-x-1">
+                                      <AlertCircle className="w-3 h-3" />
+                                      <span>RNC: {relNC ? `${relNC.codigo} - ${relNC.titulo.substring(0, 20)}...` : plano.naoConformidadeId}</span>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
       ) : (
         <div className="grid grid-cols-1 gap-6">
           {filteredPlanos.map((plano) => {
+            const stats = getPlanStats(plano);
+            const actions = stats.actions;
             const relDoc = documents.find(d => d.id === plano.documentoId);
             const relAudit = audits.find(a => a.id === plano.auditoriaId);
             const relNC = ncs.find(n => n.id === plano.naoConformidadeId);
+            const isOverdue = isDateOverdue(stats.prazoFinal, stats.statusConsolidado);
 
             return (
               <div 
                 key={plano.id}
                 className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xs overflow-hidden hover:border-slate-300 dark:hover:border-slate-700 transition-all duration-200"
               >
-                {/* Header card info */}
-                <div className="px-6 py-4 bg-slate-50 dark:bg-slate-900/60 border-b border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                  <div className="flex items-center space-x-2.5">
-                    <span className="text-[10px] font-mono font-bold bg-[#0B3A63] text-white px-2.5 py-1 rounded-md tracking-wider">
-                      {plano.codigo}
-                    </span>
-                    <h4 className="text-sm font-extrabold text-slate-800 dark:text-white leading-tight">
-                      {plano.titulo}
-                    </h4>
-                    <span className="text-[10px] bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400 px-2 py-0.5 rounded font-bold">
-                      {plano.setor}
-                    </span>
+                {/* Header card info (Capa) */}
+                <div className="px-6 py-4 bg-slate-50 dark:bg-slate-900/60 border-b border-slate-150 dark:border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-3">
+                  <div className="space-y-1.5">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-[10px] font-mono font-extrabold bg-[#0B3A63] text-white px-2.5 py-1 rounded-md tracking-wider">
+                        {plano.codigo}
+                      </span>
+                      <h4 className="text-sm font-extrabold text-slate-800 dark:text-white leading-tight">
+                        {plano.titulo}
+                      </h4>
+                      <span className="text-[10px] bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400 px-2 py-0.5 rounded font-bold">
+                        {plano.setor}
+                      </span>
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300 border border-blue-200 dark:border-blue-900">
+                        {actions.length} {actions.length === 1 ? 'Ação' : 'Ações'}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+                      <div className="flex items-center gap-1">
+                        <User className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+                        <span>Coord: <strong className="text-slate-800 dark:text-slate-200">{plano.coordenador || plano.quem || 'Líder SGQ'}</strong></span>
+                      </div>
+                      <span>•</span>
+                      <div className="flex items-center gap-1">
+                        <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                        <span>Prazo Limite: <strong className={`font-mono ${isOverdue ? 'text-rose-600 dark:text-rose-400' : 'text-slate-800 dark:text-slate-200'}`}>
+                          {stats.prazoFinal ? formatDateBR(stats.prazoFinal) : '-'}
+                        </strong></span>
+                      </div>
+                      {isOverdue && (
+                        <span className="text-[9px] font-extrabold text-rose-500 uppercase tracking-tight ml-1 bg-rose-50 dark:bg-rose-950/40 px-1.5 py-0.5 rounded border border-rose-200 dark:border-rose-900">
+                          Atrasado
+                        </span>
+                      )}
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2 self-end sm:self-center">
-                    {getStatusBadge(plano.status)}
+
+                  <div className="flex items-center gap-2 self-start md:self-center">
+                    {getStatusBadge(stats.statusConsolidado)}
                     
-                    {/* Imprimir button */}
+                    {canCreate && (
+                      <button
+                        onClick={() => handleOpenAddActionModal(plano.id)}
+                        className="px-2.5 py-1.5 bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/50 dark:hover:bg-blue-900/60 text-blue-600 dark:text-blue-400 rounded-lg text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer"
+                        title="Adicionar Ação 5W2H nesta Capa"
+                      >
+                        <PlusCircle className="w-3.5 h-3.5" />
+                        <span>+ Ação</span>
+                      </button>
+                    )}
+
                     <button
                       onClick={() => {
                         setSelectedPrintPlano(plano);
                         setIsPrintModalOpen(true);
                       }}
-                      className="p-1.5 hover:bg-slate-150 dark:hover:bg-slate-800 rounded text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
-                      title="Imprimir Modelo 5W2H"
+                      className="p-1.5 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors cursor-pointer"
+                      title="Imprimir Folha 5W2H"
                     >
                       <Printer className="w-4 h-4" />
                     </button>
 
-                    {/* Editar button */}
                     {canEdit && (!canModifyItem || canModifyItem(plano.onde)) && (
                       <button
                         onClick={() => handleOpenEditPlano(plano)}
-                        className="p-1.5 hover:bg-slate-150 dark:hover:bg-slate-800 rounded text-slate-400 hover:text-blue-500 transition-colors cursor-pointer"
-                        title="Editar Plano de Ação"
+                        className="p-1.5 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-lg text-slate-400 hover:text-blue-500 transition-colors cursor-pointer"
+                        title="Editar Capa do Plano"
                       >
                         <Pencil className="w-4 h-4" />
                       </button>
                     )}
 
-                    {/* Excluir button */}
                     {canDelete && (!canDeleteItem || canDeleteItem(plano.onde)) && (
                       <button
                         onClick={() => handleDeletePlanoClick(plano)}
-                        className="p-1.5 hover:bg-slate-150 dark:hover:bg-slate-800 rounded text-slate-400 hover:text-rose-500 transition-colors cursor-pointer"
+                        className="p-1.5 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-lg text-slate-400 hover:text-rose-500 transition-colors cursor-pointer"
                         title="Excluir Plano de Ação"
                       >
                         <Trash2 className="w-4 h-4" />
@@ -777,115 +1807,199 @@ export const PlanosAcaoComponent: React.FC<PlanosAcaoProps> = ({
                   </div>
                 </div>
 
-                {/* 5W2H Matrix Body */}
-                <div className="p-6">
-                  <p className="text-[9px] font-mono font-extrabold text-[#0B3A63] dark:text-blue-400 uppercase tracking-widest mb-3 border-b border-slate-150 dark:border-slate-800 pb-1">ESTRUTURA DETALHADA 5W2H</p>
-                  
-                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
-                    
-                    {/* WHAT */}
-                    <div className="p-3 bg-slate-50/60 dark:bg-slate-800/20 border border-slate-150 dark:border-slate-800 rounded-xl space-y-1">
-                      <div className="flex items-center space-x-1">
-                        <span className="text-[10px] font-mono font-black text-blue-600 dark:text-blue-400">WHAT</span>
-                        <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">(O quê?)</span>
-                      </div>
-                      <p className="text-[11px] font-medium text-slate-700 dark:text-slate-300 leading-relaxed">
-                        {plano.oQue}
-                      </p>
-                    </div>
-
-                    {/* WHY */}
-                    <div className="p-3 bg-slate-50/60 dark:bg-slate-800/20 border border-slate-150 dark:border-slate-800 rounded-xl space-y-1">
-                      <div className="flex items-center space-x-1">
-                        <span className="text-[10px] font-mono font-black text-blue-600 dark:text-blue-400">WHY</span>
-                        <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">(Por quê?)</span>
-                      </div>
-                      <p className="text-[11px] font-medium text-slate-700 dark:text-slate-300 leading-relaxed">
-                        {plano.porQue || <em className="text-slate-400 font-normal">Não informado</em>}
-                      </p>
-                    </div>
-
-                    {/* WHERE */}
-                    <div className="p-3 bg-slate-50/60 dark:bg-slate-800/20 border border-slate-150 dark:border-slate-800 rounded-xl space-y-1">
-                      <div className="flex items-center space-x-1">
-                        <span className="text-[10px] font-mono font-black text-blue-600 dark:text-blue-400">WHERE</span>
-                        <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">(Onde?)</span>
-                      </div>
-                      <div className="flex items-center text-[11px] font-medium text-slate-700 dark:text-slate-300 gap-1 mt-1">
-                        <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                        <span>{plano.onde || 'Qualquer'}</span>
-                      </div>
-                    </div>
-
-                    {/* WHEN */}
-                    <div className="p-3 bg-slate-50/60 dark:bg-slate-800/20 border border-slate-150 dark:border-slate-800 rounded-xl space-y-1">
-                      <div className="flex items-center space-x-1">
-                        <span className="text-[10px] font-mono font-black text-blue-600 dark:text-blue-400">WHEN</span>
-                        <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">(Quando/Prazo?)</span>
-                      </div>
-                      <div className="flex items-center text-[11px] font-medium text-slate-700 dark:text-slate-300 gap-1 mt-1">
-                        <Calendar className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                        <span className="font-bold text-slate-800 dark:text-slate-100">{new Date(plano.quando).toLocaleDateString('pt-BR')}</span>
-                      </div>
-                    </div>
-
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                    
-                    {/* WHO */}
-                    <div className="p-3 bg-slate-50/60 dark:bg-slate-800/20 border border-slate-150 dark:border-slate-800 rounded-xl space-y-1">
-                      <div className="flex items-center space-x-1">
-                        <span className="text-[10px] font-mono font-black text-[#0B3A63] dark:text-blue-400">WHO</span>
-                        <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">(Quem/Responsável?)</span>
-                      </div>
-                      <div className="flex items-center text-[11px] font-medium text-slate-700 dark:text-slate-300 gap-1 mt-1">
-                        <User className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                        <span className="font-bold text-slate-800 dark:text-slate-100">{plano.quem}</span>
-                      </div>
-                    </div>
-
-                    {/* HOW */}
-                    <div className="p-3 bg-slate-50/60 dark:bg-slate-800/20 border border-slate-150 dark:border-slate-800 rounded-xl space-y-1">
-                      <div className="flex items-center space-x-1">
-                        <span className="text-[10px] font-mono font-black text-[#0B3A63] dark:text-blue-400">HOW</span>
-                        <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">(Como?)</span>
-                      </div>
-                      <p className="text-[11px] font-medium text-slate-700 dark:text-slate-300 leading-relaxed">
-                        {plano.como || <em className="text-slate-400 font-normal">Não informado</em>}
-                      </p>
-                    </div>
-
-                    {/* HOW MUCH */}
-                    <div className="p-3 bg-slate-50/60 dark:bg-slate-800/20 border border-slate-150 dark:border-slate-800 rounded-xl space-y-1">
-                      <div className="flex items-center space-x-1">
-                        <span className="text-[10px] font-mono font-black text-[#0B3A63] dark:text-blue-400">HOW MUCH</span>
-                        <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">(Quanto custa?)</span>
-                      </div>
-                      <div className="flex items-center text-[11px] font-extrabold text-emerald-600 dark:text-emerald-400 gap-1 mt-1">
-                        <DollarSign className="w-3.5 h-3.5 shrink-0" />
-                        <span>R$ {plano.quantoCusta.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                      </div>
-                    </div>
-
-                    {/* DATA CRIAÇÃO */}
-                    <div className="p-3 bg-slate-50/60 dark:bg-slate-800/20 border border-slate-150 dark:border-slate-800 rounded-xl space-y-1 flex flex-col justify-between">
+                {/* Scope & Progress */}
+                <div className="p-6 space-y-4">
+                  {plano.objetivo && (
+                    <div className="flex items-start gap-2 bg-blue-50/40 dark:bg-blue-950/20 border border-blue-100 dark:border-blue-900/40 p-3 rounded-xl">
+                      <Target className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
                       <div>
-                        <span className="text-[10px] font-mono font-bold text-slate-400">DATA REGISTRO</span>
-                        <p className="text-[11px] font-semibold text-slate-600 dark:text-slate-400">
-                          {new Date(plano.dataCriacao).toLocaleDateString('pt-BR')}
+                        <p className="text-[10px] font-mono font-bold text-blue-800 dark:text-blue-300 uppercase tracking-wider">
+                          Objetivo Geral & Avaliação de Eficácia (ISO 9001 Cláusula 10.2):
+                        </p>
+                        <p className="text-xs text-slate-700 dark:text-slate-300 mt-0.5 font-medium leading-relaxed">
+                          {plano.objetivo}
                         </p>
                       </div>
                     </div>
+                  )}
 
+                  {/* Metrics bar */}
+                  <div className="bg-slate-50 dark:bg-slate-800/40 border border-slate-150 dark:border-slate-800 rounded-xl p-3 flex flex-wrap items-center justify-between gap-3">
+                    <div className="flex items-center gap-4 text-xs">
+                      <div className="space-y-0.5">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase">Progresso</span>
+                        <div 
+                          className="flex items-center gap-2" 
+                          title={stats.canceladas > 0 
+                            ? `${stats.percent}% de progresso: ${stats.concluidas} de ${stats.acoesAtivas} ação(ões) ativa(s) concluída(s) (${stats.canceladas} cancelada(s) descartada(s) do escopo)` 
+                            : `${stats.percent}% de progresso: ${stats.concluidas} de ${stats.total} ação(ões) concluída(s)`}
+                        >
+                          <div className="w-24 bg-slate-200 dark:bg-slate-700 rounded-full h-2 overflow-hidden">
+                            <div 
+                              className={`h-2 rounded-full transition-all duration-300 ${
+                                stats.percent === 100 ? 'bg-emerald-500' : stats.percent > 0 ? 'bg-blue-600' : 'bg-slate-300'
+                              }`}
+                              style={{ width: `${stats.percent}%` }}
+                            />
+                          </div>
+                          <span className={`font-mono font-black text-xs ${stats.percent === 100 ? 'text-emerald-600 dark:text-emerald-400' : 'text-blue-600 dark:text-blue-400'}`}>{stats.percent}%</span>
+                        </div>
+                      </div>
+
+                      <div className="h-6 w-px bg-slate-200 dark:bg-slate-700 hidden sm:block" />
+
+                      <div className="flex items-center gap-3">
+                        <span className="text-xs text-slate-600 dark:text-slate-300">
+                          Total: <strong className="text-slate-900 dark:text-white font-bold">{stats.total}</strong>
+                        </span>
+                        <span className="text-xs text-blue-600 dark:text-blue-400">
+                          Planejado: <strong className="font-bold">{stats.planejadas}</strong>
+                        </span>
+                        <span className="text-xs text-amber-600 dark:text-amber-400">
+                          Em Andamento: <strong className="font-bold">{stats.emAndamento}</strong>
+                        </span>
+                        <span className="text-xs text-emerald-600 dark:text-emerald-400">
+                          Concluídas: <strong className="font-bold">{stats.concluidas}</strong>
+                        </span>
+                        {stats.canceladas > 0 && (
+                          <span className="text-xs text-slate-500 dark:text-slate-400">
+                            Canceladas: <strong className="font-bold">{stats.canceladas}</strong>
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="text-right">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase block">Custo Total Previsto</span>
+                      <span className="text-xs font-mono font-extrabold text-emerald-600 dark:text-emerald-400">
+                        R$ {stats.totalCost.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Actions 5W2H List */}
+                  <div className="border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden">
+                    <div className="px-4 py-2 bg-slate-100/70 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
+                      <span className="text-[10px] font-mono font-black text-[#0B3A63] dark:text-blue-400 uppercase tracking-widest">
+                        AÇÕES EXECUTIVAS 5W2H ({actions.length})
+                      </span>
+                      {canCreate && (
+                        <button
+                          onClick={() => handleOpenAddActionModal(plano.id)}
+                          className="text-[10px] font-bold text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1 cursor-pointer"
+                        >
+                          <Plus className="w-3 h-3" />
+                          <span>Adicionar Ação</span>
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="divide-y divide-slate-150 dark:divide-slate-800">
+                      {actions.map((act, idx) => {
+                        const isActOverdue = isDateOverdue(act.quando, act.status);
+                        return (
+                          <div key={act.id || idx} className="p-3 hover:bg-slate-50/70 dark:hover:bg-slate-800/30 transition-colors space-y-2">
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="flex items-start gap-2.5">
+                                <span className="font-mono text-[11px] font-bold text-slate-400 shrink-0 mt-0.5">
+                                  #{act.itemNumero || idx + 1}
+                                </span>
+                                <div>
+                                  <p className="text-xs font-bold text-slate-900 dark:text-slate-100">
+                                    {act.oQue}
+                                  </p>
+                                  {act.porQue && (
+                                    <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                                      <span className="font-semibold text-slate-600 dark:text-slate-300">Por quê:</span> {act.porQue}
+                                    </p>
+                                  )}
+                                  {act.como && (
+                                    <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                                      <span className="font-semibold text-slate-600 dark:text-slate-300">Como:</span> {act.como}
+                                    </p>
+                                  )}
+                                </div>
+                              </div>
+
+                              <div className="flex items-center gap-2 shrink-0">
+                                <select
+                                  value={act.status}
+                                  onChange={(e) => handleToggleActionStatus(plano.id, act.id, e.target.value as any)}
+                                  className={`text-[10px] font-bold px-2 py-1 rounded-md border focus:outline-hidden cursor-pointer ${
+                                    act.status === 'Concluído' ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800' :
+                                    act.status === 'Em Andamento' ? 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-800' :
+                                    act.status === 'Cancelada' ? 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/40 dark:text-rose-400 dark:border-rose-800' :
+                                    'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/40 dark:text-blue-400 dark:border-blue-800'
+                                  }`}
+                                >
+                                  <option value="Planejado">Planejado</option>
+                                  <option value="Em Andamento">Em Andamento</option>
+                                  <option value="Concluído">Concluído</option>
+                                  <option value="Cancelada">Cancelada</option>
+                                </select>
+
+                                {canEdit && (
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleOpenEditActionModal(plano.id, act);
+                                    }}
+                                    className="p-1 hover:bg-slate-200 dark:hover:bg-slate-700 rounded text-slate-400 hover:text-blue-500 transition-colors cursor-pointer"
+                                    title="Editar ação"
+                                  >
+                                    <Pencil className="w-3 h-3" />
+                                  </button>
+                                )}
+
+                                {canDelete && (
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleDeleteActionClick(plano, act);
+                                    }}
+                                    className="p-1 hover:bg-slate-200 dark:hover:bg-slate-700 rounded text-slate-400 hover:text-rose-500 transition-colors cursor-pointer"
+                                    title="Remover ação"
+                                  >
+                                    <Trash2 className="w-3 h-3" />
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Action Metadata Row */}
+                            <div className="flex flex-wrap items-center gap-3 text-[10px] text-slate-500 dark:text-slate-400 pt-1 border-t border-slate-100 dark:border-slate-800/60">
+                              <span className="flex items-center gap-1 font-semibold text-slate-700 dark:text-slate-300">
+                                <User className="w-3 h-3 text-slate-400" />
+                                {act.quem}
+                              </span>
+                              {act.onde && (
+                                <span className="flex items-center gap-1">
+                                  <MapPin className="w-3 h-3 text-slate-400" />
+                                  {act.onde}
+                                </span>
+                              )}
+                              <span className={`flex items-center gap-1 font-mono font-bold ${
+                                isActOverdue ? 'text-rose-600 dark:text-rose-400' : 'text-slate-700 dark:text-slate-300'
+                              }`}>
+                                <Calendar className="w-3 h-3" />
+                                {formatDateBR(act.quando)}
+                                {isActOverdue && <span className="text-[8px] uppercase text-rose-500 font-extrabold ml-0.5">(Atrasado)</span>}
+                              </span>
+                              <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400 ml-auto">
+                                R$ {(Number(act.quantoCusta) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
 
                   {/* Integrations Badges Footer */}
                   {(plano.documentoId || plano.auditoriaId || plano.naoConformidadeId) && (
-                    <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800 flex flex-wrap gap-2 items-center">
+                    <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex flex-wrap gap-2 items-center">
                       <span className="text-[9px] font-mono font-bold text-slate-400 uppercase tracking-wider mr-1">Rastreabilidade SGQ:</span>
                       
-                      {/* Document integration */}
                       {plano.documentoId && (
                         <div className="flex items-center bg-blue-50/60 dark:bg-blue-950/20 border border-blue-100 dark:border-blue-900 px-2 py-1 rounded text-[10px] font-bold text-blue-600 dark:text-blue-400 space-x-1">
                           <FileText className="w-3 h-3" />
@@ -893,7 +2007,6 @@ export const PlanosAcaoComponent: React.FC<PlanosAcaoProps> = ({
                         </div>
                       )}
 
-                      {/* Audit integration */}
                       {plano.auditoriaId && (
                         <div className="flex items-center bg-indigo-50/60 dark:bg-indigo-950/20 border border-indigo-100 dark:border-indigo-900 px-2 py-1 rounded text-[10px] font-bold text-indigo-600 dark:text-indigo-400 space-x-1">
                           <CheckSquare className="w-3 h-3" />
@@ -901,7 +2014,6 @@ export const PlanosAcaoComponent: React.FC<PlanosAcaoProps> = ({
                         </div>
                       )}
 
-                      {/* Non-conformity integration */}
                       {plano.naoConformidadeId && (
                         <div className="flex items-center bg-rose-50/60 dark:bg-rose-950/20 border border-rose-100 dark:border-rose-900 px-2 py-1 rounded text-[10px] font-bold text-rose-600 dark:text-rose-400 space-x-1">
                           <AlertCircle className="w-3 h-3" />
@@ -931,139 +2043,500 @@ export const PlanosAcaoComponent: React.FC<PlanosAcaoProps> = ({
         </div>
       </div>
 
-      {/* MODAL: NOVO OU EDITAR PLANO DE AÇÃO */}
+      {/* MODAL: NOVO OU EDITAR PLANO DE AÇÃO (CAPA COM MÚLTIPLAS AÇÕES) */}
       {isPlanoModalOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl border border-slate-100 dark:border-slate-800 animate-scale-in">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl w-full max-w-4xl max-h-[92vh] overflow-y-auto shadow-2xl border border-slate-100 dark:border-slate-800 animate-scale-in">
             {/* Header */}
-            <div className="px-6 py-4 bg-[#0B3A63] text-white flex items-center justify-between sticky top-0 z-10">
-              <h3 className="text-sm font-extrabold flex items-center gap-2">
-                <ClipboardList className="w-4.5 h-4.5" />
-                {editingPlano ? `Editar Plano de Ação: ${editingPlano.codigo}` : 'Novo Plano de Ação 5W2H (ISO 9001)'}
-              </h3>
+            <div className="px-6 py-4 bg-[#0B3A63] text-white flex items-center justify-between sticky top-0 z-20 shadow-xs">
+              <div className="flex items-center gap-2">
+                <ClipboardList className="w-5 h-5 text-blue-300" />
+                <div>
+                  <h3 className="text-sm font-extrabold leading-tight">
+                    {editingPlano ? `Editar Capa do Plano: ${editingPlano.codigo}` : 'Novo Plano de Ação 5W2H (Capa com Ações)'}
+                  </h3>
+                  <p className="text-[10px] text-blue-200">
+                    Definição da Capa Macro e detalhamento das Ações Executivas 5W2H (ISO 9001:2015 10.2)
+                  </p>
+                </div>
+              </div>
               <button 
+                type="button"
                 onClick={() => setIsPlanoModalOpen(false)} 
-                className="text-white/60 hover:text-white font-mono text-xl"
+                className="text-white/70 hover:text-white font-mono text-2xl leading-none cursor-pointer"
               >
                 &times;
               </button>
             </div>
 
-            <form onSubmit={handleSubmitPlano} className="p-6 space-y-4">
+            <form onSubmit={handleSubmitPlano} className="p-6 space-y-6">
+              {capaFormFeedback && (
+                <div className="p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-xl text-xs text-amber-800 dark:text-amber-300 flex items-center justify-between animate-fade-in">
+                  <div className="flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
+                    <span className="font-semibold">{capaFormFeedback}</span>
+                  </div>
+                  <button 
+                    type="button" 
+                    onClick={() => setCapaFormFeedback(null)} 
+                    className="text-amber-500 hover:text-amber-700 dark:text-amber-400 font-bold ml-2 text-base leading-none cursor-pointer"
+                  >
+                    &times;
+                  </button>
+                </div>
+              )}
               
-              {/* Row 1: Code, Title, Sector */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Código do Plano *</label>
-                  <input
-                    type="text"
-                    required
-                    value={formPlano.codigo}
-                    onChange={(e) => setFormPlano({ ...formPlano, codigo: e.target.value })}
-                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3 py-2 text-xs font-semibold rounded-lg focus:outline-hidden dark:text-slate-100"
-                    placeholder="PA-2026-001"
-                  />
+              {/* SEÇÃO 1: DADOS GERAIS DA CAPA */}
+              <div className="bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-750 p-4 rounded-xl space-y-4">
+                <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-700 pb-2">
+                  <span className="text-[11px] font-mono font-black text-[#0B3A63] dark:text-blue-400 uppercase tracking-wider flex items-center gap-1.5">
+                    <Target className="w-4 h-4" />
+                    1. Dados da Capa do Plano (Nível Estrutural)
+                  </span>
+                  <span className="text-[10px] text-slate-400 font-medium">Informações consolidadas</span>
                 </div>
-                <div className="md:col-span-2">
-                  <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Título do Plano *</label>
-                  <input
-                    type="text"
-                    required
-                    value={formPlano.titulo}
-                    onChange={(e) => setFormPlano({ ...formPlano, titulo: e.target.value })}
-                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3 py-2 text-xs font-semibold rounded-lg focus:outline-hidden dark:text-slate-100"
-                    placeholder="Ex: Treinamento prático de calibração"
-                  />
-                </div>
-              </div>
 
-              {/* Row 2: Sector and Status */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Setor do Processo *</label>
-                  <select
-                    value={formPlano.setor}
-                    onChange={(e) => setFormPlano({ ...formPlano, setor: e.target.value as SectorType })}
-                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3 py-2 text-xs font-semibold rounded-lg focus:outline-hidden dark:text-slate-100"
-                  >
-                    {sectorsList.map(sec => (
-                      <option key={sec} value={sec}>{sec}</option>
-                    ))}
-                  </select>
+                {/* Linha 1: Código, Título, Setor */}
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Código do Plano *</label>
+                    <input
+                      type="text"
+                      required
+                      value={formPlano.codigo}
+                      onChange={(e) => setFormPlano({ ...formPlano, codigo: e.target.value })}
+                      className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3 py-2 text-xs font-mono font-bold rounded-lg focus:outline-hidden dark:text-slate-100"
+                      placeholder="PA-2026-001"
+                    />
+                  </div>
+                  <div className="md:col-span-2">
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Título da Capa / Tratativa *</label>
+                    <input
+                      type="text"
+                      required
+                      value={formPlano.titulo}
+                      onChange={(e) => setFormPlano({ ...formPlano, titulo: e.target.value })}
+                      className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3 py-2 text-xs font-bold rounded-lg focus:outline-hidden dark:text-slate-100"
+                      placeholder="Ex: Tratativa para melhoria de processo ou contenção de desvio"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Setor do Processo *</label>
+                    <select
+                      value={formPlano.setor}
+                      onChange={(e) => setFormPlano({ ...formPlano, setor: e.target.value as SectorType })}
+                      className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3 py-2 text-xs font-semibold rounded-lg focus:outline-hidden dark:text-slate-100"
+                    >
+                      {sectorsList.map(sec => (
+                        <option key={sec} value={sec}>{sec}</option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Status de Implementação</label>
-                  <select
-                    value={formPlano.status}
-                    onChange={(e) => setFormPlano({ ...formPlano, status: e.target.value as any })}
-                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3 py-2 text-xs font-semibold rounded-lg focus:outline-hidden dark:text-slate-100"
-                  >
-                    <option value="Planejado">Planejado</option>
-                    <option value="Em Andamento">Em Andamento</option>
-                    <option value="Concluído">Concluído</option>
-                    <option value="Cancelada">Cancelado</option>
-                  </select>
+
+                {/* Linha 2: Coordenador, Data de Registro, Prazo Geral, Status */}
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Coordenador Geral Responsável *</label>
+                    <input
+                      type="text"
+                      required
+                      value={formPlano.coordenador}
+                      onChange={(e) => setFormPlano({ ...formPlano, coordenador: e.target.value })}
+                      className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3 py-2 text-xs font-semibold rounded-lg focus:outline-hidden dark:text-slate-100"
+                      placeholder="Nome do líder/coordenador do plano"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Data de Registro</label>
+                    <input
+                      type="date"
+                      value={formPlano.dataCriacao}
+                      onChange={(e) => setFormPlano({ ...formPlano, dataCriacao: e.target.value })}
+                      className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3 py-2 text-xs font-semibold rounded-lg focus:outline-hidden dark:text-slate-100"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Prazo Geral Limite</label>
+                    <input
+                      type="date"
+                      value={formPlano.prazoGeral}
+                      onChange={(e) => setFormPlano({ ...formPlano, prazoGeral: e.target.value })}
+                      className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3 py-2 text-xs font-semibold rounded-lg focus:outline-hidden dark:text-slate-100"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Status Geral do Plano</label>
+                    <select
+                      value={formPlano.status}
+                      onChange={(e) => setFormPlano({ ...formPlano, status: e.target.value as any })}
+                      className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3 py-2 text-xs font-semibold rounded-lg focus:outline-hidden dark:text-slate-100"
+                    >
+                      <option value="Planejado">Planejado</option>
+                      <option value="Em Andamento">Em Andamento</option>
+                      <option value="Concluído">Concluído</option>
+                      <option value="Cancelada">Cancelado</option>
+                    </select>
+                  </div>
                 </div>
-              </div>
 
-              {/* 5W2H Section Divider */}
-              <div className="border-t border-slate-150 dark:border-slate-800 pt-3">
-                <span className="text-[10px] font-mono font-black text-blue-600 dark:text-blue-400 tracking-widest uppercase">Campos Metodologia 5W2H</span>
-              </div>
-
-              {/* WHAT & WHY */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Linha 3: Objetivo & Avaliação de Eficácia */}
                 <div>
                   <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
-                    WHAT - O que fazer? *
+                    Objetivo Geral & Avaliação de Eficácia da Tratativa (Cláusula 10.2)
                   </label>
                   <textarea
-                    required
                     rows={2}
-                    value={formPlano.oQue}
-                    onChange={(e) => setFormPlano({ ...formPlano, oQue: e.target.value })}
-                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3 py-2 text-xs font-medium rounded-lg focus:outline-hidden dark:text-slate-100"
-                    placeholder="Descrição da ação corretiva, preventiva ou melhoria..."
+                    value={formPlano.objetivo}
+                    onChange={(e) => setFormPlano({ ...formPlano, objetivo: e.target.value })}
+                    className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3 py-2 text-xs font-medium rounded-lg focus:outline-hidden dark:text-slate-100 leading-relaxed"
+                    placeholder="Descreva o objetivo macro, critério de sucesso e eficácia esperada para eliminar a causa raiz..."
                   />
                 </div>
-                <div>
-                  <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
-                    WHY - Por que fazer?
-                  </label>
-                  <textarea
-                    rows={2}
-                    value={formPlano.porQue}
-                    onChange={(e) => setFormPlano({ ...formPlano, porQue: e.target.value })}
-                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3 py-2 text-xs font-medium rounded-lg focus:outline-hidden dark:text-slate-100"
-                    placeholder="Justificativa ou problema que será resolvido..."
-                  />
+
+                {/* Linha 4: Rastreabilidade */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-1 border-t border-slate-200 dark:border-slate-700/60">
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Documento Vinculado</label>
+                    <select
+                      value={formPlano.documentoId}
+                      onChange={(e) => setFormPlano({ ...formPlano, documentoId: e.target.value })}
+                      className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-2.5 py-1.5 text-xs font-medium rounded-lg focus:outline-hidden dark:text-slate-100"
+                    >
+                      <option value="">-- Nenhum documento --</option>
+                      {documents.map(d => (
+                        <option key={d.id} value={d.id}>{d.codigo} - {d.titulo}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Auditoria Vinculada</label>
+                    <select
+                      value={formPlano.auditoriaId}
+                      onChange={(e) => setFormPlano({ ...formPlano, auditoriaId: e.target.value })}
+                      className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-2.5 py-1.5 text-xs font-medium rounded-lg focus:outline-hidden dark:text-slate-100"
+                    >
+                      <option value="">-- Nenhuma auditoria --</option>
+                      {audits.map(a => (
+                        <option key={a.id} value={a.id}>{a.codigo} - {a.titulo}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">RNC Vinculada</label>
+                    <select
+                      value={formPlano.naoConformidadeId}
+                      onChange={(e) => setFormPlano({ ...formPlano, naoConformidadeId: e.target.value })}
+                      className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-2.5 py-1.5 text-xs font-medium rounded-lg focus:outline-hidden dark:text-slate-100"
+                    >
+                      <option value="">-- Nenhuma RNC --</option>
+                      {ncs.map(n => (
+                        <option key={n.id} value={n.id}>{n.codigo} - {n.titulo}</option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
               </div>
 
-              {/* WHERE, WHEN, WHO */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* SEÇÃO 2: AÇÕES 5W2H VINCULADAS À CAPA */}
+              <div className="space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-150 dark:border-slate-800 pb-2">
+                  <div>
+                    <h4 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
+                      <ClipboardList className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                      2. Ações Executivas 5W2H Vinculadas ({formPlano.acoes.length})
+                    </h4>
+                    <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">
+                      Cada ação detalha uma etapa executiva com responsável, prazo e método.
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs font-mono font-bold text-emerald-600 dark:text-emerald-400">
+                      Total: R$ {formPlano.acoes.reduce((acc, a) => acc + (Number(a.quantoCusta) || 0), 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={handleAddCapaAction}
+                      className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold flex items-center gap-1 transition-all shadow-xs cursor-pointer"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>+ Adicionar Ação 5W2H</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Lista de Ações no Formulário */}
+                <div className="space-y-3">
+                  {formPlano.acoes.map((action, idx) => (
+                    <div 
+                      key={action.id || idx}
+                      className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-2xs space-y-3 relative"
+                    >
+                      {/* Sub-header da Ação */}
+                      <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800">
+                        <div className="flex items-center gap-2">
+                          <span className="w-5 h-5 rounded-full bg-[#0B3A63] text-white flex items-center justify-center font-mono font-black text-[10px]">
+                            {idx + 1}
+                          </span>
+                          <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                            Ação 5W2H #{idx + 1}
+                          </span>
+                        </div>
+                        {formPlano.acoes.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveCapaAction(idx)}
+                            className="text-xs text-rose-500 hover:text-rose-700 flex items-center gap-1 font-semibold cursor-pointer"
+                            title="Remover esta ação"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            <span>Remover</span>
+                          </button>
+                        )}
+                      </div>
+
+                      {/* WHAT & WHY */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                            WHAT (O que fazer?) *
+                          </label>
+                          <textarea
+                            required
+                            rows={2}
+                            value={action.oQue}
+                            onChange={(e) => handleUpdateCapaAction(idx, 'oQue', e.target.value)}
+                            className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3 py-1.5 text-xs font-medium rounded-lg focus:outline-hidden dark:text-slate-100"
+                            placeholder="Descrição da ação executiva..."
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                            WHY (Por que fazer?)
+                          </label>
+                          <textarea
+                            rows={2}
+                            value={action.porQue || ''}
+                            onChange={(e) => handleUpdateCapaAction(idx, 'porQue', e.target.value)}
+                            className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3 py-1.5 text-xs font-medium rounded-lg focus:outline-hidden dark:text-slate-100"
+                            placeholder="Justificativa ou causa tratada..."
+                          />
+                        </div>
+                      </div>
+
+                      {/* WHERE, WHEN, WHO, STATUS */}
+                      <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                            WHERE (Onde?)
+                          </label>
+                          <input
+                            type="text"
+                            value={action.onde || ''}
+                            onChange={(e) => handleUpdateCapaAction(idx, 'onde', e.target.value)}
+                            className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-2.5 py-1.5 text-xs font-medium rounded-lg focus:outline-hidden dark:text-slate-100"
+                            placeholder="Local ou máquina"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                            WHO (Quem fará?) *
+                          </label>
+                          <input
+                            type="text"
+                            required
+                            value={action.quem}
+                            onChange={(e) => handleUpdateCapaAction(idx, 'quem', e.target.value)}
+                            className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-2.5 py-1.5 text-xs font-semibold rounded-lg focus:outline-hidden dark:text-slate-100"
+                            placeholder="Nome do executor"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                            WHEN (Prazo)? *
+                          </label>
+                          <input
+                            type="date"
+                            required
+                            value={action.quando}
+                            onChange={(e) => handleUpdateCapaAction(idx, 'quando', e.target.value)}
+                            className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-2.5 py-1.5 text-xs font-semibold rounded-lg focus:outline-hidden dark:text-slate-100"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                            Status da Ação
+                          </label>
+                          <select
+                            value={action.status}
+                            onChange={(e) => handleUpdateCapaAction(idx, 'status', e.target.value)}
+                            className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-2.5 py-1.5 text-xs font-bold rounded-lg focus:outline-hidden dark:text-slate-100"
+                          >
+                            <option value="Planejado">Planejado</option>
+                            <option value="Em Andamento">Em Andamento</option>
+                            <option value="Concluído">Concluído</option>
+                            <option value="Cancelada">Cancelado</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      {/* HOW & HOW MUCH */}
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        <div className="md:col-span-2">
+                          <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                            HOW (Como fará / Método)?
+                          </label>
+                          <input
+                            type="text"
+                            value={action.como || ''}
+                            onChange={(e) => handleUpdateCapaAction(idx, 'como', e.target.value)}
+                            className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-2.5 py-1.5 text-xs font-medium rounded-lg focus:outline-hidden dark:text-slate-100"
+                            placeholder="Passo a passo, POP utilizado ou instruções..."
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                            HOW MUCH (Custo R$)?
+                          </label>
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={action.quantoCusta}
+                            onChange={(e) => handleUpdateCapaAction(idx, 'quantoCusta', Number(e.target.value))}
+                            className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-2.5 py-1.5 text-xs font-bold text-emerald-600 dark:text-emerald-400 font-mono rounded-lg focus:outline-hidden dark:bg-slate-800"
+                            placeholder="0.00"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="text-center pt-2">
+                  <button
+                    type="button"
+                    onClick={handleAddCapaAction}
+                    className="px-4 py-2 border-2 border-dashed border-blue-300 dark:border-blue-800 hover:border-blue-500 text-blue-600 dark:text-blue-400 rounded-xl text-xs font-bold flex items-center gap-1.5 mx-auto transition-all cursor-pointer"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>Adicionar Outra Ação 5W2H nesta Capa</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Actions Footer */}
+              <div className="flex items-center justify-between pt-4 border-t border-slate-150 dark:border-slate-800">
+                <span className="text-xs text-slate-500 dark:text-slate-400">
+                  {formPlano.acoes.length} {formPlano.acoes.length === 1 ? 'ação vinculada' : 'ações vinculadas'}
+                </span>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsPlanoModalOpen(false)}
+                    className="px-4 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-750 text-slate-700 dark:text-slate-300 rounded-lg text-xs font-bold transition-colors cursor-pointer"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold shadow-xs transition-colors cursor-pointer"
+                  >
+                    {editingPlano ? 'Salvar Alterações da Capa' : 'Registrar Plano Mestre (Capa)'}
+                  </button>
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: ADICIONAR OU EDITAR AÇÃO 5W2H INDIVIDUAL */}
+      {isActionItemModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl w-full max-w-xl max-h-[90vh] overflow-y-auto shadow-2xl border border-slate-100 dark:border-slate-800 animate-scale-in">
+            {/* Header */}
+            <div className="px-6 py-4 bg-[#0B3A63] text-white flex items-center justify-between sticky top-0 z-10">
+              <div className="flex items-center gap-2">
+                <PlusCircle className="w-4.5 h-4.5 text-blue-300" />
+                <div>
+                  <h3 className="text-sm font-extrabold">
+                    {editingActionItem ? 'Editar Ação 5W2H' : 'Nova Ação 5W2H'}
+                  </h3>
+                  {actionItemTargetPlanoId && (
+                    <p className="text-[10px] text-blue-200 font-mono">
+                      Vinculada ao Plano: {planos.find(p => p.id === actionItemTargetPlanoId)?.codigo} - {planos.find(p => p.id === actionItemTargetPlanoId)?.titulo}
+                    </p>
+                  )}
+                </div>
+              </div>
+              <button 
+                type="button"
+                onClick={() => setIsActionItemModalOpen(false)} 
+                className="text-white/60 hover:text-white font-mono text-2xl leading-none cursor-pointer"
+              >
+                &times;
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveActionItemModal} className="p-6 space-y-4">
+              {actionItemModalError && (
+                <div className="p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 rounded-xl text-xs text-rose-800 dark:text-rose-300 flex items-center justify-between animate-fade-in">
+                  <div className="flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 text-rose-600 dark:text-rose-400 shrink-0" />
+                    <span className="font-semibold">{actionItemModalError}</span>
+                  </div>
+                  <button 
+                    type="button" 
+                    onClick={() => setActionItemModalError(null)} 
+                    className="text-rose-500 hover:text-rose-700 dark:text-rose-400 font-bold ml-2 text-base leading-none cursor-pointer"
+                  >
+                    &times;
+                  </button>
+                </div>
+              )}
+              {/* WHAT */}
+              <div>
+                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                  WHAT - O que fazer? *
+                </label>
+                <textarea
+                  required
+                  rows={2}
+                  value={actionItemForm.oQue}
+                  onChange={(e) => setActionItemForm({ ...actionItemForm, oQue: e.target.value })}
+                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3 py-2 text-xs font-semibold rounded-lg focus:outline-hidden dark:text-slate-100"
+                  placeholder="Descrição da ação prática executiva..."
+                />
+              </div>
+
+              {/* WHY */}
+              <div>
+                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                  WHY - Por que fazer?
+                </label>
+                <textarea
+                  rows={2}
+                  value={actionItemForm.porQue}
+                  onChange={(e) => setActionItemForm({ ...actionItemForm, porQue: e.target.value })}
+                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3 py-2 text-xs font-medium rounded-lg focus:outline-hidden dark:text-slate-100"
+                  placeholder="Justificativa da ação ou desvio a mitigar..."
+                />
+              </div>
+
+              {/* WHERE & WHO */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
                     WHERE - Onde?
                   </label>
                   <input
                     type="text"
-                    value={formPlano.onde}
-                    onChange={(e) => setFormPlano({ ...formPlano, onde: e.target.value })}
+                    value={actionItemForm.onde}
+                    onChange={(e) => setActionItemForm({ ...actionItemForm, onde: e.target.value })}
                     className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3 py-2 text-xs font-medium rounded-lg focus:outline-hidden dark:text-slate-100"
-                    placeholder="Ex: Máquina 03, Estoque"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
-                    WHEN - Quando (Prazo)? *
-                  </label>
-                  <input
-                    type="date"
-                    required
-                    value={formPlano.quando}
-                    onChange={(e) => setFormPlano({ ...formPlano, quando: e.target.value })}
-                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3 py-2 text-xs font-medium rounded-lg focus:outline-hidden dark:text-slate-100"
+                    placeholder="Local, máquina ou posto..."
                   />
                 </div>
                 <div>
@@ -1073,89 +2546,72 @@ export const PlanosAcaoComponent: React.FC<PlanosAcaoProps> = ({
                   <input
                     type="text"
                     required
-                    value={formPlano.quem}
-                    onChange={(e) => setFormPlano({ ...formPlano, quem: e.target.value })}
-                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3 py-2 text-xs font-medium rounded-lg focus:outline-hidden dark:text-slate-100"
-                    placeholder="Responsável pela execução"
+                    value={actionItemForm.quem}
+                    onChange={(e) => setActionItemForm({ ...actionItemForm, quem: e.target.value })}
+                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3 py-2 text-xs font-semibold rounded-lg focus:outline-hidden dark:text-slate-100"
+                    placeholder="Responsável direto"
                   />
                 </div>
               </div>
 
-              {/* HOW & HOW MUCH */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="md:col-span-2">
+              {/* WHEN & STATUS */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
                   <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
-                    HOW - Como fará? (Método)
+                    WHEN - Quando (Prazo limite)? *
                   </label>
                   <input
-                    type="text"
-                    value={formPlano.como}
-                    onChange={(e) => setFormPlano({ ...formPlano, como: e.target.value })}
-                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3 py-2 text-xs font-medium rounded-lg focus:outline-hidden dark:text-slate-100"
-                    placeholder="Passo a passo, ferramentas ou métodos utilizados..."
+                    type="date"
+                    required
+                    value={actionItemForm.quando}
+                    onChange={(e) => setActionItemForm({ ...actionItemForm, quando: e.target.value })}
+                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3 py-2 text-xs font-semibold rounded-lg focus:outline-hidden dark:text-slate-100"
                   />
                 </div>
                 <div>
                   <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
-                    HOW MUCH - Quanto custa? (R$)
+                    Status da Ação
+                  </label>
+                  <select
+                    value={actionItemForm.status}
+                    onChange={(e) => setActionItemForm({ ...actionItemForm, status: e.target.value as any })}
+                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3 py-2 text-xs font-bold rounded-lg focus:outline-hidden dark:text-slate-100"
+                  >
+                    <option value="Planejado">Planejado</option>
+                    <option value="Em Andamento">Em Andamento</option>
+                    <option value="Concluído">Concluído</option>
+                    <option value="Cancelada">Cancelada</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* HOW & HOW MUCH */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div className="md:col-span-2">
+                  <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                    HOW - Como fará (Método)?
+                  </label>
+                  <input
+                    type="text"
+                    value={actionItemForm.como}
+                    onChange={(e) => setActionItemForm({ ...actionItemForm, como: e.target.value })}
+                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3 py-2 text-xs font-medium rounded-lg focus:outline-hidden dark:text-slate-100"
+                    placeholder="Instruções, ferramentas ou procedimentos..."
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                    HOW MUCH - Custo (R$)
                   </label>
                   <input
                     type="number"
                     min="0"
                     step="0.01"
-                    value={formPlano.quantoCusta}
-                    onChange={(e) => setFormPlano({ ...formPlano, quantoCusta: Number(e.target.value) })}
-                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3 py-2 text-xs font-medium rounded-lg focus:outline-hidden dark:text-slate-100"
+                    value={actionItemForm.quantoCusta}
+                    onChange={(e) => setActionItemForm({ ...actionItemForm, quantoCusta: Number(e.target.value) })}
+                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3 py-2 text-xs font-bold text-emerald-600 dark:text-emerald-400 font-mono rounded-lg focus:outline-hidden dark:bg-slate-800"
                     placeholder="0.00"
                   />
-                </div>
-              </div>
-
-              {/* Integrations Section Divider */}
-              <div className="border-t border-slate-150 dark:border-slate-800 pt-3">
-                <span className="text-[10px] font-mono font-black text-[#0B3A63] dark:text-blue-400 tracking-widest uppercase">Integrações de Rastreabilidade</span>
-              </div>
-
-              {/* Document, Audit, NC integrations select */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Documento Vinculado</label>
-                  <select
-                    value={formPlano.documentoId}
-                    onChange={(e) => setFormPlano({ ...formPlano, documentoId: e.target.value })}
-                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3 py-2 text-xs font-semibold rounded-lg focus:outline-hidden dark:text-slate-100"
-                  >
-                    <option value="">-- Nenhum documento --</option>
-                    {documents.map(d => (
-                      <option key={d.id} value={d.id}>{d.codigo} - {d.titulo}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Auditoria Vinculada</label>
-                  <select
-                    value={formPlano.auditoriaId}
-                    onChange={(e) => setFormPlano({ ...formPlano, auditoriaId: e.target.value })}
-                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3 py-2 text-xs font-semibold rounded-lg focus:outline-hidden dark:text-slate-100"
-                  >
-                    <option value="">-- Nenhuma auditoria --</option>
-                    {audits.map(a => (
-                      <option key={a.id} value={a.id}>{a.codigo} - {a.titulo}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Não Conformidade (RNC) Vinculada</label>
-                  <select
-                    value={formPlano.naoConformidadeId}
-                    onChange={(e) => setFormPlano({ ...formPlano, naoConformidadeId: e.target.value })}
-                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3 py-2 text-xs font-semibold rounded-lg focus:outline-hidden dark:text-slate-100"
-                  >
-                    <option value="">-- Nenhuma RNC --</option>
-                    {ncs.map(n => (
-                      <option key={n.id} value={n.id}>{n.codigo} - {n.titulo}</option>
-                    ))}
-                  </select>
                 </div>
               </div>
 
@@ -1163,16 +2619,16 @@ export const PlanosAcaoComponent: React.FC<PlanosAcaoProps> = ({
               <div className="flex justify-end gap-2 pt-4 border-t border-slate-150 dark:border-slate-800">
                 <button
                   type="button"
-                  onClick={() => setIsPlanoModalOpen(false)}
-                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-750 text-slate-700 dark:text-slate-300 rounded-lg text-xs font-bold transition-colors"
+                  onClick={() => setIsActionItemModalOpen(false)}
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-750 text-slate-700 dark:text-slate-300 rounded-lg text-xs font-bold transition-colors cursor-pointer"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold shadow-xs transition-colors"
+                  className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold shadow-xs transition-colors cursor-pointer"
                 >
-                  {editingPlano ? 'Salvar Alterações' : 'Confirmar Registro'}
+                  {editingActionItem ? 'Salvar Ação' : 'Adicionar Ação'}
                 </button>
               </div>
             </form>
@@ -1252,156 +2708,192 @@ export const PlanosAcaoComponent: React.FC<PlanosAcaoProps> = ({
         </div>
       )}
 
-      {/* MODAL: IMPRESSÃO DETALHADA DO MODELO 5W2H */}
-      {isPrintModalOpen && selectedPrintPlano && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl w-full max-w-2xl overflow-hidden shadow-2xl border border-slate-100 dark:border-slate-800 animate-scale-in">
-            {/* Header */}
-            <div className="px-6 py-4 bg-[#0B3A63] text-white flex items-center justify-between">
-              <h3 className="text-sm font-extrabold flex items-center gap-2">
-                <Printer className="w-4.5 h-4.5" />
-                Impressão de Folha de Plano 5W2H
-              </h3>
-              <button 
-                onClick={() => setIsPrintModalOpen(false)} 
-                className="text-white/60 hover:text-white font-mono text-xl"
-              >
-                &times;
-              </button>
-            </div>
-
-            {/* Printable View Container */}
-            <div id="printable-5w2h-area" className="p-8 bg-white text-slate-900 font-sans space-y-6">
-              
-              {/* Printable Header */}
-              <div className="border-2 border-slate-900 p-4 flex items-center justify-between">
-                <div className="flex items-center space-x-3">
-                  <div className="w-10 h-10 rounded bg-[#0B3A63] flex items-center justify-center text-white font-black text-lg">
-                    VI
-                  </div>
+      {/* MODAL: IMPRESSÃO DETALHADA DO MODELO 5W2H (CAPA COM AÇÕES) */}
+      {isPrintModalOpen && selectedPrintPlano && (() => {
+        const printStats = getPlanStats(selectedPrintPlano);
+        const printActions = printStats.actions;
+        return (
+          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+            <div className="bg-white dark:bg-slate-900 rounded-2xl w-full max-w-4xl max-h-[92vh] overflow-y-auto shadow-2xl border border-slate-100 dark:border-slate-800 animate-scale-in">
+              {/* Header */}
+              <div className="px-6 py-4 bg-[#0B3A63] text-white flex items-center justify-between sticky top-0 z-20">
+                <div className="flex items-center gap-2">
+                  <Printer className="w-5 h-5 text-blue-300" />
                   <div>
-                    <h1 className="text-base font-extrabold tracking-tight">VICKYTEX</h1>
-                    <p className="text-[10px] font-bold text-slate-500 font-mono">SISTEMA DE GESTÃO DA QUALIDADE (SGQ)</p>
+                    <h3 className="text-sm font-extrabold">
+                      Folha de Plano de Ação 5W2H: {selectedPrintPlano.codigo}
+                    </h3>
+                    <p className="text-[10px] text-blue-200">
+                      Visualização prévia formatada para impressão A4 institucional SGQ
+                    </p>
                   </div>
                 </div>
-                <div className="text-right">
-                  <h2 className="text-xs font-black bg-slate-900 text-white px-2 py-1 inline-block">FORMULÁRIO 5W2H</h2>
-                  <p className="text-[9px] font-bold text-slate-500 mt-1">Conformidade ISO 9001:2015</p>
-                </div>
+                <button 
+                  type="button"
+                  onClick={() => setIsPrintModalOpen(false)} 
+                  className="text-white/60 hover:text-white font-mono text-2xl leading-none cursor-pointer"
+                >
+                  &times;
+                </button>
               </div>
 
-              {/* Plano de Ação Identifiers */}
-              <div className="grid grid-cols-2 md:grid-cols-4 border border-slate-400 text-xs">
-                <div className="p-2 border-r border-b border-slate-300 bg-slate-50 font-bold">Código do Plano:</div>
-                <div className="p-2 border-r border-b border-slate-300 font-mono font-extrabold">{selectedPrintPlano.codigo}</div>
-                <div className="p-2 border-r border-b border-slate-300 bg-slate-50 font-bold">Data de Emissão:</div>
-                <div className="p-2 border-b border-slate-300">{new Date(selectedPrintPlano.dataCriacao).toLocaleDateString('pt-BR')}</div>
-
-                <div className="p-2 border-r border-slate-300 bg-slate-50 font-bold">Título do Plano:</div>
-                <div className="p-2 border-r border-slate-300 font-bold col-span-3">{selectedPrintPlano.titulo}</div>
-              </div>
-
-              {/* 5W2H Matrix Grid Table */}
-              <table className="w-full border-collapse border border-slate-400 text-xs text-left">
-                <thead>
-                  <tr className="bg-slate-900 text-white text-[10px] font-bold tracking-wider">
-                    <th className="p-2 border border-slate-400 w-1/4">Perguntas (Questões)</th>
-                    <th className="p-2 border border-slate-400 w-3/4">Planejamento e Ação Executiva</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr>
-                    <td className="p-2 border border-slate-300 bg-slate-50 font-bold">
-                      WHAT (O quê?)<br/>
-                      <span className="text-[9px] font-normal text-slate-500">Qual ação será executada?</span>
-                    </td>
-                    <td className="p-2 border border-slate-300 font-medium">{selectedPrintPlano.oQue}</td>
-                  </tr>
-                  <tr>
-                    <td className="p-2 border border-slate-300 bg-slate-50 font-bold">
-                      WHY (Por quê?)<br/>
-                      <span className="text-[9px] font-normal text-slate-500">Qual a justificativa / motivo?</span>
-                    </td>
-                    <td className="p-2 border border-slate-300 font-medium">{selectedPrintPlano.porQue || '-'}</td>
-                  </tr>
-                  <tr>
-                    <td className="p-2 border border-slate-300 bg-slate-50 font-bold">
-                      WHERE (Onde?)<br/>
-                      <span className="text-[9px] font-normal text-slate-500">Onde será aplicada?</span>
-                    </td>
-                    <td className="p-2 border border-slate-300 font-medium">{selectedPrintPlano.onde || '-'}</td>
-                  </tr>
-                  <tr>
-                    <td className="p-2 border border-slate-300 bg-slate-50 font-bold">
-                      WHEN (Quando?)<br/>
-                      <span className="text-[9px] font-normal text-slate-500">Qual o prazo limite?</span>
-                    </td>
-                    <td className="p-2 border border-slate-300 font-bold text-slate-800">{new Date(selectedPrintPlano.quando).toLocaleDateString('pt-BR')}</td>
-                  </tr>
-                  <tr>
-                    <td className="p-2 border border-slate-300 bg-slate-50 font-bold">
-                      WHO (Quem?)<br/>
-                      <span className="text-[9px] font-normal text-slate-500">Quem é o executor?</span>
-                    </td>
-                    <td className="p-2 border border-slate-300 font-bold">{selectedPrintPlano.quem}</td>
-                  </tr>
-                  <tr>
-                    <td className="p-2 border border-slate-300 bg-slate-50 font-bold">
-                      HOW (Como?)<br/>
-                      <span className="text-[9px] font-normal text-slate-500">Qual método de execução?</span>
-                    </td>
-                    <td className="p-2 border border-slate-300 font-medium">{selectedPrintPlano.como || '-'}</td>
-                  </tr>
-                  <tr>
-                    <td className="p-2 border border-slate-300 bg-slate-50 font-bold">
-                      HOW MUCH (Quanto?)<br/>
-                      <span className="text-[9px] font-normal text-slate-500">Custos estimados?</span>
-                    </td>
-                    <td className="p-2 border border-slate-300 font-extrabold text-slate-800">
-                      R$ {selectedPrintPlano.quantoCusta.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-
-              {/* Rastreabilidade / Sign-off section */}
-              <div className="grid grid-cols-2 gap-6 pt-10 text-xs">
-                <div className="text-center space-y-8">
-                  <div className="border-t border-slate-500 w-4/5 mx-auto"></div>
-                  <div>
-                    <p className="font-bold">{selectedPrintPlano.quem}</p>
-                    <p className="text-[10px] text-slate-500">Responsável pela Ação</p>
+              {/* Printable View Container */}
+              <div id="printable-5w2h-area" className="p-8 bg-white text-slate-900 font-sans space-y-6">
+                
+                {/* Printable Header */}
+                <div className="border-2 border-slate-900 p-4 flex items-center justify-between">
+                  <div className="flex items-center space-x-3">
+                    <div className="w-12 h-12 rounded bg-[#0B3A63] flex items-center justify-center text-white font-black text-xl">
+                      VI
+                    </div>
+                    <div>
+                      <h1 className="text-base font-extrabold tracking-tight">VICKYTEX</h1>
+                      <p className="text-[10px] font-bold text-slate-500 font-mono">SISTEMA DE GESTÃO DA QUALIDADE (SGQ)</p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <h2 className="text-xs font-black bg-slate-900 text-white px-2.5 py-1 inline-block">PLANO MESTRE 5W2H</h2>
+                    <p className="text-[9px] font-bold text-slate-500 mt-1">Conformidade ISO 9001:2015 Cláusula 10.2</p>
                   </div>
                 </div>
-                <div className="text-center space-y-8">
-                  <div className="border-t border-slate-500 w-4/5 mx-auto"></div>
-                  <div>
-                    <p className="font-bold">{user?.name ? `${user.name} (Qualidade)` : 'Gestão da Qualidade Vickytex'}</p>
-                    <p className="text-[10px] text-slate-500">Gestão da Qualidade Vickytex</p>
+
+                {/* Capa Grid Identifiers */}
+                <div className="grid grid-cols-2 md:grid-cols-4 border border-slate-400 text-xs">
+                  <div className="p-2 border-r border-b border-slate-300 bg-slate-50 font-bold">Código Mestre:</div>
+                  <div className="p-2 border-r border-b border-slate-300 font-mono font-extrabold text-[#0B3A63]">{selectedPrintPlano.codigo}</div>
+                  <div className="p-2 border-r border-b border-slate-300 bg-slate-50 font-bold">Data de Registro:</div>
+                  <div className="p-2 border-b border-slate-300">{formatDateBR(selectedPrintPlano.dataCriacao)}</div>
+
+                  <div className="p-2 border-r border-b border-slate-300 bg-slate-50 font-bold">Título da Capa:</div>
+                  <div className="p-2 border-r border-b border-slate-300 font-extrabold col-span-3">{selectedPrintPlano.titulo}</div>
+
+                  <div className="p-2 border-r border-b border-slate-300 bg-slate-50 font-bold">Setor:</div>
+                  <div className="p-2 border-r border-b border-slate-300 font-semibold">{selectedPrintPlano.setor}</div>
+                  <div className="p-2 border-r border-b border-slate-300 bg-slate-50 font-bold">Coordenador Geral:</div>
+                  <div className="p-2 border-b border-slate-300 font-semibold">{selectedPrintPlano.coordenador || selectedPrintPlano.quem || 'Líder SGQ'}</div>
+
+                  <div className="p-2 border-r border-b border-slate-300 bg-slate-50 font-bold">Status Geral:</div>
+                  <div className="p-2 border-r border-b border-slate-300 font-bold">{printStats.statusConsolidado}</div>
+                  <div className="p-2 border-r border-b border-slate-300 bg-slate-50 font-bold">Investimento Total:</div>
+                  <div className="p-2 border-b border-slate-300 font-mono font-extrabold text-emerald-700">
+                    R$ {printStats.totalCost.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </div>
+
+                  {selectedPrintPlano.objetivo && (
+                    <>
+                      <div className="p-2 border-r border-slate-300 bg-slate-50 font-bold">Objetivo & Eficácia:</div>
+                      <div className="p-2 border-slate-300 col-span-3 text-[11px] leading-relaxed italic">{selectedPrintPlano.objetivo}</div>
+                    </>
+                  )}
+                </div>
+
+                {/* 5W2H Actions Table */}
+                <div className="space-y-1">
+                  <h4 className="text-[11px] font-black text-slate-900 uppercase tracking-wider">
+                    Ações Executivas 5W2H ({printActions.length} {printActions.length === 1 ? 'Ação Vinculada' : 'Ações Vinculadas'})
+                  </h4>
+                  <table className="w-full border-collapse border border-slate-400 text-xs text-left">
+                    <thead>
+                      <tr className="bg-slate-900 text-white text-[9px] font-bold uppercase tracking-wider">
+                        <th className="p-2 border border-slate-400 w-8 text-center">#</th>
+                        <th className="p-2 border border-slate-400 min-w-[200px]">WHAT (O quê?) / WHY (Por quê?) / HOW (Como?)</th>
+                        <th className="p-2 border border-slate-400 min-w-[100px]">WHERE (Onde?)</th>
+                        <th className="p-2 border border-slate-400 min-w-[110px]">WHO (Quem?)</th>
+                        <th className="p-2 border border-slate-400 min-w-[90px] text-center">WHEN (Prazo)</th>
+                        <th className="p-2 border border-slate-400 min-w-[90px] text-right">HOW MUCH</th>
+                        <th className="p-2 border border-slate-400 min-w-[85px] text-center">STATUS</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-300">
+                      {printActions.map((act, idx) => (
+                        <tr key={act.id || idx} className="align-top">
+                          <td className="p-2 border border-slate-300 font-mono font-bold text-center bg-slate-50">
+                            {act.itemNumero || idx + 1}
+                          </td>
+                          <td className="p-2 border border-slate-300 space-y-1">
+                            <strong className="block text-slate-900">{act.oQue}</strong>
+                            {act.porQue && (
+                              <p className="text-[10px] text-slate-600"><span className="font-semibold">Por quê:</span> {act.porQue}</p>
+                            )}
+                            {act.como && (
+                              <p className="text-[10px] text-slate-600"><span className="font-semibold">Como:</span> {act.como}</p>
+                            )}
+                          </td>
+                          <td className="p-2 border border-slate-300 text-slate-700">{act.onde || '—'}</td>
+                          <td className="p-2 border border-slate-300 font-semibold">{act.quem}</td>
+                          <td className="p-2 border border-slate-300 text-center font-mono font-bold">
+                            {formatDateBR(act.quando)}
+                          </td>
+                          <td className="p-2 border border-slate-300 text-right font-mono font-bold text-emerald-700 whitespace-nowrap">
+                            R$ {(Number(act.quantoCusta) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </td>
+                          <td className="p-2 border border-slate-300 text-center">
+                            <span className="font-bold text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-800 border border-slate-200">
+                              {act.status}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot className="bg-slate-50 font-bold border-t-2 border-slate-900 text-[10px]">
+                      <tr>
+                        <td colSpan={4} className="p-2 border border-slate-300 text-right">Totais Consolidados:</td>
+                        <td className="p-2 border border-slate-300 text-center">{printStats.total} ações</td>
+                        <td className="p-2 border border-slate-300 text-right font-mono text-emerald-700 whitespace-nowrap">
+                          R$ {printStats.totalCost.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </td>
+                        <td className="p-2 border border-slate-300 text-center text-emerald-700">
+                          {printStats.concluidas}/{printStats.acoesAtivas > 0 ? printStats.acoesAtivas : printStats.total} ({printStats.percent}%)
+                          {printStats.planejadas > 0 && <span className="block text-[9px] text-blue-600 font-normal">[{printStats.planejadas} plan.]</span>}
+                          {printStats.canceladas > 0 && <span className="block text-[9px] text-slate-500 font-normal">[{printStats.canceladas} canc.]</span>}
+                        </td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+
+                {/* Sign-off section */}
+                <div className="grid grid-cols-2 gap-8 pt-6 text-xs">
+                  <div className="text-center space-y-6">
+                    <div className="border-t border-slate-500 w-4/5 mx-auto"></div>
+                    <div>
+                      <p className="font-bold">{selectedPrintPlano.coordenador || selectedPrintPlano.quem || 'Coordenador do Plano'}</p>
+                      <p className="text-[10px] text-slate-500">Coordenador / Responsável pela Execução</p>
+                    </div>
+                  </div>
+                  <div className="text-center space-y-6">
+                    <div className="border-t border-slate-500 w-4/5 mx-auto"></div>
+                    <div>
+                      <p className="font-bold">{user?.name ? `${user.name} (SGQ)` : 'Gestão da Qualidade Vickytex'}</p>
+                      <p className="text-[10px] text-slate-500">Gestão da Qualidade Vickytex (ISO 9001:2015)</p>
+                    </div>
                   </div>
                 </div>
+
               </div>
 
-            </div>
-
-            {/* Print trigger footer */}
-            <div className="px-6 py-4 bg-slate-50 dark:bg-slate-800/50 border-t border-slate-150 dark:border-slate-800 flex justify-end gap-2">
-              <button
-                onClick={() => setIsPrintModalOpen(false)}
-                className="px-4 py-1.5 bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-bold rounded-lg"
-              >
-                Fechar
-              </button>
-              <button
-                onClick={handlePrintPlano}
-                className="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg shadow-xs"
-              >
-                Imprimir Documento
-              </button>
+              {/* Print trigger footer */}
+              <div className="px-6 py-4 bg-slate-50 dark:bg-slate-800/50 border-t border-slate-150 dark:border-slate-800 flex justify-end gap-2 sticky bottom-0 z-10">
+                <button
+                  type="button"
+                  onClick={() => setIsPrintModalOpen(false)}
+                  className="px-4 py-2 bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-bold rounded-lg cursor-pointer"
+                >
+                  Fechar
+                </button>
+                <button
+                  type="button"
+                  onClick={handlePrintPlano}
+                  className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg shadow-xs cursor-pointer flex items-center gap-1.5"
+                >
+                  <Printer className="w-4 h-4" />
+                  <span>Imprimir Documento Oficial</span>
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* MODAL DE CONFIRMAÇÃO DE EXCLUSÃO DE PLANO DE AÇÃO */}
       {planoToDelete && (
@@ -1449,6 +2941,86 @@ export const PlanosAcaoComponent: React.FC<PlanosAcaoProps> = ({
                 className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-bold transition-colors shadow-xs"
               >
                 Sim, Excluir Plano
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE CONFIRMAÇÃO DE EXCLUSÃO DE AÇÃO INDIVIDUAL 5W2H */}
+      {actionToDelete && (
+        <div id="delete-action-modal-overlay" className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 animate-scale-in">
+            <div className="flex items-center space-x-3 pb-3 border-b border-slate-150 dark:border-slate-800">
+              <div className={`p-2.5 rounded-full shrink-0 ${actionToDelete.isOnlyAction ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400' : 'bg-rose-500/10 text-rose-600 dark:text-rose-400'}`}>
+                {actionToDelete.isOnlyAction ? <AlertCircle className="w-6 h-6 animate-pulse" /> : <Trash2 className="w-6 h-6" />}
+              </div>
+              <div>
+                <h3 className="text-sm font-extrabold text-slate-900 dark:text-slate-100">
+                  {actionToDelete.isOnlyAction ? 'Excluir Plano de Ação Completo?' : 'Confirmar Exclusão da Ação 5W2H'}
+                </h3>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 font-mono">
+                  {actionToDelete.plano.codigo} - {actionToDelete.plano.titulo}
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-3 text-xs text-slate-600 dark:text-slate-300">
+              {actionToDelete.isOnlyAction ? (
+                <div className="space-y-2">
+                  <p className="leading-relaxed">
+                    Esta é a <strong>única ação executiva</strong> vinculada a este plano. Pela metodologia SGQ ISO 9001 (Cláusula 10.2), um plano de tratativa não pode existir sem ações.
+                  </p>
+                  <p className="p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/60 rounded-xl text-amber-800 dark:text-amber-300 font-medium leading-relaxed">
+                    Deseja excluir permanentemente o plano <strong>{actionToDelete.plano.codigo}</strong> por completo do sistema?
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <p className="leading-relaxed">
+                    Tem certeza de que deseja remover esta ação executiva do plano?
+                  </p>
+                  <div className="bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-750 p-3 rounded-xl space-y-1.5 font-medium">
+                    <p className="font-extrabold text-slate-900 dark:text-slate-100 text-xs">
+                      #{actionToDelete.action.itemNumero || 1} - {actionToDelete.action.oQue}
+                    </p>
+                    <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400">
+                      <span>Responsável: <strong className="text-slate-700 dark:text-slate-300">{actionToDelete.action.quem}</strong></span>
+                      <span>•</span>
+                      <span>Prazo: <strong className="text-slate-700 dark:text-slate-300 font-mono">{formatDateBR(actionToDelete.action.quando)}</strong></span>
+                      {Number(actionToDelete.action.quantoCusta) > 0 && (
+                        <>
+                          <span>•</span>
+                          <span className="text-emerald-600 font-mono font-bold">R$ {Number(actionToDelete.action.quantoCusta).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                  <p className="text-[11px] text-rose-600 dark:text-rose-400 font-semibold">
+                    Esta remoção recalculará o custo consolidado e o progresso do plano.
+                  </p>
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center justify-end space-x-2 pt-3 border-t border-slate-150 dark:border-slate-800">
+              <button
+                type="button"
+                onClick={() => setActionToDelete(null)}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDeleteAction}
+                className={`px-4 py-2 text-white rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer ${
+                  actionToDelete.isOnlyAction 
+                    ? 'bg-amber-600 hover:bg-amber-700' 
+                    : 'bg-rose-600 hover:bg-rose-700'
+                }`}
+              >
+                {actionToDelete.isOnlyAction ? 'Sim, Excluir Plano Completo' : 'Sim, Remover Ação'}
               </button>
             </div>
           </div>

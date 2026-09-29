@@ -16,7 +16,9 @@ import {
   Plus,
   RefreshCw,
   FolderOpen,
-  MessageSquare
+  MessageSquare,
+  LayoutList,
+  LayoutGrid
 } from 'lucide-react';
 import { 
   Setor5S, 
@@ -61,6 +63,7 @@ export const FiveSActionPlans: React.FC<FiveSActionPlansProps> = ({
   const [filterStatus, setFilterStatus] = useState('TODOS');
   const [filterSector, setFilterSector] = useState('TODOS');
   const [filterOnlyMySectors, setFilterOnlyMySectors] = useState(false);
+  const [viewMode, setViewMode] = useState<'lista' | 'cards'>('lista');
 
   // Editing Action Plan modal
   const [editingPlan, setEditingPlan] = useState<PlanoAcao5S | null>(null);
@@ -374,83 +377,204 @@ export const FiveSActionPlans: React.FC<FiveSActionPlansProps> = ({
               <span>Apenas Meus Setores</span>
             </button>
           )}
+
+          {activeSubTab === 'planos' && (
+            <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-0.5 rounded-lg border border-slate-200 dark:border-slate-700 shrink-0">
+              <button
+                type="button"
+                onClick={() => setViewMode('lista')}
+                className={`flex items-center gap-1 px-2.5 py-1 rounded text-xs font-bold transition-all cursor-pointer ${
+                  viewMode === 'lista'
+                    ? 'bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-2xs'
+                    : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+                }`}
+                title="Visualização em Lista / Tabela"
+              >
+                <LayoutList className="w-3.5 h-3.5" />
+                <span>Lista</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode('cards')}
+                className={`flex items-center gap-1 px-2.5 py-1 rounded text-xs font-bold transition-all cursor-pointer ${
+                  viewMode === 'cards'
+                    ? 'bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-2xs'
+                    : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+                }`}
+                title="Visualização em Cards"
+              >
+                <LayoutGrid className="w-3.5 h-3.5" />
+                <span>Cards</span>
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
       {/* --- Tab 1: PLANOS DE AÇÃO --- */}
       {activeSubTab === 'planos' && (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-          {filteredPlanos.length === 0 ? (
-            <div className="col-span-3 p-8 bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 text-center text-slate-400 italic rounded-xl">
-              Nenhum plano de ação encontrado para os filtros ativos.
+        viewMode === 'lista' ? (
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden shadow-xs">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-slate-50 dark:bg-slate-950 text-slate-500 font-bold border-b border-slate-100 dark:border-slate-800 uppercase text-[10px] tracking-wider">
+                  <tr>
+                    <th className="p-3">Requisito / Senso</th>
+                    <th className="p-3">Descrição da Ação</th>
+                    <th className="p-3">Setor</th>
+                    <th className="p-3">Responsável</th>
+                    <th className="p-3">Prazo</th>
+                    <th className="p-3">Status</th>
+                    <th className="p-3 text-right">Ação</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-medium text-slate-700 dark:text-slate-300">
+                  {filteredPlanos.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="p-8 text-center text-slate-400 italic">
+                        Nenhum plano de ação encontrado para os filtros ativos.
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredPlanos.map(plan => {
+                      const audit = auditorias.find(a => a.id === plan.auditoriaId);
+                      const req = requisitos.find(r => r.id === plan.requisitoId);
+                      const isTied = isPlanSectorTiedToUser(plan);
+
+                      return (
+                        <tr key={plan.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/20 transition-colors">
+                          <td className="p-3">
+                            <span className="text-[10px] font-mono font-bold text-[#0B3A63] bg-blue-50 dark:bg-blue-950/30 px-2 py-0.5 rounded-sm uppercase">
+                              {req?.codigo || '5S'}
+                            </span>
+                            <span className="block text-[10px] text-slate-400 mt-0.5 line-clamp-1">{req?.nome}</span>
+                          </td>
+                          <td className="p-3 max-w-[320px]">
+                            <p className="font-bold text-slate-800 dark:text-slate-200 line-clamp-2">{plan.descricao}</p>
+                            <span className="text-[10px] text-slate-400 font-mono">Ref: {audit?.codigo}</span>
+                          </td>
+                          <td className="p-3 font-semibold text-slate-700 dark:text-slate-300">
+                            {audit?.setor || 'Geral'}
+                          </td>
+                          <td className="p-3">
+                            {plan.responsavel ? (
+                              <span className="font-semibold text-slate-800 dark:text-slate-200">{plan.responsavel}</span>
+                            ) : (
+                              <span className="text-amber-500 font-bold italic text-[11px]">Não definido</span>
+                            )}
+                          </td>
+                          <td className="p-3 font-mono font-bold text-slate-700 dark:text-slate-300">
+                            {plan.prazo}
+                          </td>
+                          <td className="p-3">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                                plan.status === 'Concluído' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' :
+                                plan.status === 'Em Andamento' ? 'bg-amber-50 text-amber-600 border-amber-100' :
+                                'bg-slate-100 text-slate-500 border-slate-200'
+                              }`}>
+                                {plan.status}
+                              </span>
+                              {isTied && (
+                                <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                                  Seu Setor
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                          <td className="p-3 text-right">
+                            <button
+                              onClick={() => handleOpenPlanModal(plan)}
+                              className={`text-[11px] font-bold hover:underline cursor-pointer inline-flex items-center space-x-1 ${
+                                isTied ? 'text-[#0B3A63] dark:text-sky-400' : 'text-slate-500 dark:text-slate-400'
+                              }`}
+                            >
+                              <span>{isTied ? 'Editar e Tratar' : 'Consultar Detalhes'}</span>
+                              <span>&rarr;</span>
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
             </div>
-          ) : (
-            filteredPlanos.map(plan => {
-              const audit = auditorias.find(a => a.id === plan.auditoriaId);
-              const req = requisitos.find(r => r.id === plan.requisitoId);
-              const isTied = isPlanSectorTiedToUser(plan);
-              
-              return (
-                <div key={plan.id} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-xs hover:shadow-md transition-all flex flex-col justify-between">
-                  <div className="space-y-3.5">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[10px] font-mono font-bold text-[#0B3A63] bg-blue-50 dark:bg-blue-950/30 px-2 py-0.5 rounded-sm uppercase">
-                        {req?.codigo || '5S'}
-                      </span>
-                      <div className="flex items-center gap-1.5">
-                        {isTied ? (
-                          <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 flex items-center gap-1">
-                            <CheckCircle2 className="w-2.5 h-2.5 text-emerald-600" />
-                            <span>Seu Setor</span>
-                          </span>
-                        ) : (
-                          <span className="px-1.5 py-0.5 rounded text-[9px] font-medium bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400 border border-slate-200 dark:border-slate-700 flex items-center gap-1">
-                            <Lock className="w-2.5 h-2.5 text-slate-400" />
-                            <span>Outro Setor</span>
-                          </span>
-                        )}
-                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
-                          plan.status === 'Concluído' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' :
-                          plan.status === 'Em Andamento' ? 'bg-amber-50 text-amber-600 border-amber-100' :
-                          'bg-slate-100 text-slate-500 border-slate-200'
-                        }`}>
-                          {plan.status}
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+            {filteredPlanos.length === 0 ? (
+              <div className="col-span-3 p-8 bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 text-center text-slate-400 italic rounded-xl">
+                Nenhum plano de ação encontrado para os filtros ativos.
+              </div>
+            ) : (
+              filteredPlanos.map(plan => {
+                const audit = auditorias.find(a => a.id === plan.auditoriaId);
+                const req = requisitos.find(r => r.id === plan.requisitoId);
+                const isTied = isPlanSectorTiedToUser(plan);
+                
+                return (
+                  <div key={plan.id} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-xs hover:shadow-md transition-all flex flex-col justify-between">
+                    <div className="space-y-3.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-mono font-bold text-[#0B3A63] bg-blue-50 dark:bg-blue-950/30 px-2 py-0.5 rounded-sm uppercase">
+                          {req?.codigo || '5S'}
                         </span>
+                        <div className="flex items-center gap-1.5">
+                          {isTied ? (
+                            <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 flex items-center gap-1">
+                              <CheckCircle2 className="w-2.5 h-2.5 text-emerald-600" />
+                              <span>Seu Setor</span>
+                            </span>
+                          ) : (
+                            <span className="px-1.5 py-0.5 rounded text-[9px] font-medium bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400 border border-slate-200 dark:border-slate-700 flex items-center gap-1">
+                              <Lock className="w-2.5 h-2.5 text-slate-400" />
+                              <span>Outro Setor</span>
+                            </span>
+                          )}
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                            plan.status === 'Concluído' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' :
+                            plan.status === 'Em Andamento' ? 'bg-amber-50 text-amber-600 border-amber-100' :
+                            'bg-slate-100 text-slate-500 border-slate-200'
+                          }`}>
+                            {plan.status}
+                          </span>
+                        </div>
+                      </div>
+
+                      <h4 className="text-xs font-bold text-slate-800 dark:text-slate-100 line-clamp-2">
+                        {plan.descricao}
+                      </h4>
+
+                      <div className="text-[11px] text-slate-400 space-y-1 font-sans">
+                        <p>Setor: <span className="font-semibold text-slate-600 dark:text-slate-300">{audit?.setor || 'Geral'}</span></p>
+                        <p>Responsável: {plan.responsavel ? (
+                          <span className="font-semibold text-slate-600 dark:text-slate-300">{plan.responsavel}</span>
+                        ) : (
+                          <span className="text-amber-500 font-bold italic">Não definido (Obrigatório)</span>
+                        )}</p>
+                        <p>Prazo Limite: <span className="font-semibold text-slate-600 dark:text-slate-300 font-mono">{plan.prazo}</span></p>
                       </div>
                     </div>
 
-                    <h4 className="text-xs font-bold text-slate-800 dark:text-slate-100 line-clamp-2">
-                      {plan.descricao}
-                    </h4>
-
-                    <div className="text-[11px] text-slate-400 space-y-1 font-sans">
-                      <p>Setor: <span className="font-semibold text-slate-600 dark:text-slate-300">{audit?.setor || 'Geral'}</span></p>
-                      <p>Responsável: {plan.responsavel ? (
-                        <span className="font-semibold text-slate-600 dark:text-slate-300">{plan.responsavel}</span>
-                      ) : (
-                        <span className="text-amber-500 font-bold italic">Não definido (Obrigatório)</span>
-                      )}</p>
-                      <p>Prazo Limite: <span className="font-semibold text-slate-600 dark:text-slate-300 font-mono">{plan.prazo}</span></p>
+                    <div className="mt-4 pt-3.5 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
+                      <span className="text-[9px] text-slate-400 uppercase font-mono">Ref: {audit?.codigo}</span>
+                      <button
+                        onClick={() => handleOpenPlanModal(plan)}
+                        className={`text-[11px] font-bold hover:underline cursor-pointer flex items-center space-x-1 ${
+                          isTied ? 'text-[#0B3A63] dark:text-sky-400' : 'text-slate-500 dark:text-slate-400'
+                        }`}
+                      >
+                        <span>{isTied ? 'Editar e Tratar' : 'Consultar Detalhes'}</span>
+                        <span>&rarr;</span>
+                      </button>
                     </div>
                   </div>
-
-                  <div className="mt-4 pt-3.5 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
-                    <span className="text-[9px] text-slate-400 uppercase font-mono">Ref: {audit?.codigo}</span>
-                    <button
-                      onClick={() => handleOpenPlanModal(plan)}
-                      className={`text-[11px] font-bold hover:underline cursor-pointer flex items-center space-x-1 ${
-                        isTied ? 'text-[#0B3A63] dark:text-sky-400' : 'text-slate-500 dark:text-slate-400'
-                      }`}
-                    >
-                      <span>{isTied ? 'Editar e Tratar' : 'Consultar Detalhes'}</span>
-                      <span>&rarr;</span>
-                    </button>
-                  </div>
-                </div>
-              );
-            })
-          )}
-        </div>
+                );
+              })
+            )}
+          </div>
+        )
       )}
 
       {/* --- Tab 2: LISTA DE NÃO CONFORMIDADES --- */}
