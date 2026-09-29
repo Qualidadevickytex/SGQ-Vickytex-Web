@@ -70,12 +70,31 @@ export const formatDateBR = (dateStr?: string): string => {
   }
 };
 
+export const normalizeToISO = (dateStr?: string): string => {
+  if (!dateStr) return '';
+  const clean = dateStr.includes('T') ? dateStr.split('T')[0] : dateStr.trim();
+  if (clean.includes('/')) {
+    const parts = clean.split('/');
+    if (parts.length === 3) {
+      if (parts[2].length === 4) {
+        // DD/MM/YYYY -> YYYY-MM-DD
+        return `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+      } else if (parts[0].length === 4) {
+        // YYYY/MM/DD -> YYYY-MM-DD
+        return `${parts[0]}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`;
+      }
+    }
+  }
+  return clean;
+};
+
 export const isDateOverdue = (deadlineStr?: string, status?: string): boolean => {
   if (!deadlineStr) return false;
   if (status === 'Concluído' || status === 'Cancelada') return false;
   const todayISO = getLocalDateISO();
-  const cleanDeadline = deadlineStr.includes('T') ? deadlineStr.split('T')[0] : deadlineStr;
-  return cleanDeadline < todayISO;
+  const isoDeadline = normalizeToISO(deadlineStr);
+  if (!isoDeadline) return false;
+  return isoDeadline < todayISO;
 };
 
 interface PlanosAcaoProps {
@@ -254,6 +273,15 @@ export const PlanosAcaoComponent: React.FC<PlanosAcaoProps> = ({
       }
     }
 
+    // Identificar ações ativas em atraso
+    const acoesAtrasadas = actions.filter(a => isDateOverdue(a.quando, a.status)).length;
+    const temAcoesAtrasadas = acoesAtrasadas > 0;
+
+    // O plano é considerado em atraso se seu prazo estiver vencido OU contiver ações ativas em atraso
+    const isPlanoVencido = (isDateOverdue(prazoFinal, statusConsolidado) || temAcoesAtrasadas) &&
+      statusConsolidado !== 'Concluído' &&
+      statusConsolidado !== 'Cancelada';
+
     return {
       actions,
       total,
@@ -265,7 +293,10 @@ export const PlanosAcaoComponent: React.FC<PlanosAcaoProps> = ({
       percent,
       totalCost,
       prazoFinal,
-      statusConsolidado
+      statusConsolidado,
+      acoesAtrasadas,
+      temAcoesAtrasadas,
+      isPlanoVencido
     };
   };
 
@@ -1106,7 +1137,7 @@ export const PlanosAcaoComponent: React.FC<PlanosAcaoProps> = ({
       );
     
     const matchesSector = selectedSector === 'Todos' || plano.setor === selectedSector;
-    const isPlanoOverdue = isDateOverdue(stats.prazoFinal, stats.statusConsolidado);
+    const isPlanoOverdue = stats.isPlanoVencido;
     const matchesStatus = selectedStatus === 'Todos' 
       ? true 
       : selectedStatus === 'Atrasado' 
@@ -1116,13 +1147,14 @@ export const PlanosAcaoComponent: React.FC<PlanosAcaoProps> = ({
     return matchesSearch && matchesSector && matchesStatus;
   });
 
-  // Métricas
+  // Métricas consolidadas
   const totalInvestido = filteredPlanos.reduce((acc, p) => acc + getPlanStats(p).totalCost, 0);
   const totalAcoesCount = filteredPlanos.reduce((acc, p) => acc + getPlanStats(p).total, 0);
-  const atrasados = filteredPlanos.filter(p => isDateOverdue(getPlanStats(p).prazoFinal, getPlanStats(p).statusConsolidado)).length;
-  const planejados = filteredPlanos.filter(p => getPlanStats(p).statusConsolidado === 'Planejado' && !isDateOverdue(getPlanStats(p).prazoFinal, getPlanStats(p).statusConsolidado)).length;
-  const emAndamento = filteredPlanos.filter(p => getPlanStats(p).statusConsolidado === 'Em Andamento' && !isDateOverdue(getPlanStats(p).prazoFinal, getPlanStats(p).statusConsolidado)).length;
+  const totalAcoesAtrasadas = filteredPlanos.reduce((acc, p) => acc + getPlanStats(p).acoesAtrasadas, 0);
+  const atrasados = filteredPlanos.filter(p => getPlanStats(p).isPlanoVencido).length;
   const concluidos = filteredPlanos.filter(p => getPlanStats(p).statusConsolidado === 'Concluído').length;
+  const planejados = filteredPlanos.filter(p => getPlanStats(p).statusConsolidado === 'Planejado' && !getPlanStats(p).isPlanoVencido).length;
+  const emAndamento = filteredPlanos.filter(p => getPlanStats(p).statusConsolidado === 'Em Andamento' && !getPlanStats(p).isPlanoVencido).length;
 
   // Renderizar badge de status com suporte a Atrasado
   const getStatusBadge = (status: string, isOverdue?: boolean) => {
@@ -1209,7 +1241,7 @@ export const PlanosAcaoComponent: React.FC<PlanosAcaoProps> = ({
           <p className="text-[10px] font-mono font-bold text-slate-400 uppercase tracking-wider">Total de Planos</p>
           <div className="flex items-baseline justify-between mt-1">
             <span className="text-2xl font-black text-slate-800 dark:text-white">{filteredPlanos.length}</span>
-            <span className="text-[10px] font-bold text-slate-400">cadastrados</span>
+            <span className="text-[10px] font-bold text-slate-400">{totalAcoesCount} {totalAcoesCount === 1 ? 'ação' : 'ações'}</span>
           </div>
         </div>
         <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 shadow-xs">
@@ -1226,14 +1258,24 @@ export const PlanosAcaoComponent: React.FC<PlanosAcaoProps> = ({
             <span className="text-[10px] font-bold text-amber-400">no prazo</span>
           </div>
         </div>
-        <div className={`bg-white dark:bg-slate-900 border ${atrasados > 0 ? 'border-rose-300 dark:border-rose-900/60 bg-rose-50/20' : 'border-slate-200 dark:border-slate-800'} rounded-2xl p-4 shadow-xs`}>
+        <div className={`bg-white dark:bg-slate-900 border ${(atrasados > 0 || totalAcoesAtrasadas > 0) ? 'border-rose-300 dark:border-rose-900/60 bg-rose-50/20' : 'border-slate-200 dark:border-slate-800'} rounded-2xl p-4 shadow-xs`}>
           <p className="text-[10px] font-mono font-bold text-rose-500 uppercase tracking-wider flex items-center justify-between">
             <span>Atrasados</span>
-            {atrasados > 0 && <AlertTriangle className="w-3 h-3 text-rose-500 shrink-0" />}
+            {(atrasados > 0 || totalAcoesAtrasadas > 0) && <AlertTriangle className="w-3.5 h-3.5 text-rose-500 shrink-0" />}
           </p>
           <div className="flex items-baseline justify-between mt-1">
-            <span className={`text-2xl font-black ${atrasados > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-slate-400'}`}>{atrasados}</span>
-            <span className="text-[10px] font-bold text-rose-400">atenção</span>
+            <span className={`text-2xl font-black ${(atrasados > 0 || totalAcoesAtrasadas > 0) ? 'text-rose-600 dark:text-rose-400' : 'text-slate-400'}`}>
+              {atrasados}
+            </span>
+            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+              totalAcoesAtrasadas > 0 
+                ? 'text-rose-600 bg-rose-100 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-200 dark:border-rose-800' 
+                : 'text-slate-400'
+            }`}>
+              {totalAcoesAtrasadas > 0 
+                ? `${totalAcoesAtrasadas} ${totalAcoesAtrasadas === 1 ? 'ação' : 'ações'}` 
+                : 'em dia'}
+            </span>
           </div>
         </div>
         <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 shadow-xs">
@@ -1291,7 +1333,7 @@ export const PlanosAcaoComponent: React.FC<PlanosAcaoProps> = ({
             <option value="Todos">Todos os Status</option>
             <option value="Planejado">Planejado</option>
             <option value="Em Andamento">Em Andamento</option>
-            <option value="Atrasado">⚠️ Atrasado</option>
+            <option value="Atrasado">⚠️ Atrasado {atrasados > 0 ? `(${atrasados})` : ''}</option>
             <option value="Concluído">Concluído</option>
             <option value="Cancelada">Cancelado</option>
           </select>
@@ -1399,7 +1441,7 @@ export const PlanosAcaoComponent: React.FC<PlanosAcaoProps> = ({
                   const relDoc = documents.find(d => d.id === plano.documentoId);
                   const relAudit = audits.find(a => a.id === plano.auditoriaId);
                   const relNC = ncs.find(n => n.id === plano.naoConformidadeId);
-                  const isOverdue = isDateOverdue(stats.prazoFinal, stats.statusConsolidado);
+                  const isOverdue = stats.isPlanoVencido;
 
                   return (
                     <React.Fragment key={plano.id}>
@@ -1513,7 +1555,9 @@ export const PlanosAcaoComponent: React.FC<PlanosAcaoProps> = ({
                           </div>
                           {isOverdue && (
                             <span className="inline-block text-[9px] font-extrabold text-rose-500 uppercase tracking-tight mt-0.5">
-                              Atrasado
+                              {stats.acoesAtrasadas > 0 
+                                ? `Atrasado (${stats.acoesAtrasadas} ${stats.acoesAtrasadas === 1 ? 'ação' : 'ações'})` 
+                                : 'Atrasado'}
                             </span>
                           )}
                         </td>
@@ -1865,7 +1909,7 @@ export const PlanosAcaoComponent: React.FC<PlanosAcaoProps> = ({
             const relDoc = documents.find(d => d.id === plano.documentoId);
             const relAudit = audits.find(a => a.id === plano.auditoriaId);
             const relNC = ncs.find(n => n.id === plano.naoConformidadeId);
-            const isOverdue = isDateOverdue(stats.prazoFinal, stats.statusConsolidado);
+            const isOverdue = stats.isPlanoVencido;
 
             return (
               <div 
@@ -1903,7 +1947,9 @@ export const PlanosAcaoComponent: React.FC<PlanosAcaoProps> = ({
                       </div>
                       {isOverdue && (
                         <span className="text-[9px] font-extrabold text-rose-500 uppercase tracking-tight ml-1 bg-rose-50 dark:bg-rose-950/40 px-1.5 py-0.5 rounded border border-rose-200 dark:border-rose-900">
-                          Atrasado
+                          {stats.acoesAtrasadas > 0 
+                            ? `Atrasado (${stats.acoesAtrasadas} ${stats.acoesAtrasadas === 1 ? 'ação' : 'ações'})` 
+                            : 'Atrasado'}
                         </span>
                       )}
                     </div>
