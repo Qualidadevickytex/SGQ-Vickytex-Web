@@ -303,354 +303,489 @@ export const PlanosAcaoComponent: React.FC<PlanosAcaoProps> = ({
   const handlePrintPlano = () => {
     if (!selectedPrintPlano) return;
     
-    // Remover qualquer container de impressão anterior para evitar duplicidade
-    const existing = document.querySelector('.print-container');
-    if (existing) {
-      existing.remove();
+    // Remover iframe anterior se existir
+    const existingIframe = document.getElementById('print-5w2h-iframe');
+    if (existingIframe) {
+      existingIframe.remove();
     }
     
-    const printContainer = document.createElement('div');
-    printContainer.className = 'print-container';
+    const iframe = document.createElement('iframe');
+    iframe.id = 'print-5w2h-iframe';
+    iframe.style.position = 'fixed';
+    iframe.style.right = '0';
+    iframe.style.bottom = '0';
+    iframe.style.width = '0';
+    iframe.style.height = '0';
+    iframe.style.border = '0';
+    iframe.setAttribute('aria-hidden', 'true');
+    document.body.appendChild(iframe);
+    
+    const iframeDoc = iframe.contentWindow?.document;
+    if (!iframeDoc) return;
     
     const stats = getPlanStats(selectedPrintPlano);
     const actions = stats.actions;
     const relDoc = documents.find(d => d.id === selectedPrintPlano.documentoId);
     const relAudit = audits.find(a => a.id === selectedPrintPlano.auditoriaId);
     const relNC = ncs.find(n => n.id === selectedPrintPlano.naoConformidadeId);
+    
+    const coordName = selectedPrintPlano.coordenador || selectedPrintPlano.quem || 'Coordenador do Plano';
+    const isCoordAlsoSGQ = user?.name && (user.name.toLowerCase().trim() === coordName.toLowerCase().trim());
+    const sgqApproverName = isCoordAlsoSGQ ? 'Gestão da Qualidade Vickytex' : (user?.name ? `${user.name} (SGQ)` : 'Gestão da Qualidade Vickytex');
 
-    const actionsHtml = actions.map((act, idx) => `
-      <tr>
-        <td style="padding: 8px; border: 1px solid #cbd5e1; text-align: center; font-family: monospace; font-weight: bold; background: #f8fafc;">${act.itemNumero || idx + 1}</td>
-        <td style="padding: 8px; border: 1px solid #cbd5e1; font-weight: 600;">
-          ${act.oQue}
-          ${act.porQue ? `<div style="font-size: 10px; color: #64748b; font-weight: normal; margin-top: 2px;"><strong>Por quê:</strong> ${act.porQue}</div>` : ''}
-          ${act.como ? `<div style="font-size: 10px; color: #64748b; font-weight: normal; margin-top: 2px;"><strong>Como:</strong> ${act.como}</div>` : ''}
+    const actionsHtml = actions.length > 0 ? actions.map((act, idx) => `
+      <tr style="page-break-inside: avoid;">
+        <td style="padding: 6px 8px; border: 1px solid #cbd5e1; text-align: center; font-family: 'JetBrains Mono', monospace; font-weight: bold; background: #f8fafc; font-size: 11px;">${act.itemNumero || idx + 1}</td>
+        <td style="padding: 6px 8px; border: 1px solid #cbd5e1;">
+          <div style="font-weight: 700; color: #0f172a; font-size: 11.5px;">${act.oQue}</div>
+          ${act.porQue ? `<div style="font-size: 10px; color: #475569; margin-top: 2px;"><strong>Por quê:</strong> ${act.porQue}</div>` : ''}
+          ${act.como ? `<div style="font-size: 10px; color: #475569; margin-top: 2px;"><strong>Como:</strong> ${act.como}</div>` : ''}
         </td>
-        <td style="padding: 8px; border: 1px solid #cbd5e1; font-size: 11px;">${act.onde || '-'}</td>
-        <td style="padding: 8px; border: 1px solid #cbd5e1; font-weight: 600; font-size: 11px;">${act.quem}</td>
-        <td style="padding: 8px; border: 1px solid #cbd5e1; text-align: center; font-size: 11px; white-space: nowrap;">
+        <td style="padding: 6px 8px; border: 1px solid #cbd5e1; font-size: 11px; color: #334155;">${act.onde || '—'}</td>
+        <td style="padding: 6px 8px; border: 1px solid #cbd5e1; font-weight: 600; font-size: 11px; color: #0f172a;">${act.quem}</td>
+        <td style="padding: 6px 8px; border: 1px solid #cbd5e1; text-align: center; font-size: 11px; font-family: 'JetBrains Mono', monospace; white-space: nowrap;">
           ${formatDateBR(act.quando)}
-          ${act.historicoPrazos && act.historicoPrazos.length > 0 ? `<div style="font-size: 9px; color: #b45309; font-weight: bold; margin-top: 2px;">(Prorrogado ${act.historicoPrazos.length}x)</div>` : ''}
+          ${act.historicoPrazos && act.historicoPrazos.length > 0 ? `<div style="font-size: 8.5px; color: #b45309; font-weight: bold; margin-top: 2px; font-family: sans-serif;">(Prorrogado ${act.historicoPrazos.length}x)</div>` : ''}
         </td>
-        <td style="padding: 8px; border: 1px solid #cbd5e1; text-align: right; font-family: monospace; font-size: 11px;">R$ ${(Number(act.quantoCusta) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-        <td style="padding: 8px; border: 1px solid #cbd5e1; text-align: center; font-size: 10px; font-weight: bold;">
-          <span style="display: inline-block; padding: 2px 6px; border-radius: 4px; ${
-            act.status === 'Concluído' ? 'background: #dcfce7; color: #15803d;' :
-            act.status === 'Em Andamento' ? 'background: #fef3c7; color: #b45309;' :
-            act.status === 'Cancelada' ? 'background: #ffe4e6; color: #be123c;' :
-            'background: #eff6ff; color: #1d4ed8;'
+        <td style="padding: 6px 8px; border: 1px solid #cbd5e1; text-align: right; font-family: 'JetBrains Mono', monospace; font-weight: bold; font-size: 11px; color: #0f172a; white-space: nowrap;">
+          R$ ${(Number(act.quantoCusta) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+        </td>
+        <td style="padding: 6px 8px; border: 1px solid #cbd5e1; text-align: center; font-size: 10px; font-weight: bold;">
+          <span style="display: inline-block; padding: 2px 7px; border-radius: 4px; ${
+            act.status === 'Concluído' ? 'background: #dcfce7; color: #166534; border: 1px solid #bbf7d0;' :
+            act.status === 'Em Andamento' ? 'background: #fef3c7; color: #92400e; border: 1px solid #fde68a;' :
+            act.status === 'Cancelada' ? 'background: #f1f5f9; color: #475569; border: 1px solid #e2e8f0;' :
+            'background: #eff6ff; color: #1e40af; border: 1px solid #bfdbfe;'
           }">
             ${act.status}
           </span>
         </td>
       </tr>
-    `).join('');
+    `).join('') : `
+      <tr>
+        <td colspan="7" style="padding: 16px; text-align: center; color: #64748b; font-style: italic; border: 1px solid #cbd5e1;">Nenhuma ação executiva cadastrada para este plano.</td>
+      </tr>
+    `;
 
     const content = `
-      <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap');
-        .print-wrapper {
-          font-family: 'Inter', sans-serif;
-          padding: 40px;
-          background-color: #fff;
-          color: #0f172a;
-          -webkit-print-color-adjust: exact;
-          print-color-adjust: exact;
-        }
-        .header-container {
-          border: 2px solid #0f172a;
-          padding: 16px;
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          margin-bottom: 24px;
-        }
-        .logo-title {
-          display: flex;
-          align-items: center;
-          gap: 12px;
-        }
-        .logo {
-          width: 40px;
-          height: 40px;
-          background-color: #0b3a63;
-          color: #ffffff;
-          font-weight: 900;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          font-size: 16px;
-          border-radius: 4px;
-        }
-        .company-name {
-          font-size: 14px;
-          font-weight: 800;
-          margin: 0;
-        }
-        .company-sub {
-          font-size: 10px;
-          color: #64748b;
-          margin: 0;
-          text-transform: uppercase;
-          font-family: 'JetBrains Mono', monospace;
-        }
-        .header-ref {
-          text-align: right;
-        }
-        .ref-code {
-          font-size: 12px;
-          font-weight: 900;
-          background-color: #0f172a;
-          color: #ffffff;
-          padding: 4px 8px;
-          display: inline-block;
-          margin: 0;
-        }
-        .ref-sub {
-          font-size: 9px;
-          color: #64748b;
-          margin: 4px 0 0 0;
-          font-weight: bold;
-        }
-        .grid-container {
-          display: grid;
-          grid-template-cols: repeat(4, 1fr);
-          border: 1px solid #94a3b8;
-          margin-bottom: 24px;
-          font-size: 12px;
-        }
-        .grid-cell {
-          padding: 8px 12px;
-          border-bottom: 1px solid #cbd5e1;
-          border-right: 1px solid #cbd5e1;
-        }
-        .grid-cell:nth-child(4n) {
-          border-right: none;
-        }
-        .grid-cell:nth-last-child(-n+4) {
-          border-bottom: none;
-        }
-        .grid-label {
-          font-weight: bold;
-          background-color: #f8fafc;
-          color: #334155;
-        }
-        .grid-val {
-          color: #0f172a;
-        }
-        .grid-val-bold {
-          font-weight: 800;
-          color: #0f172a;
-        }
-        .grid-val-mono {
-          font-family: 'JetBrains Mono', monospace;
-          font-weight: 800;
-        }
-        .table-5w2h {
-          width: 100%;
-          border-collapse: collapse;
-          border: 1px solid #94a3b8;
-          margin-bottom: 32px;
-          font-size: 12px;
-        }
-        .table-5w2h th {
-          background-color: #0f172a;
-          color: #ffffff;
-          padding: 10px 12px;
-          font-weight: bold;
-          text-align: left;
-          text-transform: uppercase;
-          font-size: 10px;
-          letter-spacing: 0.05em;
-          border: 1px solid #94a3b8;
-        }
-        .table-5w2h td {
-          padding: 12px;
-          border: 1px solid #cbd5e1;
-          vertical-align: top;
-        }
-        .question-col {
-          width: 30%;
-          background-color: #f8fafc;
-          font-weight: bold;
-          color: #1e293b;
-        }
-        .question-sub {
-          font-size: 9px;
-          color: #64748b;
-          font-weight: normal;
-          margin-top: 2px;
-          display: block;
-        }
-        .value-col {
-          width: 70%;
-          color: #0f172a;
-        }
-        .val-bold {
-          font-weight: 700;
-        }
-        .val-heavy {
-          font-weight: 800;
-        }
-        .sign-container {
-          display: grid;
-          grid-template-cols: 1fr 1fr;
-          gap: 40px;
-          margin-top: 48px;
-          font-size: 12px;
-        }
-        .sign-box {
-          text-align: center;
-        }
-        .sign-line {
-          border-top: 1px solid #64748b;
-          width: 80%;
-          margin: 0 auto 12px auto;
-        }
-        .sign-name {
-          font-weight: bold;
-          color: #0f172a;
-          margin: 0;
-        }
-        .sign-role {
-          font-size: 10px;
-          color: #64748b;
-          margin: 2px 0 0 0;
-        }
-        .footer-info {
-          background-color: #f8fafc;
-          border: 1px solid #e2e8f0;
-          border-radius: 8px;
-          padding: 12px;
-          font-size: 10px;
-          color: #64748b;
-          text-align: center;
-          line-height: 1.5;
-          margin-top: 40px;
-        }
-      </style>
-      <div class="print-wrapper">
-        <div class="header-container">
-          <div class="logo-title">
-            <div class="logo">VI</div>
-            <div>
-              <h1 class="company-name">VICKYTEX</h1>
-              <p class="company-sub">SISTEMA DE GESTÃO DA QUALIDADE (SGQ)</p>
+      <!DOCTYPE html>
+      <html lang="pt-BR">
+        <head>
+          <meta charset="utf-8">
+          <title>Plano de Ação 5W2H - ${selectedPrintPlano.codigo}</title>
+          <style>
+            @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@500;700;800&display=swap');
+            
+            * {
+              box-sizing: border-box;
+              margin: 0;
+              padding: 0;
+              -webkit-print-color-adjust: exact !important;
+              print-color-adjust: exact !important;
+            }
+
+            @page {
+              size: A4 landscape;
+              margin: 8mm 10mm 8mm 10mm;
+            }
+
+            body {
+              font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+              color: #0f172a;
+              background-color: #ffffff;
+              padding: 0;
+              margin: 0;
+              font-size: 11px;
+              line-height: 1.35;
+            }
+
+            .sheet {
+              width: 100%;
+              max-width: 100%;
+            }
+
+            .header-table {
+              width: 100%;
+              border-collapse: collapse;
+              border: 2px solid #0f172a;
+              margin-bottom: 8px;
+            }
+
+            .header-table td {
+              padding: 8px 12px;
+              vertical-align: middle;
+            }
+
+            .logo-box {
+              display: flex;
+              align-items: center;
+              gap: 10px;
+            }
+
+            .logo-badge {
+              width: 36px;
+              height: 36px;
+              background-color: #0b3a63;
+              color: #ffffff;
+              font-weight: 900;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              font-size: 16px;
+              border-radius: 4px;
+              letter-spacing: -0.5px;
+            }
+
+            .company-name {
+              font-size: 13px;
+              font-weight: 900;
+              color: #0f172a;
+              letter-spacing: -0.2px;
+            }
+
+            .company-sub {
+              font-size: 8.5px;
+              color: #475569;
+              font-weight: 700;
+              text-transform: uppercase;
+              letter-spacing: 0.4px;
+            }
+
+            .title-box {
+              text-align: center;
+            }
+
+            .doc-title {
+              font-size: 13px;
+              font-weight: 900;
+              color: #0f172a;
+              letter-spacing: 0.5px;
+              text-transform: uppercase;
+            }
+
+            .doc-sub {
+              font-size: 9px;
+              color: #64748b;
+              font-weight: 600;
+              margin-top: 1px;
+            }
+
+            .meta-box {
+              text-align: right;
+              font-size: 9.5px;
+            }
+
+            .meta-code {
+              font-family: 'JetBrains Mono', monospace;
+              font-size: 11px;
+              font-weight: 800;
+              background-color: #0f172a;
+              color: #ffffff;
+              padding: 2px 7px;
+              border-radius: 3px;
+              display: inline-block;
+            }
+
+            .meta-norm {
+              font-size: 8.5px;
+              color: #475569;
+              font-weight: 700;
+              margin-top: 3px;
+            }
+
+            .grid-capa {
+              width: 100%;
+              border-collapse: collapse;
+              border: 1px solid #94a3b8;
+              margin-bottom: 8px;
+              font-size: 10px;
+            }
+
+            .grid-capa td {
+              border: 1px solid #cbd5e1;
+              padding: 5px 8px;
+            }
+
+            .lbl {
+              background-color: #f8fafc;
+              font-weight: 700;
+              color: #334155;
+              width: 15%;
+            }
+
+            .val {
+              color: #0f172a;
+              width: 35%;
+            }
+
+            .val-bold {
+              font-weight: 700;
+              color: #0f172a;
+            }
+
+            .val-mono {
+              font-family: 'JetBrains Mono', monospace;
+              font-weight: 700;
+            }
+
+            .section-title {
+              font-size: 10px;
+              font-weight: 800;
+              color: #0f172a;
+              text-transform: uppercase;
+              letter-spacing: 0.3px;
+              margin: 8px 0 5px 0;
+              display: flex;
+              align-items: center;
+              justify-content: space-between;
+            }
+
+            .table-5w2h {
+              width: 100%;
+              border-collapse: collapse;
+              border: 1px solid #0f172a;
+              margin-bottom: 10px;
+            }
+
+            .table-5w2h th {
+              background-color: #0f172a;
+              color: #ffffff;
+              padding: 5px 7px;
+              font-size: 8.5px;
+              font-weight: 800;
+              text-transform: uppercase;
+              letter-spacing: 0.4px;
+              border: 1px solid #334155;
+            }
+
+            .table-5w2h tfoot td {
+              background-color: #f8fafc;
+              font-weight: 700;
+              border: 1px solid #cbd5e1;
+              padding: 5px 7px;
+              font-size: 9.5px;
+            }
+
+            .signatures-box {
+              width: 100%;
+              margin-top: 10px;
+              page-break-inside: avoid;
+            }
+
+            .sign-table {
+              width: 100%;
+              border-collapse: collapse;
+            }
+
+            .sign-table td {
+              width: 50%;
+              padding: 0 30px;
+              text-align: center;
+              vertical-align: bottom;
+            }
+
+            .sign-line {
+              border-top: 1px solid #475569;
+              width: 80%;
+              margin: 0 auto 5px auto;
+            }
+
+            .sign-title {
+              font-size: 10.5px;
+              font-weight: 800;
+              color: #0f172a;
+            }
+
+            .sign-subtitle {
+              font-size: 9px;
+              color: #64748b;
+              margin-top: 1px;
+            }
+
+            .footer-note {
+              margin-top: 10px;
+              padding: 5px 8px;
+              background-color: #f8fafc;
+              border: 1px solid #e2e8f0;
+              border-radius: 4px;
+              font-size: 8px;
+              color: #64748b;
+              text-align: center;
+              line-height: 1.3;
+              page-break-inside: avoid;
+            }
+          </style>
+        </head>
+        <body>
+          <div class="sheet">
+            <!-- Header Table -->
+            <table class="header-table">
+              <tr>
+                <td style="width: 33%;">
+                  <div class="logo-box">
+                    <div class="logo-badge">VI</div>
+                    <div>
+                      <div class="company-name">VICKYTEX INDÚSTRIA TÊXTIL</div>
+                      <div class="company-sub">SISTEMA DE GESTÃO DA QUALIDADE</div>
+                    </div>
+                  </div>
+                </td>
+                <td style="width: 43%;">
+                  <div class="title-box">
+                    <div class="doc-title">PLANO DE AÇÃO 5W2H</div>
+                    <div class="doc-sub">Tratativa de Não Conformidades, Riscos & Oportunidades</div>
+                  </div>
+                </td>
+                <td style="width: 24%;">
+                  <div class="meta-box">
+                    <div class="meta-code">${selectedPrintPlano.codigo}</div>
+                    <div class="meta-norm">ISO 9001:2015 — Cláusula 10.2</div>
+                    <div style="font-size: 8.5px; color: #64748b; margin-top: 2px;">Emissão: ${formatDateBR(selectedPrintPlano.dataCriacao)}</div>
+                  </div>
+                </td>
+              </tr>
+            </table>
+
+            <!-- Capa Grid Table -->
+            <table class="grid-capa">
+              <tr>
+                <td class="lbl">Código Mestre:</td>
+                <td class="val val-mono" style="color: #0b3a63;">${selectedPrintPlano.codigo}</td>
+                <td class="lbl">Data de Registro:</td>
+                <td class="val val-mono">${formatDateBR(selectedPrintPlano.dataCriacao)}</td>
+              </tr>
+              <tr>
+                <td class="lbl">Título da Capa:</td>
+                <td class="val val-bold" colspan="3">${selectedPrintPlano.titulo}</td>
+              </tr>
+              <tr>
+                <td class="lbl">Setor Responsável:</td>
+                <td class="val val-bold">${selectedPrintPlano.setor}</td>
+                <td class="lbl">Coordenador Geral:</td>
+                <td class="val val-bold">${coordName}</td>
+              </tr>
+              <tr>
+                <td class="lbl">Prazo Limite:</td>
+                <td class="val val-mono">${stats.prazoFinal ? formatDateBR(stats.prazoFinal) : '-'}</td>
+                <td class="lbl">Investimento Total:</td>
+                <td class="val val-mono" style="color: #15803d;">R$ ${stats.totalCost.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+              </tr>
+              <tr>
+                <td class="lbl">Status Consolidado:</td>
+                <td class="val" colspan="3">
+                  <span style="font-weight: 800; font-size: 9.5px; padding: 2px 7px; border-radius: 4px; ${
+                    stats.statusConsolidado === 'Concluído' ? 'background: #dcfce7; color: #166534; border: 1px solid #bbf7d0;' :
+                    stats.statusConsolidado === 'Em Andamento' ? 'background: #fef3c7; color: #92400e; border: 1px solid #fde68a;' :
+                    stats.statusConsolidado === 'Cancelada' ? 'background: #f1f5f9; color: #475569; border: 1px solid #e2e8f0;' :
+                    'background: #eff6ff; color: #1e40af; border: 1px solid #bfdbfe;'
+                  }">
+                    ${stats.statusConsolidado}
+                  </span>
+                </td>
+              </tr>
+              ${selectedPrintPlano.objetivo ? `
+                <tr>
+                  <td class="lbl">Objetivo & Eficácia:</td>
+                  <td class="val" colspan="3" style="font-style: italic; color: #1e293b; background-color: #f8fafc; font-size: 9.5px; line-height: 1.35;">
+                    ${selectedPrintPlano.objetivo}
+                  </td>
+                </tr>
+              ` : ''}
+              ${(relDoc || relAudit || relNC) ? `
+                <tr>
+                  <td class="lbl">Rastreabilidade:</td>
+                  <td class="val" colspan="3" style="font-size: 9px;">
+                    ${relDoc ? `<span style="margin-right: 12px;"><strong>📄 Documento:</strong> ${relDoc.codigo} - ${relDoc.titulo}</span>` : ''}
+                    ${relAudit ? `<span style="margin-right: 12px;"><strong>🔍 Auditoria:</strong> ${relAudit.codigo} - ${relAudit.titulo}</span>` : ''}
+                    ${relNC ? `<span><strong>⚠️ RNC:</strong> ${relNC.codigo} - ${relNC.titulo}</span>` : ''}
+                  </td>
+                </tr>
+              ` : ''}
+            </table>
+
+            <!-- Section Title -->
+            <div class="section-title">
+              <span>Ações Executivas 5W2H (${actions.length} ${actions.length === 1 ? 'Ação Vinculada' : 'Ações Vinculadas'})</span>
+              <span style="font-size: 8.5px; font-weight: 600; color: #64748b; text-transform: none;">Metodologia 5W2H — SGQ Vickytex</span>
+            </div>
+
+            <!-- Table 5W2H -->
+            <table class="table-5w2h">
+              <thead>
+                <tr>
+                  <th style="width: 28px; text-align: center;">#</th>
+                  <th>O QUÊ / POR QUÊ / COMO (What / Why / How)</th>
+                  <th style="width: 100px;">ONDE (Where)</th>
+                  <th style="width: 110px;">QUEM (Who)</th>
+                  <th style="width: 85px; text-align: center;">QUANDO (Prazo)</th>
+                  <th style="width: 90px; text-align: right;">CUSTO (R$)</th>
+                  <th style="width: 85px; text-align: center;">STATUS</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${actionsHtml}
+              </tbody>
+              <tfoot>
+                <tr>
+                  <td colspan="4" style="text-align: right; padding-right: 10px; font-weight: 800;">Totais Consolidados:</td>
+                  <td style="text-align: center; font-family: 'JetBrains Mono', monospace; font-weight: bold;">${stats.total} ${stats.total === 1 ? 'ação' : 'ações'}</td>
+                  <td style="text-align: right; font-family: 'JetBrains Mono', monospace; color: #15803d; font-weight: 800;">
+                    R$ ${stats.totalCost.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </td>
+                  <td style="text-align: center; color: #166534; font-weight: 800;">
+                    ${stats.concluidas}/${stats.acoesAtivas > 0 ? stats.acoesAtivas : stats.total} (${stats.percent}%)
+                  </td>
+                </tr>
+              </tfoot>
+            </table>
+
+            <!-- Signatures -->
+            <div class="signatures-box">
+              <table class="sign-table">
+                <tr>
+                  <td>
+                    <div class="sign-line"></div>
+                    <div class="sign-title">${coordName}</div>
+                    <div class="sign-subtitle">Coordenador / Responsável pela Execução</div>
+                  </td>
+                  <td>
+                    <div class="sign-line"></div>
+                    <div class="sign-title">${sgqApproverName}</div>
+                    <div class="sign-subtitle">Gestão da Qualidade Vickytex (ISO 9001:2015)</div>
+                  </td>
+                </tr>
+              </table>
+            </div>
+
+            <!-- Footer note -->
+            <div class="footer-note">
+              Este documento é uma informação documentada oficial do SGQ Vickytex Indústria Têxtil Ltda., em conformidade com as cláusulas 6.1 e 10.2 da norma ABNT NBR ISO 9001:2015. 
+              Impresso em: ${new Date().toLocaleDateString('pt-BR')} às ${new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}.
             </div>
           </div>
-          <div class="header-ref">
-            <h2 class="ref-code">FORMULÁRIO 5W2H</h2>
-            <p class="ref-sub">Conformidade ISO 9001:2015</p>
-          </div>
-        </div>
-        
-        <div class="grid-container">
-          <div class="grid-cell grid-label">Código Mestre:</div>
-          <div class="grid-cell grid-val-mono">${selectedPrintPlano.codigo}</div>
-          <div class="grid-cell grid-label">Data de Registro:</div>
-          <div class="grid-cell grid-val">${formatDateBR(selectedPrintPlano.dataCriacao)}</div>
-          
-          <div class="grid-cell grid-label">Título da Capa:</div>
-          <div class="grid-cell grid-val-bold" style="grid-column: span 3;">${selectedPrintPlano.titulo}</div>
-
-          <div class="grid-cell grid-label">Setor Responsável:</div>
-          <div class="grid-cell grid-val-bold">${selectedPrintPlano.setor}</div>
-          <div class="grid-cell grid-label">Coordenador do Plano:</div>
-          <div class="grid-cell grid-val-bold">${selectedPrintPlano.coordenador || selectedPrintPlano.quem || 'Líder SGQ'}</div>
-
-          <div class="grid-cell grid-label">Prazo Limite:</div>
-          <div class="grid-cell grid-val">${stats.prazoFinal ? formatDateBR(stats.prazoFinal) : '-'}</div>
-          <div class="grid-cell grid-label">Custo Consolidado:</div>
-          <div class="grid-cell grid-val-mono" style="color: #16a34a;">R$ ${stats.totalCost.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
-
-          ${selectedPrintPlano.objetivo ? `
-            <div style="grid-column: span 4; padding: 10px 12px; background-color: #f1f5f9; border-bottom: 1px solid #cbd5e1; font-size: 11px;">
-              <strong>Objetivo & Avaliação de Eficácia da Tratativa:</strong><br/>
-              <span style="color: #1e293b;">${selectedPrintPlano.objetivo}</span>
-            </div>
-          ` : ''}
-
-          ${(relDoc || relAudit || relNC) ? `
-            <div style="grid-column: span 4; padding: 8px 12px; background-color: #ffffff; font-size: 10px;">
-              <strong>Rastreabilidade SGQ:</strong>
-              ${relDoc ? `<span style="display:inline-block; margin-right: 12px;">📄 Doc: ${relDoc.codigo} (${relDoc.titulo})</span>` : ''}
-              ${relAudit ? `<span style="display:inline-block; margin-right: 12px;">🔍 Auditoria: ${relAudit.codigo} (${relAudit.titulo})</span>` : ''}
-              ${relNC ? `<span style="display:inline-block;">⚠️ RNC: ${relNC.codigo} (${relNC.titulo})</span>` : ''}
-            </div>
-          ` : ''}
-        </div>
-        
-        <h3 style="font-size: 11px; font-weight: 800; color: #0f172a; margin: 20px 0 8px 0; text-transform: uppercase; letter-spacing: 0.05em;">
-          Ações Executivas 5W2H (${actions.length} ${actions.length === 1 ? 'Ação Vinculada' : 'Ações Vinculadas'})
-        </h3>
-
-        <table style="width: 100%; border-collapse: collapse; border: 1px solid #0f172a; margin-bottom: 24px; font-size: 11px;">
-          <thead>
-            <tr>
-              <th style="width: 35px; text-align: center; background-color: #0f172a; color: #ffffff; padding: 8px 10px; font-size: 9px; text-transform: uppercase; border: 1px solid #334155;">#</th>
-              <th style="background-color: #0f172a; color: #ffffff; padding: 8px 10px; font-size: 9px; text-transform: uppercase; border: 1px solid #334155;">O quê / Por quê / Como</th>
-              <th style="width: 100px; background-color: #0f172a; color: #ffffff; padding: 8px 10px; font-size: 9px; text-transform: uppercase; border: 1px solid #334155;">Onde</th>
-              <th style="width: 120px; background-color: #0f172a; color: #ffffff; padding: 8px 10px; font-size: 9px; text-transform: uppercase; border: 1px solid #334155;">Quem</th>
-              <th style="width: 80px; text-align: center; background-color: #0f172a; color: #ffffff; padding: 8px 10px; font-size: 9px; text-transform: uppercase; border: 1px solid #334155;">Quando</th>
-              <th style="width: 90px; text-align: right; background-color: #0f172a; color: #ffffff; padding: 8px 10px; font-size: 9px; text-transform: uppercase; border: 1px solid #334155;">Custo (R$)</th>
-              <th style="width: 90px; text-align: center; background-color: #0f172a; color: #ffffff; padding: 8px 10px; font-size: 9px; text-transform: uppercase; border: 1px solid #334155;">Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${actionsHtml}
-          </tbody>
-          <tfoot>
-            <tr style="background-color: #f8fafc; font-weight: bold; border-top: 2px solid #0f172a;">
-              <td colspan="4" style="padding: 8px; text-align: right; border: 1px solid #cbd5e1;">Totais Consolidados:</td>
-              <td style="padding: 8px; text-align: center; border: 1px solid #cbd5e1;">${stats.total} ações</td>
-              <td style="padding: 8px; text-align: right; font-family: monospace; border: 1px solid #cbd5e1;">R$ ${stats.totalCost.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-              <td style="padding: 8px; text-align: center; color: #16a34a; border: 1px solid #cbd5e1;">${stats.concluidas}/${stats.acoesAtivas > 0 ? stats.acoesAtivas : stats.total} concluídas (${stats.percent}%)${stats.planejadas > 0 ? ` <span style="color: #2563eb; font-size: 10px;">[${stats.planejadas} plan.]</span>` : ''}${stats.canceladas > 0 ? ` <span style="color: #64748b; font-size: 10px;">[${stats.canceladas} canc.]</span>` : ''}</td>
-            </tr>
-          </tfoot>
-        </table>
-        
-        <div class="sign-container">
-          <div class="sign-box">
-            <div class="sign-line"></div>
-            <p class="sign-name">${selectedPrintPlano.quem}</p>
-            <p class="sign-role">Responsável pela Ação</p>
-          </div>
-          <div class="sign-box">
-            <div class="sign-line"></div>
-            <p class="sign-name">${user?.name ? `${user.name} (Qualidade)` : 'Gestão da Qualidade Vickytex'}</p>
-            <p class="sign-role">Gestão da Qualidade Vickytex</p>
-          </div>
-        </div>
-        
-        <div class="footer-info">
-          Este documento é uma evidência oficial do SGQ Vickytex. Conforme as diretrizes do requisito de planejamento de mudanças e ações para abordar riscos e oportunidades da norma ISO 9001:2015.
-        </div>
-      </div>
+        </body>
+      </html>
     `;
+
+    iframeDoc.open();
+    iframeDoc.write(content);
+    iframeDoc.close();
     
-    printContainer.innerHTML = content;
-    document.body.appendChild(printContainer);
-    
-    // Evento afterprint para garantir remoção segura do container apenas depois que a impressão é iniciada/fechada
-    const handleAfterPrint = () => {
-      if (document.body.contains(printContainer)) {
-        document.body.removeChild(printContainer);
-      }
-      window.removeEventListener('afterprint', handleAfterPrint);
-    };
-    window.addEventListener('afterprint', handleAfterPrint);
-    
-    // Fallback de segurança caso afterprint não dispare
-    setTimeout(handleAfterPrint, 15000);
-    
+    // Aguardar renderização das fontes e disparar impressão isolada do iframe
     setTimeout(() => {
       try {
-        window.print();
+        iframe.contentWindow?.focus();
+        iframe.contentWindow?.print();
       } catch (err) {
-        console.error('Error triggering print:', err);
-        handleAfterPrint();
+        console.error('Erro ao acionar impressão:', err);
+      } finally {
+        setTimeout(() => {
+          if (document.body.contains(iframe)) {
+            document.body.removeChild(iframe);
+          }
+        }, 3000);
       }
-    }, 300);
+    }, 250);
   };
 
   // Formulário da Capa
@@ -2978,28 +3113,46 @@ export const PlanosAcaoComponent: React.FC<PlanosAcaoProps> = ({
         const printStats = getPlanStats(selectedPrintPlano);
         const printActions = printStats.actions;
         return (
-          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4">
-            <div className="bg-white dark:bg-slate-900 rounded-2xl w-full max-w-4xl max-h-[92vh] overflow-y-auto shadow-2xl border border-slate-100 dark:border-slate-800 animate-scale-in">
+          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 print:hidden">
+            <div className="bg-white dark:bg-slate-900 rounded-2xl w-full max-w-5xl max-h-[92vh] overflow-y-auto shadow-2xl border border-slate-100 dark:border-slate-800 animate-scale-in flex flex-col">
               {/* Header */}
-              <div className="px-6 py-4 bg-[#0B3A63] text-white flex items-center justify-between sticky top-0 z-20">
-                <div className="flex items-center gap-2">
-                  <Printer className="w-5 h-5 text-blue-300" />
+              <div className="px-6 py-3.5 bg-[#0B3A63] text-white flex items-center justify-between sticky top-0 z-20 shrink-0">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-2 bg-blue-500/20 rounded-lg">
+                    <Printer className="w-5 h-5 text-blue-200" />
+                  </div>
                   <div>
-                    <h3 className="text-sm font-extrabold">
-                      Folha de Plano de Ação 5W2H: {selectedPrintPlano.codigo}
-                    </h3>
-                    <p className="text-[10px] text-blue-200">
-                      Visualização prévia formatada para impressão A4 institucional SGQ
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-sm font-extrabold tracking-tight">
+                        Folha de Plano de Ação 5W2H: {selectedPrintPlano.codigo}
+                      </h3>
+                      <span className="text-[9px] font-bold uppercase tracking-wider bg-blue-500/30 text-blue-200 px-2 py-0.5 rounded">
+                        A4 Paisagem
+                      </span>
+                    </div>
+                    <p className="text-[10.5px] text-blue-200">
+                      Visualização prévia oficial formatada para impressão A4 institucional SGQ (ISO 9001:2015)
                     </p>
                   </div>
                 </div>
-                <button 
-                  type="button"
-                  onClick={() => setIsPrintModalOpen(false)} 
-                  className="text-white/60 hover:text-white font-mono text-2xl leading-none cursor-pointer"
-                >
-                  &times;
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handlePrintPlano}
+                    className="px-4 py-1.5 bg-blue-500 hover:bg-blue-400 text-white text-xs font-bold rounded-lg shadow-xs cursor-pointer flex items-center gap-1.5 transition-colors"
+                  >
+                    <Printer className="w-3.5 h-3.5" />
+                    <span>Imprimir A4 Paisagem</span>
+                  </button>
+                  <button 
+                    type="button"
+                    onClick={() => setIsPrintModalOpen(false)} 
+                    className="text-white/70 hover:text-white font-mono text-2xl leading-none cursor-pointer pl-1"
+                    title="Fechar visualização"
+                  >
+                    &times;
+                  </button>
+                </div>
               </div>
 
               {/* Printable View Container */}
@@ -3154,10 +3307,10 @@ export const PlanosAcaoComponent: React.FC<PlanosAcaoProps> = ({
                 <button
                   type="button"
                   onClick={handlePrintPlano}
-                  className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg shadow-xs cursor-pointer flex items-center gap-1.5"
+                  className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg shadow-xs cursor-pointer flex items-center gap-1.5 transition-colors"
                 >
                   <Printer className="w-4 h-4" />
-                  <span>Imprimir Documento Oficial</span>
+                  <span>Imprimir Documento Oficial (A4 Paisagem)</span>
                 </button>
               </div>
             </div>
