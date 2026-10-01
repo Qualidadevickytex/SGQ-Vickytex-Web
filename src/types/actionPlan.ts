@@ -14,6 +14,25 @@ export interface HistoricoPrazoAcao {
   alteradoPor: string; // Nome do usuário / responsável
 }
 
+export interface ComentarioAcao {
+  id: string;
+  texto: string;
+  criadoEm: string; // ISO string data/hora
+  criadoPor: string; // Nome do autor
+  cargoOuSetor?: string;
+}
+
+export interface EvidenciaAcao {
+  id: string;
+  nome: string;
+  url: string; // base64 data URL ou link externo
+  tipo?: 'imagem' | 'documento' | 'link';
+  tamanho?: number; // em bytes
+  adicionadoEm: string;
+  adicionadoPor: string;
+  descricao?: string;
+}
+
 export interface ItemAcao5W2H {
   id: string;
   itemNumero?: number; // 1, 2, 3...
@@ -28,6 +47,10 @@ export interface ItemAcao5W2H {
   status: 'Planejado' | 'Em Andamento' | 'Concluído' | 'Cancelada';
   observacoes?: string;
   concluidoEm?: string;
+  concluidoPor?: string;
+  comentarioConclusao?: string;
+  evidencias?: EvidenciaAcao[];
+  comentarios?: ComentarioAcao[];
   historicoPrazos?: HistoricoPrazoAcao[];
 }
 

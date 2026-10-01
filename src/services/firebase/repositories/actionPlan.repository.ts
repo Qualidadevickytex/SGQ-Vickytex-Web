@@ -16,18 +16,26 @@ class ActionPlanRepositoryClass extends BaseRepository<PlanoAcao> {
   protected saveLocalData(_data: PlanoAcao[]): void {}
 
   protected mapRecord(rec: any): PlanoAcao {
-    const acoes = Array.isArray(rec.acoes) ? rec.acoes : (rec.oQue ? [{
-      id: `${rec.id}-1`,
-      itemNumero: 1,
-      oQue: rec.oQue || rec.o_que || '',
-      porQue: rec.porQue || rec.por_que || '',
-      onde: rec.onde || '',
-      quando: rec.quando || '',
-      quem: rec.quem || rec.coordenador || '',
-      como: rec.como || '',
-      quantoCusta: rec.quantoCusta ?? rec.quanto_custa ?? 0,
-      status: rec.status || 'Planejado'
-    }] : []);
+    const acoes = Array.isArray(rec.acoes) 
+      ? rec.acoes.map((a: any, idx: number) => ({
+          ...a,
+          itemNumero: idx + 1,
+          evidencias: Array.isArray(a.evidencias) ? a.evidencias : [],
+          comentarios: Array.isArray(a.comentarios) ? a.comentarios : [],
+          historicoPrazos: Array.isArray(a.historicoPrazos) ? a.historicoPrazos : []
+        }))
+      : (rec.oQue ? [{
+          id: `${rec.id}-1`,
+          itemNumero: 1,
+          oQue: rec.oQue || rec.o_que || '',
+          porQue: rec.porQue || rec.por_que || '',
+          onde: rec.onde || '',
+          quando: rec.quando || '',
+          quem: rec.quem || rec.coordenador || '',
+          como: rec.como || '',
+          quantoCusta: rec.quantoCusta ?? rec.quanto_custa ?? 0,
+          status: rec.status || 'Planejado'
+        }] : []);
 
     return {
       id: rec.id,

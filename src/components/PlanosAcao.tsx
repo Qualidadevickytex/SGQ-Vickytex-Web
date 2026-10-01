@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { 
   ClipboardList, 
   Plus, 
@@ -38,9 +38,28 @@ import {
   Layers,
   PlusCircle,
   Target,
-  History
+  History,
+  MessageSquare,
+  Paperclip,
+  Upload,
+  Download,
+  ExternalLink,
+  File,
+  Image,
+  Eye,
+  Send
 } from 'lucide-react';
-import { Documento, Auditoria, NaoConformidade, SectorType, PlanoAcao, ItemAcao5W2H, HistoricoPrazoAcao } from '../types';
+import { 
+  Documento, 
+  Auditoria, 
+  NaoConformidade, 
+  SectorType, 
+  PlanoAcao, 
+  ItemAcao5W2H, 
+  HistoricoPrazoAcao,
+  ComentarioAcao,
+  EvidenciaAcao
+} from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { useSectors } from '../hooks/useSectors';
 import { SECTORS, getSectors, PersonalizacaoGeral } from '../utils/mockData';
@@ -68,6 +87,31 @@ export const formatDateBR = (dateStr?: string): string => {
   } catch {
     return dateStr;
   }
+};
+
+export const formatDateTimeBR = (isoStr?: string): string => {
+  if (!isoStr) return '-';
+  try {
+    const d = new Date(isoStr);
+    if (isNaN(d.getTime())) return isoStr;
+    return d.toLocaleString('pt-BR', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  } catch {
+    return isoStr;
+  }
+};
+
+export const formatFileSize = (bytes?: number): string => {
+  if (!bytes || bytes === 0) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
 };
 
 export const normalizeToISO = (dateStr?: string): string => {
@@ -128,6 +172,7 @@ export const PlanosAcaoComponent: React.FC<PlanosAcaoProps> = ({
   const [selectedSector, setSelectedSector] = useState<string>('Todos');
   const [selectedStatus, setSelectedStatus] = useState<string>('Todos');
   const [viewMode, setViewMode] = useState<'lista' | 'cards'>('lista');
+  const [sortBy, setSortBy] = useState<'codigo_asc' | 'codigo_desc' | 'prazo_asc' | 'data_desc'>('codigo_asc');
   const [expandedIds, setExpandedIds] = useState<Record<string, boolean>>({});
 
   const toggleExpand = (id: string) => {
@@ -171,6 +216,42 @@ export const PlanosAcaoComponent: React.FC<PlanosAcaoProps> = ({
   const [editingActionItem, setEditingActionItem] = useState<ItemAcao5W2H | null>(null);
   const [justificativaPrazo, setJustificativaPrazo] = useState('');
   const [viewingHistoryAction, setViewingHistoryAction] = useState<ItemAcao5W2H | null>(null);
+
+  // Estados para Conclusão de Ação com Evidência & Comentários
+  const [actionToConclude, setActionToConclude] = useState<{
+    plano: PlanoAcao;
+    action: ItemAcao5W2H;
+  } | null>(null);
+  const [conclusaoData, setConclusaoData] = useState(getLocalDateISO());
+  const [conclusaoResponsavel, setConclusaoResponsavel] = useState('');
+  const [conclusaoComentario, setConclusaoComentario] = useState('');
+  const [conclusaoEvidencias, setConclusaoEvidencias] = useState<EvidenciaAcao[]>([]);
+  const [isAddingLinkConclusao, setIsAddingLinkConclusao] = useState(false);
+  const [linkConclusaoNome, setLinkConclusaoNome] = useState('');
+  const [linkConclusaoUrl, setLinkConclusaoUrl] = useState('');
+
+  // Estados para Comentários & Acompanhamento de Ação
+  const [actionCommentsModal, setActionCommentsModal] = useState<{
+    plano: PlanoAcao;
+    action: ItemAcao5W2H;
+  } | null>(null);
+  const [commentsModalTab, setCommentsModalTab] = useState<'comentarios' | 'evidencias'>('comentarios');
+  const [newCommentText, setNewCommentText] = useState('');
+  const [isAddingLinkInComments, setIsAddingLinkInComments] = useState(false);
+  const [linkCommentNome, setLinkCommentNome] = useState('');
+  const [linkCommentUrl, setLinkCommentUrl] = useState('');
+
+  // Visualizador de Evidência
+  const [previewEvidence, setPreviewEvidence] = useState<EvidenciaAcao | null>(null);
+  const [evidenceUploadError, setEvidenceUploadError] = useState<string | null>(null);
+
+  const formatFileSize = (bytes?: number): string => {
+    if (!bytes) return '';
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
   const [actionItemForm, setActionItemForm] = useState({
     oQue: '',
     porQue: '',
@@ -179,13 +260,56 @@ export const PlanosAcaoComponent: React.FC<PlanosAcaoProps> = ({
     quem: '',
     como: '',
     quantoCusta: 0,
-    status: 'Planejado' as 'Planejado' | 'Em Andamento' | 'Concluído' | 'Cancelada'
+    status: 'Planejado' as 'Planejado' | 'Em Andamento' | 'Concluído' | 'Cancelada',
+    concluidoEm: '',
+    concluidoPor: '',
+    comentarioConclusao: '',
+    evidencias: [] as EvidenciaAcao[]
   });
 
-  // Obter ações filhas da Capa (com fallback para planos legados de ação única)
+  // Processar upload de arquivo para Evidência com validação segura
+  const handleProcessFileUpload = (
+    file: File, 
+    onSuccess: (newEv: EvidenciaAcao) => void
+  ) => {
+    setEvidenceUploadError(null);
+    if (file.size > 5 * 1024 * 1024) {
+      setEvidenceUploadError('O arquivo selecionado excede o limite máximo permitido de 5MB.');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const url = e.target?.result as string;
+      const isImage = file.type.startsWith('image/');
+      const newEv: EvidenciaAcao = {
+        id: `ev_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+        nome: file.name,
+        url,
+        tipo: isImage ? 'imagem' : 'documento',
+        tamanho: file.size,
+        adicionadoEm: new Date().toISOString(),
+        adicionadoPor: user?.name ? `${user.name} (${user.role || 'SGQ'})` : 'Usuário Vickytex'
+      };
+      onSuccess(newEv);
+    };
+    reader.onerror = () => {
+      setEvidenceUploadError('Não foi possível ler o arquivo. Tente novamente.');
+    };
+    reader.readAsDataURL(file);
+  };
+
+  // Obter ações filhas da Capa (com garantia de ordenação e numeração sequencial 1, 2, 3...)
   const getPlanActions = (plano: PlanoAcao): ItemAcao5W2H[] => {
     if (Array.isArray(plano.acoes) && plano.acoes.length > 0) {
-      return plano.acoes;
+      const sorted = [...plano.acoes].sort((a, b) => {
+        const numA = typeof a.itemNumero === 'number' && a.itemNumero > 0 ? a.itemNumero : 9999;
+        const numB = typeof b.itemNumero === 'number' && b.itemNumero > 0 ? b.itemNumero : 9999;
+        return numA - numB;
+      });
+      return sorted.map((act, idx) => ({
+        ...act,
+        itemNumero: idx + 1
+      }));
     }
     if (plano.oQue) {
       return [{
@@ -817,11 +941,28 @@ export const PlanosAcaoComponent: React.FC<PlanosAcaoProps> = ({
     status: 'Planejado' as 'Planejado' | 'Em Andamento' | 'Concluído' | 'Cancelada'
   });
 
+  // Obter próximo código sequencial garantindo continuidade mesmo com exclusões (ex: PA-2026-001, 002, 003...)
+  const getNextPlanoCode = (planosList: PlanoAcao[]): string => {
+    const currentYear = new Date().getFullYear();
+    let maxNum = 0;
+    planosList.forEach(p => {
+      if (!p.codigo) return;
+      const match = p.codigo.match(/(\d+)$/);
+      if (match) {
+        const num = parseInt(match[1], 10);
+        if (!isNaN(num) && num > maxNum) {
+          maxNum = num;
+        }
+      }
+    });
+    const nextNum = maxNum + 1;
+    const formattedNum = String(nextNum).padStart(3, '0');
+    return `PA-${currentYear}-${formattedNum}`;
+  };
+
   // Limpar formulário para novo plano (Capa)
   const handleOpenNewPlano = () => {
-    const nextNum = planos.length + 1;
-    const formattedNum = String(nextNum).padStart(3, '0');
-    const autoCodigo = `PA-2026-${formattedNum}`;
+    const autoCodigo = getNextPlanoCode(planos);
     const today = getLocalDateISO();
 
     setEditingPlano(null);
@@ -919,7 +1060,11 @@ export const PlanosAcaoComponent: React.FC<PlanosAcaoProps> = ({
       quantoCusta: 0,
       status: 'Planejado'
     };
-    setFormPlano({ ...formPlano, acoes: [...formPlano.acoes, newAct] });
+    const newAcoes = [...formPlano.acoes, newAct].map((a, idx) => ({
+      ...a,
+      itemNumero: idx + 1
+    }));
+    setFormPlano({ ...formPlano, acoes: newAcoes });
   };
 
   const handleRemoveCapaAction = (index: number) => {
@@ -928,7 +1073,9 @@ export const PlanosAcaoComponent: React.FC<PlanosAcaoProps> = ({
       return;
     }
     setCapaFormFeedback(null);
-    const newAcoes = formPlano.acoes.filter((_, idx) => idx !== index);
+    const newAcoes = formPlano.acoes
+      .filter((_, idx) => idx !== index)
+      .map((a, idx) => ({ ...a, itemNumero: idx + 1 }));
     setFormPlano({ ...formPlano, acoes: newAcoes });
   };
 
@@ -940,8 +1087,10 @@ export const PlanosAcaoComponent: React.FC<PlanosAcaoProps> = ({
       return;
     }
 
-    // Filtrar ações válidas
-    const validActions = formPlano.acoes.filter(a => a.oQue.trim().length > 0);
+    // Filtrar ações válidas e reindexar sequencialmente (1, 2, 3...)
+    const validActions = formPlano.acoes
+      .filter(a => a.oQue.trim().length > 0)
+      .map((a, idx) => ({ ...a, itemNumero: idx + 1 }));
     if (validActions.length === 0) {
       setCapaFormFeedback('Por favor, adicione pelo menos uma ação 5W2H com descrição no plano.');
       return;
@@ -1013,30 +1162,238 @@ export const PlanosAcaoComponent: React.FC<PlanosAcaoProps> = ({
     setEditingPlano(null);
   };
 
-  // Alternar rapidamente o status de uma ação individual
+  // Alternar o status de uma ação individual (intercepta Concluído para solicitar evidências)
   const handleToggleActionStatus = (planoId: string, actionId: string, newStatus: 'Planejado' | 'Em Andamento' | 'Concluído' | 'Cancelada') => {
     const plano = planos.find(p => p.id === planoId);
     if (!plano) return;
     const currentActions = getPlanActions(plano);
+    const action = currentActions.find(a => a.id === actionId);
+    if (!action) return;
+
+    if (newStatus === 'Concluído') {
+      // Abre modal de conclusão para registro de parecer, data e evidências
+      setActionToConclude({ plano, action });
+      setConclusaoData(getLocalDateISO());
+      setConclusaoResponsavel(user?.name || action.quem || plano.coordenador || 'Responsável');
+      setConclusaoComentario(action.comentarioConclusao || '');
+      setConclusaoEvidencias(action.evidencias ? [...action.evidencias] : []);
+      setIsAddingLinkConclusao(false);
+      setLinkConclusaoNome('');
+      setLinkConclusaoUrl('');
+      return;
+    }
+
     const updatedActions = currentActions.map(a => a.id === actionId ? { 
       ...a, 
       status: newStatus,
-      concluidoEm: newStatus === 'Concluído' ? new Date().toISOString().split('T')[0] : undefined
+      concluidoEm: undefined
     } : a);
 
+    applyUpdatedActionsToPlano(plano, updatedActions, `Status da ação #${action.itemNumero} no plano ${plano.codigo} alterado para "${newStatus}".`);
+  };
+
+  // Aplicar ações atualizadas ao Plano de Ação
+  const applyUpdatedActionsToPlano = (plano: PlanoAcao, updatedActions: ItemAcao5W2H[], logMsg: string) => {
+    const totalCost = updatedActions.reduce((acc, a) => acc + (Number(a.quantoCusta) || 0), 0);
     const allCancelled = updatedActions.length > 0 && updatedActions.every(a => a.status === 'Cancelada');
     const allConcluded = updatedActions.length > 0 && updatedActions.every(a => a.status === 'Concluído' || a.status === 'Cancelada');
     const isUnderway = updatedActions.some(a => a.status === 'Em Andamento' || a.status === 'Concluído');
     const statusFinal = allCancelled ? 'Cancelada' : (allConcluded ? 'Concluído' : (isUnderway ? 'Em Andamento' : 'Planejado'));
 
+    const reindexed = updatedActions.map((a, idx) => ({ ...a, itemNumero: idx + 1 }));
+
     const updatedPlano: PlanoAcao = {
       ...plano,
-      acoes: updatedActions,
+      acoes: reindexed,
+      quantoCusta: totalCost,
       status: statusFinal
     };
 
     onUpdatePlano(updatedPlano);
-    onAddLog('Atualizou Ação 5W2H', `Status da ação no plano ${plano.codigo} alterado para "${newStatus}".`, plano.documentoId);
+    onAddLog('Atualizou Ação 5W2H', logMsg, plano.documentoId);
+  };
+
+  // Salvar conclusão da ação com parecer e evidências
+  const handleConfirmConclusaoAction = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!actionToConclude) return;
+    const { plano, action } = actionToConclude;
+
+    const currentActions = getPlanActions(plano);
+    
+    // Se o usuário escreveu um comentário de conclusão, registra também no histórico de comentários
+    let updatedComments = action.comentarios ? [...action.comentarios] : [];
+    if (conclusaoComentario.trim()) {
+      const commentEntry: ComentarioAcao = {
+        id: `c_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+        texto: `[Conclusão da Ação] ${conclusaoComentario.trim()}`,
+        criadoEm: new Date().toISOString(),
+        criadoPor: conclusaoResponsavel.trim() || user?.name || 'Responsável',
+        cargoOuSetor: user?.role || user?.sector || 'SGQ'
+      };
+      updatedComments.push(commentEntry);
+    }
+
+    const updatedActions = currentActions.map(a => a.id === action.id ? {
+      ...a,
+      status: 'Concluído' as const,
+      concluidoEm: conclusaoData,
+      concluidoPor: conclusaoResponsavel.trim() || user?.name || action.quem,
+      comentarioConclusao: conclusaoComentario.trim(),
+      evidencias: conclusaoEvidencias,
+      comentarios: updatedComments
+    } : a);
+
+    applyUpdatedActionsToPlano(
+      plano, 
+      updatedActions, 
+      `Concluiu ação #${action.itemNumero} (${action.oQue}) com ${conclusaoEvidencias.length} evidência(s) anexada(s) no plano ${plano.codigo}.`
+    );
+
+    setActionToConclude(null);
+  };
+
+  // Adicionar Link Externo como Evidência no modal de conclusão
+  const handleAddLinkInConclusao = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!linkConclusaoUrl.trim()) return;
+    const newEv: EvidenciaAcao = {
+      id: `ev_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      nome: linkConclusaoNome.trim() || 'Link Externo / Documentação',
+      url: linkConclusaoUrl.trim(),
+      tipo: 'link',
+      adicionadoEm: new Date().toISOString(),
+      adicionadoPor: user?.name ? `${user.name} (${user.role || 'SGQ'})` : 'Usuário Vickytex'
+    };
+    setConclusaoEvidencias(prev => [...prev, newEv]);
+    setLinkConclusaoNome('');
+    setLinkConclusaoUrl('');
+    setIsAddingLinkConclusao(false);
+  };
+
+  // Remover Evidência da lista no modal de conclusão
+  const handleRemoveEvidenceFromConclusao = (evId: string) => {
+    setConclusaoEvidencias(prev => prev.filter(e => e.id !== evId));
+  };
+
+  // Adicionar comentário livre em uma ação a qualquer momento
+  const handleAddActionComment = () => {
+    if (!actionCommentsModal || !newCommentText.trim()) return;
+    const { plano, action } = actionCommentsModal;
+
+    const currentActions = getPlanActions(plano);
+    const newComment: ComentarioAcao = {
+      id: `c_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      texto: newCommentText.trim(),
+      criadoEm: new Date().toISOString(),
+      criadoPor: user?.name ? `${user.name}` : 'Usuário SGQ',
+      cargoOuSetor: user?.role || user?.sector || 'SGQ'
+    };
+
+    const targetAction = currentActions.find(a => a.id === action.id);
+    const updatedComments = [...(targetAction?.comentarios || []), newComment];
+
+    const updatedActions = currentActions.map(a => a.id === action.id ? {
+      ...a,
+      comentarios: updatedComments
+    } : a);
+
+    applyUpdatedActionsToPlano(
+      plano,
+      updatedActions,
+      `Novo comentário na ação #${action.itemNumero} do plano ${plano.codigo}.`
+    );
+
+    const freshAction = updatedActions.find(a => a.id === action.id) || {
+      ...action,
+      comentarios: updatedComments
+    };
+
+    setActionCommentsModal({
+      plano,
+      action: freshAction
+    });
+    setNewCommentText('');
+  };
+
+  // Adicionar evidência avulsa pelo modal de comentários/acompanhamento
+  const handleAddEvidenceInCommentsModal = (novaEvidencia: EvidenciaAcao) => {
+    if (!actionCommentsModal) return;
+    const { plano, action } = actionCommentsModal;
+
+    const currentActions = getPlanActions(plano);
+    const targetAction = currentActions.find(a => a.id === action.id);
+    const updatedEvidencias = [...(targetAction?.evidencias || []), novaEvidencia];
+
+    const updatedActions = currentActions.map(a => a.id === action.id ? {
+      ...a,
+      evidencias: updatedEvidencias
+    } : a);
+
+    applyUpdatedActionsToPlano(
+      plano,
+      updatedActions,
+      `Nova evidência "${novaEvidencia.nome}" vinculada à ação #${action.itemNumero} do plano ${plano.codigo}.`
+    );
+
+    const freshAction = updatedActions.find(a => a.id === action.id) || {
+      ...action,
+      evidencias: updatedEvidencias
+    };
+
+    setActionCommentsModal({
+      plano,
+      action: freshAction
+    });
+  };
+
+  // Adicionar Link Externo como Evidência pelo modal de comentários
+  const handleAddLinkInComments = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!linkCommentUrl.trim()) return;
+    const newEv: EvidenciaAcao = {
+      id: `ev_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      nome: linkCommentNome.trim() || 'Link Externo / Documentação',
+      url: linkCommentUrl.trim(),
+      tipo: 'link',
+      adicionadoEm: new Date().toISOString(),
+      adicionadoPor: user?.name ? `${user.name} (${user.role || 'SGQ'})` : 'Usuário Vickytex'
+    };
+    handleAddEvidenceInCommentsModal(newEv);
+    setLinkCommentNome('');
+    setLinkCommentUrl('');
+    setIsAddingLinkInComments(false);
+  };
+
+  // Remover evidência de uma ação
+  const handleRemoveEvidenceFromAction = (evidenciaId: string) => {
+    if (!actionCommentsModal) return;
+    const { plano, action } = actionCommentsModal;
+
+    const currentActions = getPlanActions(plano);
+    const targetAction = currentActions.find(a => a.id === action.id);
+    const updatedEvidencias = (targetAction?.evidencias || []).filter(e => e.id !== evidenciaId);
+
+    const updatedActions = currentActions.map(a => a.id === action.id ? {
+      ...a,
+      evidencias: updatedEvidencias
+    } : a);
+
+    applyUpdatedActionsToPlano(
+      plano,
+      updatedActions,
+      `Evidência removida da ação #${action.itemNumero} do plano ${plano.codigo}.`
+    );
+
+    const freshAction = updatedActions.find(a => a.id === action.id) || {
+      ...action,
+      evidencias: updatedEvidencias
+    };
+
+    setActionCommentsModal({
+      plano,
+      action: freshAction
+    });
   };
 
   // Iniciar fluxo de exclusão de ação 5W2H (com modal de confirmação)
@@ -1063,7 +1420,9 @@ export const PlanosAcaoComponent: React.FC<PlanosAcaoProps> = ({
     }
 
     const currentActions = getPlanActions(plano);
-    const updatedActions = currentActions.filter(a => a.id !== action.id);
+    const updatedActions = currentActions
+      .filter(a => a.id !== action.id)
+      .map((a, idx) => ({ ...a, itemNumero: idx + 1 }));
     const firstAct = updatedActions[0];
     const totalCost = updatedActions.reduce((acc, a) => acc + (Number(a.quantoCusta) || 0), 0);
     const allCancelled = updatedActions.length > 0 && updatedActions.every(a => a.status === 'Cancelada');
@@ -1119,7 +1478,11 @@ export const PlanosAcaoComponent: React.FC<PlanosAcaoProps> = ({
       quem: plano?.coordenador || user?.name || '',
       como: '',
       quantoCusta: 0,
-      status: 'Planejado'
+      status: 'Planejado',
+      concluidoEm: '',
+      concluidoPor: '',
+      comentarioConclusao: '',
+      evidencias: []
     });
     setIsActionItemModalOpen(true);
   };
@@ -1138,7 +1501,11 @@ export const PlanosAcaoComponent: React.FC<PlanosAcaoProps> = ({
       quem: item.quem,
       como: item.como || '',
       quantoCusta: item.quantoCusta,
-      status: item.status
+      status: item.status,
+      concluidoEm: item.concluidoEm || '',
+      concluidoPor: item.concluidoPor || '',
+      comentarioConclusao: item.comentarioConclusao || '',
+      evidencias: item.evidencias ? [...item.evidencias] : []
     });
     setIsActionItemModalOpen(true);
   };
@@ -1190,6 +1557,10 @@ export const PlanosAcaoComponent: React.FC<PlanosAcaoProps> = ({
         como: actionItemForm.como.trim(),
         quantoCusta: Number(actionItemForm.quantoCusta) || 0,
         status: actionItemForm.status,
+        concluidoEm: actionItemForm.status === 'Concluído' ? (actionItemForm.concluidoEm || getLocalDateISO()) : undefined,
+        concluidoPor: actionItemForm.status === 'Concluído' ? (actionItemForm.concluidoPor || user?.name || editingActionItem.quem) : undefined,
+        comentarioConclusao: actionItemForm.comentarioConclusao.trim(),
+        evidencias: actionItemForm.evidencias || editingActionItem.evidencias || [],
         historicoPrazos: historicoAtualizado
       } : a);
     } else {
@@ -1203,10 +1574,21 @@ export const PlanosAcaoComponent: React.FC<PlanosAcaoProps> = ({
         quem: actionItemForm.quem.trim(),
         como: actionItemForm.como.trim(),
         quantoCusta: Number(actionItemForm.quantoCusta) || 0,
-        status: actionItemForm.status
+        status: actionItemForm.status,
+        concluidoEm: actionItemForm.status === 'Concluído' ? (actionItemForm.concluidoEm || getLocalDateISO()) : undefined,
+        concluidoPor: actionItemForm.status === 'Concluído' ? (actionItemForm.concluidoPor || user?.name || '') : undefined,
+        comentarioConclusao: actionItemForm.comentarioConclusao.trim(),
+        evidencias: actionItemForm.evidencias || [],
+        comentarios: []
       };
       updatedActions = [...currentActions, newAction];
     }
+
+    // Garantir reindexação estrita sequencial das ações filhas (1, 2, 3...)
+    updatedActions = updatedActions.map((a, idx) => ({
+      ...a,
+      itemNumero: idx + 1
+    }));
 
     const totalCost = updatedActions.reduce((acc, a) => acc + (Number(a.quantoCusta) || 0), 0);
     const allCancelled = updatedActions.length > 0 && updatedActions.every(a => a.status === 'Cancelada');
@@ -1282,10 +1664,47 @@ export const PlanosAcaoComponent: React.FC<PlanosAcaoProps> = ({
     return matchesSearch && matchesSector && matchesStatus;
   });
 
+  // Extrair número sequencial do código para ordenação natural (ex: PA-2026-001 -> 1, PA-NC-005 -> 5)
+  const extractCodeNumber = (code?: string): number => {
+    if (!code) return 0;
+    const match = code.match(/(\d+)$/);
+    return match ? parseInt(match[1], 10) : 0;
+  };
+
+  // Planos ordenados sequencialmente conforme preferência do usuário
+  const sortedPlanos = useMemo(() => {
+    return [...filteredPlanos].sort((a, b) => {
+      if (sortBy === 'codigo_asc') {
+        const numA = extractCodeNumber(a.codigo);
+        const numB = extractCodeNumber(b.codigo);
+        if (numA !== numB) return numA - numB;
+        return (a.codigo || '').localeCompare(b.codigo || '');
+      }
+      if (sortBy === 'codigo_desc') {
+        const numA = extractCodeNumber(a.codigo);
+        const numB = extractCodeNumber(b.codigo);
+        if (numA !== numB) return numB - numA;
+        return (b.codigo || '').localeCompare(a.codigo || '');
+      }
+      if (sortBy === 'prazo_asc') {
+        const statsA = getPlanStats(a);
+        const statsB = getPlanStats(b);
+        return (statsA.prazoFinal || '9999').localeCompare(statsB.prazoFinal || '9999');
+      }
+      if (sortBy === 'data_desc') {
+        return (b.dataCriacao || '').localeCompare(a.dataCriacao || '');
+      }
+      return 0;
+    });
+  }, [filteredPlanos, sortBy]);
+
   // Métricas consolidadas
   const totalInvestido = filteredPlanos.reduce((acc, p) => acc + getPlanStats(p).totalCost, 0);
   const totalAcoesCount = filteredPlanos.reduce((acc, p) => acc + getPlanStats(p).total, 0);
   const totalAcoesAtrasadas = filteredPlanos.reduce((acc, p) => acc + getPlanStats(p).acoesAtrasadas, 0);
+  const totalAcoesPlanejadas = filteredPlanos.reduce((acc, p) => acc + getPlanActions(p).filter(a => a.status === 'Planejado' && !isDateOverdue(a.quando, a.status)).length, 0);
+  const totalAcoesEmAndamento = filteredPlanos.reduce((acc, p) => acc + getPlanActions(p).filter(a => a.status === 'Em Andamento' && !isDateOverdue(a.quando, a.status)).length, 0);
+  const totalAcoesConcluidas = filteredPlanos.reduce((acc, p) => acc + getPlanActions(p).filter(a => a.status === 'Concluído').length, 0);
   const atrasados = filteredPlanos.filter(p => getPlanStats(p).isPlanoVencido).length;
   const concluidos = filteredPlanos.filter(p => getPlanStats(p).statusConsolidado === 'Concluído').length;
   const planejados = filteredPlanos.filter(p => getPlanStats(p).statusConsolidado === 'Planejado' && !getPlanStats(p).isPlanoVencido).length;
@@ -1383,14 +1802,18 @@ export const PlanosAcaoComponent: React.FC<PlanosAcaoProps> = ({
           <p className="text-[10px] font-mono font-bold text-blue-500 uppercase tracking-wider">Planejados</p>
           <div className="flex items-baseline justify-between mt-1">
             <span className="text-2xl font-black text-blue-600 dark:text-blue-400">{planejados}</span>
-            <span className="text-[10px] font-bold text-blue-400">aguardando</span>
+            <span className="text-[10px] font-bold text-blue-400" title={`${totalAcoesPlanejadas} ação(ões) planejadas aguardando início`}>
+              {totalAcoesPlanejadas > 0 ? `${totalAcoesPlanejadas} ${totalAcoesPlanejadas === 1 ? 'ação' : 'ações'}` : 'aguardando'}
+            </span>
           </div>
         </div>
         <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 shadow-xs">
           <p className="text-[10px] font-mono font-bold text-amber-500 uppercase tracking-wider">Em Andamento</p>
           <div className="flex items-baseline justify-between mt-1">
             <span className="text-2xl font-black text-amber-600 dark:text-amber-400">{emAndamento}</span>
-            <span className="text-[10px] font-bold text-amber-400">no prazo</span>
+            <span className="text-[10px] font-bold text-amber-400" title={`${totalAcoesEmAndamento} ação(ões) em execução`}>
+              {totalAcoesEmAndamento > 0 ? `${totalAcoesEmAndamento} ${totalAcoesEmAndamento === 1 ? 'ação' : 'ações'}` : 'no prazo'}
+            </span>
           </div>
         </div>
         <div className={`bg-white dark:bg-slate-900 border ${(atrasados > 0 || totalAcoesAtrasadas > 0) ? 'border-rose-300 dark:border-rose-900/60 bg-rose-50/20' : 'border-slate-200 dark:border-slate-800'} rounded-2xl p-4 shadow-xs`}>
@@ -1417,7 +1840,9 @@ export const PlanosAcaoComponent: React.FC<PlanosAcaoProps> = ({
           <p className="text-[10px] font-mono font-bold text-emerald-500 uppercase tracking-wider">Concluídos</p>
           <div className="flex items-baseline justify-between mt-1">
             <span className="text-2xl font-black text-emerald-600 dark:text-emerald-400">{concluidos}</span>
-            <span className="text-[10px] font-bold text-emerald-400">eficazes</span>
+            <span className="text-[10px] font-bold text-emerald-400" title={`${totalAcoesConcluidas} ação(ões) concluídas`}>
+              {totalAcoesConcluidas > 0 ? `${totalAcoesConcluidas} ${totalAcoesConcluidas === 1 ? 'ação' : 'ações'}` : 'eficazes'}
+            </span>
           </div>
         </div>
         <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 shadow-xs col-span-2 sm:col-span-1">
@@ -1471,6 +1896,22 @@ export const PlanosAcaoComponent: React.FC<PlanosAcaoProps> = ({
             <option value="Atrasado">⚠️ Atrasado {atrasados > 0 ? `(${atrasados})` : ''}</option>
             <option value="Concluído">Concluído</option>
             <option value="Cancelada">Cancelado</option>
+          </select>
+        </div>
+
+        {/* Sort Filter */}
+        <div className="flex items-center space-x-2 w-full md:w-auto shrink-0">
+          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider hidden sm:inline">Ordem:</span>
+          <select
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value as any)}
+            className="w-full md:w-44 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs px-3 py-2 rounded-xl focus:outline-hidden font-semibold dark:text-slate-200"
+            title="Critério de ordenação da lista de Planos"
+          >
+            <option value="codigo_asc">🔢 Sequencial (001, 002...)</option>
+            <option value="codigo_desc">🔽 Código Decrescente</option>
+            <option value="data_desc">📅 Mais Recentes Primeiro</option>
+            <option value="prazo_asc">⏱️ Prazo Mais Urgente</option>
           </select>
         </div>
 
@@ -1557,7 +1998,17 @@ export const PlanosAcaoComponent: React.FC<PlanosAcaoProps> = ({
               <thead className="bg-slate-50 dark:bg-slate-950/80 text-slate-500 dark:text-slate-400 font-bold border-b border-slate-200 dark:border-slate-800 uppercase text-[10px] tracking-wider">
                 <tr>
                   <th className="py-3.5 px-3 w-10 text-center"></th>
-                  <th className="py-3.5 px-4 min-w-[280px]">Plano Mestre (Capa) & Escopo</th>
+                  <th 
+                    className="py-3.5 px-4 min-w-[280px] cursor-pointer hover:text-blue-600 transition-colors select-none"
+                    onClick={() => setSortBy(prev => prev === 'codigo_asc' ? 'codigo_desc' : 'codigo_asc')}
+                    title="Clique para ordenar por Código Sequencial"
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <span>Plano Mestre (Capa) & Escopo</span>
+                      {sortBy === 'codigo_asc' && <span className="text-[10px] text-blue-600 font-mono font-bold">▲ 001..</span>}
+                      {sortBy === 'codigo_desc' && <span className="text-[10px] text-blue-600 font-mono font-bold">▼ 999..</span>}
+                    </div>
+                  </th>
                   <th className="py-3.5 px-4 min-w-[120px]">Setor</th>
                   <th className="py-3.5 px-4 min-w-[140px]">Coordenador</th>
                   <th className="py-3.5 px-4 min-w-[150px]">Ações & Progresso</th>
@@ -1569,7 +2020,7 @@ export const PlanosAcaoComponent: React.FC<PlanosAcaoProps> = ({
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-150 dark:divide-slate-800 font-medium text-slate-700 dark:text-slate-300">
-                {filteredPlanos.map((plano) => {
+                {sortedPlanos.map((plano) => {
                   const isExpanded = !!expandedIds[plano.id];
                   const stats = getPlanStats(plano);
                   const actions = stats.actions;
@@ -1911,6 +2362,41 @@ export const PlanosAcaoComponent: React.FC<PlanosAcaoProps> = ({
                                                   <span className="font-semibold text-slate-600 dark:text-slate-300">Como:</span> {act.como}
                                                 </p>
                                               )}
+
+                                              {/* Detalhes de Conclusão & Evidências */}
+                                              {act.status === 'Concluído' && (
+                                                <div className="mt-2 p-2 bg-emerald-50/80 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900/50 rounded-lg text-[10px] space-y-1">
+                                                  <div className="flex items-center gap-1.5 text-emerald-800 dark:text-emerald-300 font-bold">
+                                                    <CheckCircle2 className="w-3 h-3 text-emerald-600 shrink-0" />
+                                                    <span>Concluído {act.concluidoEm ? `em ${formatDateBR(act.concluidoEm)}` : ''} {act.concluidoPor ? `por ${act.concluidoPor}` : ''}</span>
+                                                  </div>
+                                                  {act.comentarioConclusao && (
+                                                    <p className="text-slate-700 dark:text-slate-300 italic pl-4 border-l border-emerald-300 dark:border-emerald-800">
+                                                      "{act.comentarioConclusao}"
+                                                    </p>
+                                                  )}
+                                                  {act.evidencias && act.evidencias.length > 0 && (
+                                                    <div className="flex items-center gap-1 flex-wrap pt-0.5 pl-4">
+                                                      <span className="font-semibold text-emerald-800 dark:text-emerald-400 text-[9px]">Evidências:</span>
+                                                      {act.evidencias.map((ev) => (
+                                                        <button
+                                                          key={ev.id}
+                                                          type="button"
+                                                          onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            setPreviewEvidence(ev);
+                                                          }}
+                                                          className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-white dark:bg-slate-900 text-emerald-700 dark:text-emerald-300 rounded border border-emerald-300 dark:border-emerald-800 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 transition-colors text-[9px] font-medium cursor-pointer"
+                                                          title="Clique para visualizar ou baixar"
+                                                        >
+                                                          <Paperclip className="w-2.5 h-2.5" />
+                                                          <span className="max-w-[120px] truncate">{ev.nome}</span>
+                                                        </button>
+                                                      ))}
+                                                    </div>
+                                                  )}
+                                                </div>
+                                              )}
                                             </td>
                                             <td className="py-2.5 px-3 text-slate-600 dark:text-slate-300 text-[11px]">
                                               {act.onde || '—'}
@@ -1964,6 +2450,50 @@ export const PlanosAcaoComponent: React.FC<PlanosAcaoProps> = ({
                                             </td>
                                             <td className="py-2.5 px-3 text-right">
                                               <div className="flex items-center justify-end gap-1">
+                                                {/* Botão de Comentários */}
+                                                <button
+                                                  type="button"
+                                                  onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    setActionCommentsModal({ plano, action: act });
+                                                    setNewCommentText('');
+                                                    setIsAddingLinkInComments(false);
+                                                  }}
+                                                  className={`p-1.5 rounded-lg transition-colors flex items-center gap-1 cursor-pointer ${
+                                                    (act.comentarios && act.comentarios.length > 0)
+                                                      ? 'bg-blue-50 text-blue-700 dark:bg-blue-950/50 dark:text-blue-300 hover:bg-blue-100 font-bold border border-blue-200 dark:border-blue-900'
+                                                      : 'text-slate-400 hover:text-blue-600 hover:bg-slate-100 dark:hover:bg-slate-800'
+                                                  }`}
+                                                  title={act.comentarios && act.comentarios.length > 0 ? `${act.comentarios.length} comentário(s)` : 'Comentar / Acompanhamento'}
+                                                >
+                                                  <MessageSquare className="w-3.5 h-3.5" />
+                                                  {act.comentarios && act.comentarios.length > 0 && (
+                                                    <span className="text-[10px]">{act.comentarios.length}</span>
+                                                  )}
+                                                </button>
+
+                                                {/* Botão de Evidências */}
+                                                <button
+                                                  type="button"
+                                                  onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    setActionCommentsModal({ plano, action: act });
+                                                    setNewCommentText('');
+                                                    setIsAddingLinkInComments(false);
+                                                  }}
+                                                  className={`p-1.5 rounded-lg transition-colors flex items-center gap-1 cursor-pointer ${
+                                                    (act.evidencias && act.evidencias.length > 0)
+                                                      ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300 hover:bg-emerald-100 font-bold border border-emerald-200 dark:border-emerald-900'
+                                                      : 'text-slate-400 hover:text-emerald-600 hover:bg-slate-100 dark:hover:bg-slate-800'
+                                                  }`}
+                                                  title={act.evidencias && act.evidencias.length > 0 ? `${act.evidencias.length} evidência(s)` : 'Evidências / Anexos'}
+                                                >
+                                                  <Paperclip className="w-3.5 h-3.5" />
+                                                  {act.evidencias && act.evidencias.length > 0 && (
+                                                    <span className="text-[10px]">{act.evidencias.length}</span>
+                                                  )}
+                                                </button>
+
                                                 {canEdit && (
                                                   <button
                                                     onClick={(e) => {
@@ -2038,7 +2568,7 @@ export const PlanosAcaoComponent: React.FC<PlanosAcaoProps> = ({
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-6">
-          {filteredPlanos.map((plano) => {
+          {sortedPlanos.map((plano) => {
             const stats = getPlanStats(plano);
             const actions = stats.actions;
             const relDoc = documents.find(d => d.id === plano.documentoId);
@@ -2248,10 +2778,45 @@ export const PlanosAcaoComponent: React.FC<PlanosAcaoProps> = ({
                                       <span className="font-semibold text-slate-600 dark:text-slate-300">Como:</span> {act.como}
                                     </p>
                                   )}
+
+                                  {/* Conclusão & Evidências em Card */}
+                                  {act.status === 'Concluído' && (
+                                    <div className="mt-2 p-2 bg-emerald-50/80 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900/50 rounded-lg text-[10px] space-y-1">
+                                      <div className="flex items-center gap-1.5 text-emerald-800 dark:text-emerald-300 font-bold">
+                                        <CheckCircle2 className="w-3 h-3 text-emerald-600 shrink-0" />
+                                        <span>Concluído {act.concluidoEm ? `em ${formatDateBR(act.concluidoEm)}` : ''} {act.concluidoPor ? `por ${act.concluidoPor}` : ''}</span>
+                                      </div>
+                                      {act.comentarioConclusao && (
+                                        <p className="text-slate-700 dark:text-slate-300 italic pl-3 border-l border-emerald-300 dark:border-emerald-800">
+                                          "{act.comentarioConclusao}"
+                                        </p>
+                                      )}
+                                      {act.evidencias && act.evidencias.length > 0 && (
+                                        <div className="flex items-center gap-1 flex-wrap pt-0.5 pl-3">
+                                          <span className="font-semibold text-emerald-800 dark:text-emerald-400 text-[9px]">Evidências:</span>
+                                          {act.evidencias.map((ev) => (
+                                            <button
+                                              key={ev.id}
+                                              type="button"
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                setPreviewEvidence(ev);
+                                              }}
+                                              className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-white dark:bg-slate-900 text-emerald-700 dark:text-emerald-300 rounded border border-emerald-300 dark:border-emerald-800 hover:bg-emerald-100 transition-colors text-[9px] font-medium cursor-pointer"
+                                              title="Clique para visualizar ou baixar"
+                                            >
+                                              <Paperclip className="w-2.5 h-2.5" />
+                                              <span className="max-w-[120px] truncate">{ev.nome}</span>
+                                            </button>
+                                          ))}
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
                                 </div>
                               </div>
 
-                              <div className="flex items-center gap-2 shrink-0">
+                              <div className="flex items-center gap-1.5 shrink-0 flex-wrap justify-end">
                                 <select
                                   value={act.status}
                                   onChange={(e) => handleToggleActionStatus(plano.id, act.id, e.target.value as any)}
@@ -2267,6 +2832,50 @@ export const PlanosAcaoComponent: React.FC<PlanosAcaoProps> = ({
                                   <option value="Concluído">Concluído</option>
                                   <option value="Cancelada">Cancelada</option>
                                 </select>
+
+                                {/* Botão de Comentários */}
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setActionCommentsModal({ plano, action: act });
+                                    setNewCommentText('');
+                                    setIsAddingLinkInComments(false);
+                                  }}
+                                  className={`p-1.5 rounded-lg transition-colors flex items-center gap-1 cursor-pointer ${
+                                    (act.comentarios && act.comentarios.length > 0)
+                                      ? 'bg-blue-50 text-blue-700 dark:bg-blue-950/50 dark:text-blue-300 hover:bg-blue-100 font-bold border border-blue-200 dark:border-blue-900'
+                                      : 'text-slate-400 hover:text-blue-600 hover:bg-slate-100 dark:hover:bg-slate-800'
+                                  }`}
+                                  title={act.comentarios && act.comentarios.length > 0 ? `${act.comentarios.length} comentário(s)` : 'Comentários'}
+                                >
+                                  <MessageSquare className="w-3.5 h-3.5" />
+                                  {act.comentarios && act.comentarios.length > 0 && (
+                                    <span className="text-[10px]">{act.comentarios.length}</span>
+                                  )}
+                                </button>
+
+                                {/* Botão de Evidências */}
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setActionCommentsModal({ plano, action: act });
+                                    setNewCommentText('');
+                                    setIsAddingLinkInComments(false);
+                                  }}
+                                  className={`p-1.5 rounded-lg transition-colors flex items-center gap-1 cursor-pointer ${
+                                    (act.evidencias && act.evidencias.length > 0)
+                                      ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300 hover:bg-emerald-100 font-bold border border-emerald-200 dark:border-emerald-900'
+                                      : 'text-slate-400 hover:text-emerald-600 hover:bg-slate-100 dark:hover:bg-slate-800'
+                                  }`}
+                                  title={act.evidencias && act.evidencias.length > 0 ? `${act.evidencias.length} evidência(s)` : 'Evidências'}
+                                >
+                                  <Paperclip className="w-3.5 h-3.5" />
+                                  {act.evidencias && act.evidencias.length > 0 && (
+                                    <span className="text-[10px]">{act.evidencias.length}</span>
+                                  )}
+                                </button>
 
                                 {canEdit && (
                                   <button
@@ -2808,7 +3417,7 @@ export const PlanosAcaoComponent: React.FC<PlanosAcaoProps> = ({
                 <PlusCircle className="w-4.5 h-4.5 text-blue-300" />
                 <div>
                   <h3 className="text-sm font-extrabold">
-                    {editingActionItem ? 'Editar Ação 5W2H' : 'Nova Ação 5W2H'}
+                    {editingActionItem ? `Editar Ação 5W2H #${editingActionItem.itemNumero || 1}` : 'Nova Ação 5W2H'}
                   </h3>
                   {actionItemTargetPlanoId && (
                     <p className="text-[10px] text-blue-200 font-mono">
@@ -3014,6 +3623,109 @@ export const PlanosAcaoComponent: React.FC<PlanosAcaoProps> = ({
                   />
                 </div>
               </div>
+
+              {/* DADOS DE CONCLUSÃO & EVIDÊNCIAS NO MODAL DE AÇÃO */}
+              {actionItemForm.status === 'Concluído' && (
+                <div className="p-4 bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900/50 rounded-xl space-y-3 animate-scale-in">
+                  <div className="flex items-center gap-2 text-xs font-bold text-emerald-800 dark:text-emerald-300">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                    <span>Dados de Conclusão & Evidências Comprobatórias (ISO 10.2)</span>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[10px] font-bold text-emerald-900 dark:text-emerald-200 uppercase tracking-wider mb-1">
+                        Data de Conclusão / Execução
+                      </label>
+                      <input
+                        type="date"
+                        value={actionItemForm.concluidoEm || getLocalDateISO()}
+                        onChange={(e) => setActionItemForm({ ...actionItemForm, concluidoEm: e.target.value })}
+                        className="w-full bg-white dark:bg-slate-800 border border-emerald-300 dark:border-emerald-700 px-3 py-1.5 text-xs font-semibold rounded-lg focus:outline-hidden dark:text-slate-100"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-emerald-900 dark:text-emerald-200 uppercase tracking-wider mb-1">
+                        Responsável pelo Fechamento
+                      </label>
+                      <input
+                        type="text"
+                        value={actionItemForm.concluidoPor || user?.name || actionItemForm.quem}
+                        onChange={(e) => setActionItemForm({ ...actionItemForm, concluidoPor: e.target.value })}
+                        className="w-full bg-white dark:bg-slate-800 border border-emerald-300 dark:border-emerald-700 px-3 py-1.5 text-xs font-semibold rounded-lg focus:outline-hidden dark:text-slate-100"
+                        placeholder="Nome do homologador"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-bold text-emerald-900 dark:text-emerald-200 uppercase tracking-wider mb-1">
+                      Parecer Técnico / Comentário de Conclusão
+                    </label>
+                    <textarea
+                      rows={2}
+                      value={actionItemForm.comentarioConclusao}
+                      onChange={(e) => setActionItemForm({ ...actionItemForm, comentarioConclusao: e.target.value })}
+                      placeholder="Descreva a eficácia da ação, superação do desvio e parecer final..."
+                      className="w-full bg-white dark:bg-slate-800 border border-emerald-300 dark:border-emerald-700 p-2.5 text-xs font-medium rounded-lg focus:outline-hidden dark:text-slate-100"
+                    />
+                  </div>
+
+                  {/* Evidências anexadas */}
+                  <div className="space-y-2 pt-1 border-t border-emerald-200 dark:border-emerald-900/50">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-bold text-emerald-900 dark:text-emerald-200">
+                        Evidências ({actionItemForm.evidencias?.length || 0})
+                      </span>
+                      <label className="inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition-colors cursor-pointer shadow-2xs">
+                        <Upload className="w-3 h-3" />
+                        <span>Anexar Arquivo</span>
+                        <input
+                          type="file"
+                          className="hidden"
+                          accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.txt"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              handleProcessFileUpload(file, (newEv) => {
+                                setActionItemForm(prev => ({
+                                  ...prev,
+                                  evidencias: [...(prev.evidencias || []), newEv]
+                                }));
+                              });
+                            }
+                            e.target.value = '';
+                          }}
+                        />
+                      </label>
+                    </div>
+
+                    {actionItemForm.evidencias && actionItemForm.evidencias.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5">
+                        {actionItemForm.evidencias.map((ev) => (
+                          <div
+                            key={ev.id}
+                            className="inline-flex items-center gap-1.5 px-2 py-1 bg-white dark:bg-slate-900 text-emerald-800 dark:text-emerald-300 rounded-md border border-emerald-200 dark:border-emerald-800 text-[10px]"
+                          >
+                            <Paperclip className="w-3 h-3 text-emerald-600 shrink-0" />
+                            <span className="max-w-[120px] truncate">{ev.nome}</span>
+                            <button
+                              type="button"
+                              onClick={() => setActionItemForm(prev => ({
+                                ...prev,
+                                evidencias: (prev.evidencias || []).filter(e => e.id !== ev.id)
+                              }))}
+                              className="text-slate-400 hover:text-rose-500 font-bold ml-1 cursor-pointer"
+                            >
+                              &times;
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
 
               {/* Actions Footer */}
               <div className="flex justify-end gap-2 pt-4 border-t border-slate-150 dark:border-slate-800">
@@ -3235,6 +3947,21 @@ export const PlanosAcaoComponent: React.FC<PlanosAcaoProps> = ({
                             )}
                             {act.como && (
                               <p className="text-[10px] text-slate-600"><span className="font-semibold">Como:</span> {act.como}</p>
+                            )}
+                            {act.status === 'Concluído' && (
+                              <div className="mt-1 pt-1 border-t border-slate-200 text-[9px] text-slate-700 space-y-0.5">
+                                <span className="font-bold text-emerald-800">
+                                  ✓ Concluído {act.concluidoEm ? `em ${formatDateBR(act.concluidoEm)}` : ''} {act.concluidoPor ? `(${act.concluidoPor})` : ''}
+                                </span>
+                                {act.comentarioConclusao && (
+                                  <p className="italic text-slate-600">"{act.comentarioConclusao}"</p>
+                                )}
+                                {act.evidencias && act.evidencias.length > 0 && (
+                                  <p className="text-[8.5px] text-slate-500 font-medium">
+                                    <strong className="text-slate-700">Evidências:</strong> {act.evidencias.map(e => e.nome).join(', ')}
+                                  </p>
+                                )}
+                              </div>
                             )}
                           </td>
                           <td className="p-2 border border-slate-300 text-slate-700">{act.onde || '—'}</td>
@@ -3520,6 +4247,681 @@ export const PlanosAcaoComponent: React.FC<PlanosAcaoProps> = ({
                 type="button"
                 onClick={() => setViewingHistoryAction(null)}
                 className="px-4 py-2 bg-[#0B3A63] hover:bg-blue-900 text-white rounded-xl text-xs font-bold transition-colors cursor-pointer"
+              >
+                Fechar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: CONCLUIR AÇÃO 5W2H COM PARECER E EVIDÊNCIAS (ISO 10.2) */}
+      {actionToConclude && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl w-full max-w-2xl max-h-[92vh] overflow-y-auto shadow-2xl border border-slate-100 dark:border-slate-800 animate-scale-in">
+            {/* Header */}
+            <div className="px-6 py-4 bg-emerald-700 text-white flex items-center justify-between sticky top-0 z-10 shadow-xs">
+              <div className="flex items-center gap-2.5">
+                <CheckCircle2 className="w-5 h-5 text-emerald-200" />
+                <div>
+                  <h3 className="text-sm font-extrabold leading-tight">
+                    Concluir Ação 5W2H #{actionToConclude.action.itemNumero || 1}
+                  </h3>
+                  <p className="text-[10px] text-emerald-100">
+                    Registro de Parecer de Eficácia & Evidências Objetivas (ISO 9001:2015 10.2)
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setActionToConclude(null)}
+                className="text-white/70 hover:text-white font-mono text-2xl leading-none cursor-pointer"
+              >
+                &times;
+              </button>
+            </div>
+
+            <form onSubmit={handleConfirmConclusaoAction} className="p-6 space-y-5">
+              {/* Resumo da Ação */}
+              <div className="p-3.5 bg-emerald-50/60 dark:bg-emerald-950/25 border border-emerald-200 dark:border-emerald-900/40 rounded-xl space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-emerald-800 dark:text-emerald-300">
+                    Plano {actionToConclude.plano.codigo} • Ação #{actionToConclude.action.itemNumero || 1}
+                  </span>
+                  <span className="text-[10px] bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-300 px-2 py-0.5 rounded font-bold">
+                    Setor: {actionToConclude.plano.setor}
+                  </span>
+                </div>
+                <p className="text-xs font-extrabold text-slate-800 dark:text-slate-100">
+                  {actionToConclude.action.oQue}
+                </p>
+                {actionToConclude.action.porQue && (
+                  <p className="text-[11px] text-slate-600 dark:text-slate-400">
+                    <span className="font-semibold">Por quê:</span> {actionToConclude.action.porQue}
+                  </p>
+                )}
+                <div className="flex items-center gap-3 text-[11px] text-slate-500 dark:text-slate-400 pt-1 border-t border-emerald-100 dark:border-emerald-900/40">
+                  <span>Executor Responsável: <strong className="text-slate-700 dark:text-slate-300">{actionToConclude.action.quem}</strong></span>
+                  <span>•</span>
+                  <span>Prazo Previsto: <strong className="font-mono text-slate-700 dark:text-slate-300">{formatDateBR(actionToConclude.action.quando)}</strong></span>
+                </div>
+              </div>
+
+              {/* Data & Responsável pelo Fechamento */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                    Data de Conclusão / Execução *
+                  </label>
+                  <input
+                    type="date"
+                    required
+                    value={conclusaoData}
+                    onChange={(e) => setConclusaoData(e.target.value)}
+                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3 py-2 text-xs font-semibold rounded-lg focus:outline-hidden dark:text-slate-100"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                    Responsável pelo Fechamento *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={conclusaoResponsavel}
+                    onChange={(e) => setConclusaoResponsavel(e.target.value)}
+                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3 py-2 text-xs font-semibold rounded-lg focus:outline-hidden dark:text-slate-100"
+                    placeholder="Nome do responsável pela homologação"
+                  />
+                </div>
+              </div>
+
+              {/* Parecer Técnico de Conclusão / Comentário */}
+              <div>
+                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                  Parecer Técnico / Comentário de Conclusão
+                </label>
+                <textarea
+                  rows={3}
+                  value={conclusaoComentario}
+                  onChange={(e) => setConclusaoComentario(e.target.value)}
+                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-3 text-xs font-medium rounded-lg focus:outline-hidden dark:text-slate-100"
+                  placeholder="Descreva detalhadamente como a ação foi executada, resultados obtidos, mitigação do problema e evidências de conformidade..."
+                />
+                <span className="text-[10px] text-slate-400">
+                  Este parecer será registrado no histórico auditável e na folha impressa de controle do SGQ.
+                </span>
+              </div>
+
+              {/* Seção de Evidências Comprobatórias */}
+              <div className="space-y-3 pt-2 border-t border-slate-150 dark:border-slate-800">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div className="flex items-center gap-1.5">
+                    <Paperclip className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                    <span className="text-xs font-bold text-slate-900 dark:text-slate-100">
+                      Evidências Objetivas Comprobatórias ({conclusaoEvidencias.length})
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <label className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/50 dark:hover:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 rounded-lg text-xs font-bold border border-emerald-200 dark:border-emerald-800 transition-colors cursor-pointer">
+                      <Upload className="w-3.5 h-3.5" />
+                      <span>Anexar Arquivo</span>
+                      <input
+                        type="file"
+                        className="hidden"
+                        accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.txt"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            handleProcessFileUpload(file, (newEv) => {
+                              setConclusaoEvidencias(prev => [...prev, newEv]);
+                            });
+                          }
+                          e.target.value = '';
+                        }}
+                      />
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setIsAddingLinkConclusao(!isAddingLinkConclusao)}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg text-xs font-bold transition-colors cursor-pointer"
+                    >
+                      <ExternalLink className="w-3.5 h-3.5" />
+                      <span>Adicionar Link</span>
+                    </button>
+                  </div>
+                </div>
+
+                {evidenceUploadError && (
+                  <div className="p-2.5 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 rounded-lg text-xs text-rose-700 dark:text-rose-300 flex items-center justify-between">
+                    <span>{evidenceUploadError}</span>
+                    <button type="button" onClick={() => setEvidenceUploadError(null)} className="text-rose-500 font-bold">&times;</button>
+                  </div>
+                )}
+
+                {/* Formulário para Inserir Link */}
+                {isAddingLinkConclusao && (
+                  <div className="p-3 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl space-y-2.5 animate-fadeIn">
+                    <p className="text-[11px] font-bold text-slate-700 dark:text-slate-300">
+                      Vincular Link Externo (Google Drive, Pasta Compartilhada, ERP ou Chamado)
+                    </p>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                      <input
+                        type="text"
+                        value={linkConclusaoNome}
+                        onChange={(e) => setLinkConclusaoNome(e.target.value)}
+                        placeholder="Nome descritivo (ex: Foto da máquina ajustada, Relatório PDF)"
+                        className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3 py-1.5 text-xs rounded-lg dark:text-slate-100"
+                      />
+                      <input
+                        type="url"
+                        value={linkConclusaoUrl}
+                        onChange={(e) => setLinkConclusaoUrl(e.target.value)}
+                        placeholder="https://drive.google.com/..."
+                        className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3 py-1.5 text-xs rounded-lg dark:text-slate-100"
+                      />
+                    </div>
+                    <div className="flex justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setIsAddingLinkConclusao(false)}
+                        className="px-3 py-1 text-xs text-slate-500 hover:text-slate-700 font-semibold cursor-pointer"
+                      >
+                        Cancelar
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleAddLinkInConclusao}
+                        disabled={!linkConclusaoUrl.trim()}
+                        className="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold disabled:opacity-50 cursor-pointer"
+                      >
+                        Salvar Link
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Lista de Evidências Anexadas */}
+                {conclusaoEvidencias.length > 0 ? (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {conclusaoEvidencias.map((ev) => (
+                      <div
+                        key={ev.id}
+                        className="p-2.5 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl flex items-center justify-between gap-2 shadow-2xs"
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          {ev.tipo === 'imagem' ? (
+                            <Image className="w-4 h-4 text-emerald-600 shrink-0" />
+                          ) : ev.tipo === 'link' ? (
+                            <ExternalLink className="w-4 h-4 text-blue-600 shrink-0" />
+                          ) : (
+                            <FileText className="w-4 h-4 text-amber-600 shrink-0" />
+                          )}
+                          <div className="min-w-0">
+                            <p className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate" title={ev.nome}>
+                              {ev.nome}
+                            </p>
+                            <p className="text-[10px] text-slate-400">
+                              {ev.tamanho ? formatFileSize(ev.tamanho) : 'Link'} • {new Date(ev.adicionadoEm).toLocaleDateString('pt-BR')}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-1 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => setPreviewEvidence(ev)}
+                            className="p-1 hover:bg-slate-200 dark:hover:bg-slate-700 rounded text-slate-500 hover:text-emerald-600 cursor-pointer transition-colors"
+                            title="Visualizar evidência"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveEvidenceFromConclusao(ev.id)}
+                            className="p-1 hover:bg-slate-200 dark:hover:bg-slate-700 rounded text-slate-400 hover:text-rose-500 cursor-pointer transition-colors"
+                            title="Remover evidência"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="p-4 border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-xl text-center text-xs text-slate-400 space-y-1">
+                    <p className="font-semibold text-slate-500 dark:text-slate-400">
+                      Nenhuma evidência anexada ainda
+                    </p>
+                    <p className="text-[10px]">
+                      Você pode anexar fotos de antes/depois, relatórios de medição, POPs revisados ou links de armazenamento.
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {/* Footer */}
+              <div className="flex items-center justify-end gap-2 pt-4 border-t border-slate-150 dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setActionToConclude(null)}
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-xs flex items-center gap-1.5 transition-all cursor-pointer"
+                >
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>Confirmar e Concluir Ação</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: COMENTÁRIOS E ACOMPANHAMENTO DA AÇÃO */}
+      {actionCommentsModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl w-full max-w-2xl max-h-[92vh] flex flex-col shadow-2xl border border-slate-100 dark:border-slate-800 animate-scale-in">
+            {/* Header */}
+            <div className="px-6 py-4 bg-[#0B3A63] text-white flex items-center justify-between shrink-0 shadow-xs">
+              <div className="flex items-center gap-2.5">
+                <MessageSquare className="w-5 h-5 text-blue-300" />
+                <div>
+                  <h3 className="text-sm font-extrabold leading-tight">
+                    Acompanhamento • Ação #{actionCommentsModal.action.itemNumero || 1}
+                  </h3>
+                  <p className="text-[10px] text-blue-200">
+                    Plano {actionCommentsModal.plano.codigo} — Registro contínuo de comentários e evidências
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setActionCommentsModal(null)}
+                className="text-white/70 hover:text-white font-mono text-2xl leading-none cursor-pointer"
+              >
+                &times;
+              </button>
+            </div>
+
+            {/* Sub-header com resumo da ação */}
+            <div className="px-6 py-3 bg-slate-50 dark:bg-slate-800/60 border-b border-slate-150 dark:border-slate-800 shrink-0">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <p className="text-xs font-bold text-slate-800 dark:text-slate-100">
+                  {actionCommentsModal.action.oQue}
+                </p>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-semibold text-slate-500 dark:text-slate-400">
+                    Resp: <strong className="text-slate-700 dark:text-slate-300">{actionCommentsModal.action.quem}</strong>
+                  </span>
+                  <span>•</span>
+                  <span className="text-[10px] font-mono text-slate-500 dark:text-slate-400">
+                    Prazo: <strong>{formatDateBR(actionCommentsModal.action.quando)}</strong>
+                  </span>
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                    actionCommentsModal.action.status === 'Concluído' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300' :
+                    actionCommentsModal.action.status === 'Em Andamento' ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300' :
+                    actionCommentsModal.action.status === 'Cancelada' ? 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300' :
+                    'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300'
+                  }`}>
+                    {actionCommentsModal.action.status}
+                  </span>
+                </div>
+              </div>
+
+              {/* Tabs */}
+              <div className="flex items-center gap-2 mt-3 pt-2 border-t border-slate-200 dark:border-slate-700">
+                <button
+                  type="button"
+                  onClick={() => setCommentsModalTab('comentarios')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer ${
+                    commentsModalTab === 'comentarios'
+                      ? 'bg-blue-600 text-white shadow-2xs'
+                      : 'text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-750'
+                  }`}
+                >
+                  <MessageSquare className="w-3.5 h-3.5" />
+                  <span>Comentários ({actionCommentsModal.action.comentarios?.length || 0})</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCommentsModalTab('evidencias')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer ${
+                    commentsModalTab === 'evidencias'
+                      ? 'bg-blue-600 text-white shadow-2xs'
+                      : 'text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-750'
+                  }`}
+                >
+                  <Paperclip className="w-3.5 h-3.5" />
+                  <span>Evidências ({actionCommentsModal.action.evidencias?.length || 0})</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Conteúdo rolável */}
+            <div className="p-6 overflow-y-auto flex-1 space-y-4">
+              {commentsModalTab === 'comentarios' ? (
+                <div className="space-y-4">
+                  {/* Lista de Comentários */}
+                  {actionCommentsModal.action.comentarios && actionCommentsModal.action.comentarios.length > 0 ? (
+                    <div className="space-y-3">
+                      {actionCommentsModal.action.comentarios.map((c) => (
+                        <div
+                          key={c.id}
+                          className="p-3.5 bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-750 rounded-xl space-y-1 text-xs"
+                        >
+                          <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400">
+                            <span className="font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                              <User className="w-3 h-3 text-blue-600" />
+                              {c.criadoPor}
+                              {c.cargoOuSetor && (
+                                <span className="font-normal text-slate-400 text-[10px]">({c.cargoOuSetor})</span>
+                              )}
+                            </span>
+                            <span className="font-mono text-[10px] text-slate-400">
+                              {new Date(c.criadoEm).toLocaleString('pt-BR')}
+                            </span>
+                          </div>
+                          <p className="text-slate-700 dark:text-slate-300 leading-relaxed font-medium whitespace-pre-wrap pl-3 border-l-2 border-blue-400 dark:border-blue-600">
+                            {c.texto}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="p-6 border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-xl text-center space-y-2">
+                      <MessageSquare className="w-8 h-8 text-slate-300 dark:text-slate-600 mx-auto" />
+                      <p className="text-xs font-bold text-slate-600 dark:text-slate-400">
+                        Nenhum comentário registrado nesta ação
+                      </p>
+                      <p className="text-[11px] text-slate-400 max-w-sm mx-auto">
+                        Registre apontamentos de progresso, orientações técnicas ou validações do SGQ no campo abaixo.
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Input de Novo Comentário */}
+                  <div className="pt-2 border-t border-slate-150 dark:border-slate-850 space-y-2">
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                      Adicionar Comentário / Nota de Acompanhamento
+                    </label>
+                    <textarea
+                      rows={3}
+                      value={newCommentText}
+                      onChange={(e) => setNewCommentText(e.target.value)}
+                      placeholder="Escreva sua observação, retorno do executor ou nota de auditoria..."
+                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-3 text-xs font-medium rounded-xl focus:outline-hidden dark:text-slate-100"
+                    />
+                    <div className="flex justify-end">
+                      <button
+                        type="button"
+                        onClick={handleAddActionComment}
+                        disabled={!newCommentText.trim()}
+                        className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors disabled:opacity-50 cursor-pointer shadow-xs"
+                      >
+                        <Send className="w-3.5 h-3.5" />
+                        <span>Publicar Comentário</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {/* Controles de upload e link */}
+                  <div className="flex items-center justify-between flex-wrap gap-2 p-3 bg-slate-50 dark:bg-slate-800/40 rounded-xl border border-slate-200 dark:border-slate-700">
+                    <div className="text-xs">
+                      <p className="font-bold text-slate-800 dark:text-slate-200">Adicionar Evidência</p>
+                      <p className="text-[10px] text-slate-400">Fotos, relatórios PDF, planilhas ou links externos (máx. 5MB)</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <label className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/50 dark:hover:bg-blue-900/60 text-blue-700 dark:text-blue-300 rounded-lg text-xs font-bold border border-blue-200 dark:border-blue-800 transition-colors cursor-pointer">
+                        <Upload className="w-3.5 h-3.5" />
+                        <span>Upload Arquivo</span>
+                        <input
+                          type="file"
+                          className="hidden"
+                          accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.txt"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              handleProcessFileUpload(file, (newEv) => {
+                                handleAddEvidenceInCommentsModal(newEv);
+                              });
+                            }
+                            e.target.value = '';
+                          }}
+                        />
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => setIsAddingLinkInComments(!isAddingLinkInComments)}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-200 hover:bg-slate-300 dark:bg-slate-750 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg text-xs font-bold transition-colors cursor-pointer"
+                      >
+                        <ExternalLink className="w-3.5 h-3.5" />
+                        <span>Link Externo</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {evidenceUploadError && (
+                    <div className="p-2.5 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 rounded-lg text-xs text-rose-700 dark:text-rose-300 flex items-center justify-between">
+                      <span>{evidenceUploadError}</span>
+                      <button type="button" onClick={() => setEvidenceUploadError(null)} className="text-rose-500 font-bold">&times;</button>
+                    </div>
+                  )}
+
+                  {/* Formulário de Link no modal de comentários */}
+                  {isAddingLinkInComments && (
+                    <div className="p-3 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl space-y-2 animate-fadeIn">
+                      <p className="text-[11px] font-bold text-slate-700 dark:text-slate-300">
+                        Vincular Link de Armazenamento ou Documento
+                      </p>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                        <input
+                          type="text"
+                          value={linkCommentNome}
+                          onChange={(e) => setLinkCommentNome(e.target.value)}
+                          placeholder="Nome descritivo da evidência"
+                          className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3 py-1.5 text-xs rounded-lg dark:text-slate-100"
+                        />
+                        <input
+                          type="url"
+                          value={linkCommentUrl}
+                          onChange={(e) => setLinkCommentUrl(e.target.value)}
+                          placeholder="https://..."
+                          className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3 py-1.5 text-xs rounded-lg dark:text-slate-100"
+                        />
+                      </div>
+                      <div className="flex justify-end gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setIsAddingLinkInComments(false)}
+                          className="px-3 py-1 text-xs text-slate-500 hover:text-slate-700 font-semibold cursor-pointer"
+                        >
+                          Cancelar
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleAddLinkInComments}
+                          disabled={!linkCommentUrl.trim()}
+                          className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold disabled:opacity-50 cursor-pointer"
+                        >
+                          Salvar Link
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Lista de Evidências */}
+                  {actionCommentsModal.action.evidencias && actionCommentsModal.action.evidencias.length > 0 ? (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                      {actionCommentsModal.action.evidencias.map((ev) => (
+                        <div
+                          key={ev.id}
+                          className="p-3 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl flex items-center justify-between gap-2 shadow-2xs"
+                        >
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            {ev.tipo === 'imagem' ? (
+                              <Image className="w-5 h-5 text-emerald-600 shrink-0" />
+                            ) : ev.tipo === 'link' ? (
+                              <ExternalLink className="w-5 h-5 text-blue-600 shrink-0" />
+                            ) : (
+                              <FileText className="w-5 h-5 text-amber-600 shrink-0" />
+                            )}
+                            <div className="min-w-0">
+                              <p className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate" title={ev.nome}>
+                                {ev.nome}
+                              </p>
+                              <p className="text-[10px] text-slate-400">
+                                {ev.tamanho ? formatFileSize(ev.tamanho) : 'Link'} • {new Date(ev.adicionadoEm).toLocaleDateString('pt-BR')}
+                              </p>
+                              <p className="text-[9px] text-slate-400 truncate">
+                                Por: {ev.adicionadoPor}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-1 shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => setPreviewEvidence(ev)}
+                              className="p-1.5 hover:bg-slate-200 dark:hover:bg-slate-700 rounded text-slate-500 hover:text-blue-600 cursor-pointer transition-colors"
+                              title="Visualizar evidência"
+                            >
+                              <Eye className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveEvidenceFromAction(ev.id)}
+                              className="p-1.5 hover:bg-slate-200 dark:hover:bg-slate-700 rounded text-slate-400 hover:text-rose-500 cursor-pointer transition-colors"
+                              title="Remover evidência"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="p-6 border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-xl text-center space-y-1">
+                      <Paperclip className="w-8 h-8 text-slate-300 dark:text-slate-600 mx-auto" />
+                      <p className="text-xs font-bold text-slate-600 dark:text-slate-400">
+                        Nenhuma evidência vinculada a esta ação
+                      </p>
+                      <p className="text-[10px] text-slate-400">
+                        Faça o upload de comprovantes ou anexe links usando os botões acima.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="px-6 py-3 bg-slate-50 dark:bg-slate-800/50 border-t border-slate-150 dark:border-slate-800 flex justify-end shrink-0">
+              <button
+                type="button"
+                onClick={() => setActionCommentsModal(null)}
+                className="px-4 py-2 bg-[#0B3A63] hover:bg-blue-900 text-white rounded-xl text-xs font-bold transition-colors cursor-pointer"
+              >
+                Concluir Visualização
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: PREVIEW DE EVIDÊNCIA / ANEXO */}
+      {previewEvidence && (
+        <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl w-full max-w-xl max-h-[90vh] flex flex-col shadow-2xl border border-slate-100 dark:border-slate-800 animate-scale-in overflow-hidden">
+            {/* Header */}
+            <div className="px-6 py-4 bg-[#0B3A63] text-white flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-2">
+                <Paperclip className="w-5 h-5 text-emerald-300" />
+                <div className="min-w-0 max-w-[400px]">
+                  <h3 className="text-sm font-extrabold truncate" title={previewEvidence.nome}>
+                    {previewEvidence.nome}
+                  </h3>
+                  <p className="text-[10px] text-blue-200">
+                    Adicionado por {previewEvidence.adicionadoPor} em {new Date(previewEvidence.adicionadoEm).toLocaleDateString('pt-BR')}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPreviewEvidence(null)}
+                className="text-white/70 hover:text-white font-mono text-2xl leading-none cursor-pointer"
+              >
+                &times;
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="p-6 overflow-y-auto flex-1 flex flex-col items-center justify-center bg-slate-50 dark:bg-slate-950/50">
+              {previewEvidence.tipo === 'imagem' || previewEvidence.url.startsWith('data:image/') ? (
+                <div className="max-w-full max-h-[60vh] overflow-hidden rounded-xl border border-slate-200 dark:border-slate-800 shadow-md">
+                  <img
+                    src={previewEvidence.url}
+                    alt={previewEvidence.nome}
+                    className="max-h-[60vh] w-auto object-contain mx-auto"
+                  />
+                </div>
+              ) : previewEvidence.tipo === 'link' ? (
+                <div className="p-8 text-center space-y-4 max-w-md">
+                  <div className="w-14 h-14 rounded-2xl bg-blue-100 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 flex items-center justify-center mx-auto">
+                    <ExternalLink className="w-7 h-7" />
+                  </div>
+                  <div className="space-y-1">
+                    <h4 className="text-sm font-bold text-slate-900 dark:text-white">Link Externo Vinculado</h4>
+                    <p className="text-xs text-slate-500 break-all font-mono">
+                      {previewEvidence.url}
+                    </p>
+                  </div>
+                  <a
+                    href={previewEvidence.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs"
+                  >
+                    <span>Abrir Link em Nova Aba</span>
+                    <ExternalLink className="w-3.5 h-3.5" />
+                  </a>
+                </div>
+              ) : (
+                <div className="p-8 text-center space-y-4 max-w-md">
+                  <div className="w-14 h-14 rounded-2xl bg-amber-100 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 flex items-center justify-center mx-auto">
+                    <FileText className="w-7 h-7" />
+                  </div>
+                  <div className="space-y-1">
+                    <h4 className="text-sm font-bold text-slate-900 dark:text-white">{previewEvidence.nome}</h4>
+                    <p className="text-xs text-slate-500">
+                      Arquivo anexado ({formatFileSize(previewEvidence.tamanho)})
+                    </p>
+                  </div>
+                  <a
+                    href={previewEvidence.url}
+                    download={previewEvidence.nome}
+                    className="inline-flex items-center gap-2 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs"
+                  >
+                    <Download className="w-4 h-4" />
+                    <span>Baixar Arquivo</span>
+                  </a>
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="px-6 py-3 bg-white dark:bg-slate-900 border-t border-slate-150 dark:border-slate-800 flex justify-between items-center shrink-0">
+              <span className="text-[11px] text-slate-400">
+                {previewEvidence.tamanho ? formatFileSize(previewEvidence.tamanho) : 'Link Externo'}
+              </span>
+              <button
+                type="button"
+                onClick={() => setPreviewEvidence(null)}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-xl text-xs font-bold transition-colors cursor-pointer"
               >
                 Fechar
               </button>

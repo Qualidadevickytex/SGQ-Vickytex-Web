@@ -429,7 +429,38 @@ export const INITIAL_PLANOS_ACAO: PlanoAcao[] = [
         quem: 'Jorge Dias (Estamparia)',
         como: 'Instalação física com suporte regulável e fiação protegida contra calor.',
         quantoCusta: 1200.00,
-        status: 'Concluído'
+        status: 'Concluído',
+        concluidoEm: '2026-07-19',
+        concluidoPor: 'Jorge Dias (Estamparia)',
+        comentarioConclusao: 'Sensores instalados com sucesso nos carrosséis 1 e 2. Medição em tempo real funcionando perfeitamente.',
+        evidencias: [
+          {
+            id: 'ev-01',
+            nome: 'relatorio_instalacao_sensores.pdf',
+            url: 'https://docs.google.com/document/d/1vickytex-sensores-evidencia',
+            tipo: 'documento',
+            tamanho: 245000,
+            adicionadoEm: '2026-07-19T14:30:00Z',
+            adicionadoPor: 'Jorge Dias (Estamparia)',
+            descricao: 'Ordem de serviço e foto dos sensores instalados na estufa.'
+          }
+        ],
+        comentarios: [
+          {
+            id: 'c-01',
+            texto: 'Sensores recebidos pelo almoxarifado em 18/07 e encaminhados para a manutenção elétrica.',
+            criadoEm: '2026-07-18T10:15:00Z',
+            criadoPor: 'Almoxarifado Vickytex',
+            cargoOuSetor: 'Almoxarifado'
+          },
+          {
+            id: 'c-02',
+            texto: 'Montagem finalizada e testada no turno matutino sem interferência eletromagnética.',
+            criadoEm: '2026-07-19T14:32:00Z',
+            criadoPor: 'Jorge Dias (Estamparia)',
+            cargoOuSetor: 'Estamparia'
+          }
+        ]
       },
       {
         id: 'pa-001-a2',
@@ -441,7 +472,16 @@ export const INITIAL_PLANOS_ACAO: PlanoAcao[] = [
         quem: 'Mariana Silva (Qualidade)',
         como: 'Comparação de curva de aquecimento com sensor padrão e ajuste de offset.',
         quantoCusta: 450.00,
-        status: 'Em Andamento'
+        status: 'Em Andamento',
+        comentarios: [
+          {
+            id: 'c-03',
+            texto: 'Termômetro padrão encaminhado para o laboratório metrológico parceiro.',
+            criadoEm: '2026-07-28T09:00:00Z',
+            criadoPor: 'Mariana Silva (Qualidade)',
+            cargoOuSetor: 'Qualidade'
+          }
+        ]
       },
       {
         id: 'pa-001-a3',
