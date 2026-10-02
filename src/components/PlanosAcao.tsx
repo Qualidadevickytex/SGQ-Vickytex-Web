@@ -240,6 +240,7 @@ export const PlanosAcaoComponent: React.FC<PlanosAcaoProps> = ({
   const [isAddingLinkInComments, setIsAddingLinkInComments] = useState(false);
   const [linkCommentNome, setLinkCommentNome] = useState('');
   const [linkCommentUrl, setLinkCommentUrl] = useState('');
+  const [confirmDeleteCommentId, setConfirmDeleteCommentId] = useState<string | null>(null);
 
   // Visualizador de Evidência
   const [previewEvidence, setPreviewEvidence] = useState<EvidenciaAcao | null>(null);
@@ -1314,6 +1315,75 @@ export const PlanosAcaoComponent: React.FC<PlanosAcaoProps> = ({
       action: freshAction
     });
     setNewCommentText('');
+  };
+
+  // Excluir comentário de uma ação
+  const handleDeleteActionComment = (commentId: string) => {
+    if (!actionCommentsModal) return;
+    const { plano, action } = actionCommentsModal;
+
+    const currentActions = getPlanActions(plano);
+    const targetAction = currentActions.find(a => a.id === action.id);
+    const commentToDelete = (targetAction?.comentarios || []).find(c => c.id === commentId);
+    const updatedComments = (targetAction?.comentarios || []).filter(c => c.id !== commentId);
+
+    // Se o comentário excluído for o mesmo do parecer de conclusão, limpa também o comentarioConclusao
+    const isConclusionComment = Boolean(
+      commentToDelete && 
+      targetAction?.comentarioConclusao && 
+      (commentToDelete.texto.includes(targetAction.comentarioConclusao) || 
+       targetAction.comentarioConclusao.includes(commentToDelete.texto.replace(/^\[Conclusão da Ação\]\s*/, '')))
+    );
+
+    const updatedActions = currentActions.map(a => a.id === action.id ? {
+      ...a,
+      comentarios: updatedComments,
+      comentarioConclusao: isConclusionComment ? '' : a.comentarioConclusao
+    } : a);
+
+    applyUpdatedActionsToPlano(
+      plano,
+      updatedActions,
+      `Comentário excluído da ação #${action.itemNumero} do plano ${plano.codigo}.`
+    );
+
+    const freshAction = updatedActions.find(a => a.id === action.id) || {
+      ...action,
+      comentarios: updatedComments,
+      comentarioConclusao: isConclusionComment ? '' : action.comentarioConclusao
+    };
+
+    setActionCommentsModal({
+      plano: { ...plano, acoes: updatedActions },
+      action: freshAction
+    });
+  };
+
+  // Excluir comentário da ação enquanto está aberta no modal de edição
+  const handleDeleteCommentFromEditingAction = (commentId: string) => {
+    if (!editingActionItem || !actionItemTargetPlanoId) return;
+    const plano = planos.find(p => p.id === actionItemTargetPlanoId);
+    if (!plano) return;
+
+    const currentActions = getPlanActions(plano);
+    const updatedComments = (editingActionItem.comentarios || []).filter(c => c.id !== commentId);
+    
+    const updatedEditingAction: ItemAcao5W2H = {
+      ...editingActionItem,
+      comentarios: updatedComments
+    };
+    setEditingActionItem(updatedEditingAction);
+
+    const updatedActions = currentActions.map(a => a.id === editingActionItem.id ? {
+      ...a,
+      comentarios: updatedComments
+    } : a);
+
+    applyUpdatedActionsToPlano(
+      plano,
+      updatedActions,
+      `Comentário excluído da ação #${editingActionItem.itemNumero || 1} do plano ${plano.codigo}.`
+    );
   };
 
   // Adicionar evidência avulsa pelo modal de comentários/acompanhamento
@@ -3727,6 +3797,75 @@ export const PlanosAcaoComponent: React.FC<PlanosAcaoProps> = ({
                 </div>
               )}
 
+              {/* HISTÓRICO DE COMENTÁRIOS DA AÇÃO COM OPÇÃO DE EXCLUSÃO */}
+              {editingActionItem && editingActionItem.comentarios && editingActionItem.comentarios.length > 0 && (
+                <div className="bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800 rounded-xl p-3.5 space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5 text-xs">
+                      <MessageSquare className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+                      Comentários Registrados ({editingActionItem.comentarios.length})
+                    </span>
+                    <span className="text-[10px] text-slate-400">Exclusão e gerenciamento</span>
+                  </div>
+                  <div className="space-y-2 max-h-44 overflow-y-auto pr-1">
+                    {editingActionItem.comentarios.map((c) => (
+                      <div
+                        key={c.id}
+                        className="p-2.5 bg-white dark:bg-slate-850 border border-slate-200 dark:border-slate-700/80 rounded-lg text-xs space-y-1"
+                      >
+                        <div className="flex items-center justify-between text-[10px] text-slate-500 dark:text-slate-400">
+                          <span className="font-bold text-slate-700 dark:text-slate-200 truncate flex items-center gap-1">
+                            <User className="w-3 h-3 text-blue-500 shrink-0" />
+                            {c.criadoPor}
+                            {c.cargoOuSetor && <span className="font-normal text-slate-400">({c.cargoOuSetor})</span>}
+                          </span>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <span className="font-mono text-[9px] text-slate-400">
+                              {new Date(c.criadoEm).toLocaleString('pt-BR')}
+                            </span>
+                            {confirmDeleteCommentId === c.id ? (
+                              <div className="flex items-center gap-1.5 bg-rose-50 dark:bg-rose-950/60 px-1.5 py-0.5 rounded border border-rose-200 dark:border-rose-900 text-[10px]">
+                                <span className="font-bold text-rose-600 dark:text-rose-400 text-[9px]">Excluir?</span>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    handleDeleteCommentFromEditingAction(c.id);
+                                    setConfirmDeleteCommentId(null);
+                                  }}
+                                  className="font-extrabold text-rose-700 dark:text-rose-300 hover:underline cursor-pointer text-[10px]"
+                                  title="Confirmar exclusão deste comentário"
+                                >
+                                  Sim
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setConfirmDeleteCommentId(null)}
+                                  className="text-slate-500 hover:text-slate-700 dark:text-slate-400 cursor-pointer font-medium text-[10px]"
+                                >
+                                  Não
+                                </button>
+                              </div>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => setConfirmDeleteCommentId(c.id)}
+                                className="p-1 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded text-slate-400 hover:text-rose-600 transition-colors cursor-pointer"
+                                title="Excluir este comentário"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                        <p className="text-slate-700 dark:text-slate-300 leading-relaxed font-medium pl-2.5 border-l-2 border-blue-400 dark:border-blue-600 text-[11px] whitespace-pre-wrap">
+                          {c.texto}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* Actions Footer */}
               <div className="flex justify-end gap-2 pt-4 border-t border-slate-150 dark:border-slate-800">
                 <button
@@ -4613,17 +4752,51 @@ export const PlanosAcaoComponent: React.FC<PlanosAcaoProps> = ({
                           key={c.id}
                           className="p-3.5 bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-750 rounded-xl space-y-1 text-xs"
                         >
-                          <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400">
-                            <span className="font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
-                              <User className="w-3 h-3 text-blue-600" />
-                              {c.criadoPor}
+                          <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 gap-2">
+                            <span className="font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5 truncate">
+                              <User className="w-3 h-3 text-blue-600 shrink-0" />
+                              <span className="truncate">{c.criadoPor}</span>
                               {c.cargoOuSetor && (
-                                <span className="font-normal text-slate-400 text-[10px]">({c.cargoOuSetor})</span>
+                                <span className="font-normal text-slate-400 text-[10px] shrink-0">({c.cargoOuSetor})</span>
                               )}
                             </span>
-                            <span className="font-mono text-[10px] text-slate-400">
-                              {new Date(c.criadoEm).toLocaleString('pt-BR')}
-                            </span>
+                            <div className="flex items-center gap-2 shrink-0">
+                              <span className="font-mono text-[10px] text-slate-400">
+                                {new Date(c.criadoEm).toLocaleString('pt-BR')}
+                              </span>
+                              {confirmDeleteCommentId === c.id ? (
+                                <div className="flex items-center gap-1.5 bg-rose-50 dark:bg-rose-950/60 px-2 py-0.5 rounded-lg border border-rose-200 dark:border-rose-900 animate-fadeIn">
+                                  <span className="text-[10px] font-bold text-rose-600 dark:text-rose-400">Excluir?</span>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      handleDeleteActionComment(c.id);
+                                      setConfirmDeleteCommentId(null);
+                                    }}
+                                    className="text-[10px] font-extrabold text-rose-700 dark:text-rose-300 hover:underline px-1 cursor-pointer"
+                                    title="Confirmar exclusão deste comentário"
+                                  >
+                                    Sim
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setConfirmDeleteCommentId(null)}
+                                    className="text-[10px] text-slate-500 hover:text-slate-700 dark:text-slate-400 px-1 cursor-pointer font-medium"
+                                  >
+                                    Não
+                                  </button>
+                                </div>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => setConfirmDeleteCommentId(c.id)}
+                                  className="p-1 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded text-slate-400 hover:text-rose-600 transition-colors cursor-pointer"
+                                  title="Excluir este comentário"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                            </div>
                           </div>
                           <p className="text-slate-700 dark:text-slate-300 leading-relaxed font-medium whitespace-pre-wrap pl-3 border-l-2 border-blue-400 dark:border-blue-600">
                             {c.texto}

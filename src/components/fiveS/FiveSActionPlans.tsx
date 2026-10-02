@@ -18,7 +18,8 @@ import {
   FolderOpen,
   MessageSquare,
   LayoutList,
-  LayoutGrid
+  LayoutGrid,
+  Trash2
 } from 'lucide-react';
 import { 
   Setor5S, 
@@ -147,6 +148,8 @@ export const FiveSActionPlans: React.FC<FiveSActionPlansProps> = ({
   // O usuário pode editar e salvar se for dos setores atrelados ou superusuário
   const hasAccessToFillEditingPlan = isPlanSectorTiedToUser(editingPlan);
 
+  const [confirmDeleteCommentIdx, setConfirmDeleteCommentIdx] = useState<number | null>(null);
+
   const handleOpenPlanModal = (plan: PlanoAcao5S) => {
     setEditingPlan(plan);
     setPlanDesc(plan.descricao);
@@ -156,6 +159,30 @@ export const FiveSActionPlans: React.FC<FiveSActionPlansProps> = ({
     setPlanConclusionDate(plan.dataConclusao || '');
     setCorrectionPhotos(plan.fotosCorrecao || []);
     setNewComment('');
+    setConfirmDeleteCommentIdx(null);
+  };
+
+  const handleDeleteComment = (idxToDelete: number) => {
+    if (!editingPlan) return;
+    const updatedComentarios = editingPlan.comentarios.filter((_, i) => i !== idxToDelete);
+    const updatedPlan: PlanoAcao5S = {
+      ...editingPlan,
+      comentarios: updatedComentarios,
+      historico: [
+        ...editingPlan.historico,
+        {
+          data: new Date().toISOString().split('T')[0],
+          usuario: currentUserName,
+          acao: "Exclusão de Comentário",
+          detalhes: "Comentário removido do histórico do plano de ação 5S."
+        }
+      ]
+    };
+    setEditingPlan(updatedPlan);
+    const updatedList = planos.map(p => p.id === editingPlan.id ? updatedPlan : p);
+    onUpdatePlanos(updatedList);
+    onAddLog('Excluiu Comentário', `Comentário excluído do plano de ação 5S #${editingPlan.id}`);
+    setConfirmDeleteCommentIdx(null);
   };
 
   const handleUploadCorrectionPhoto = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -875,11 +902,51 @@ export const FiveSActionPlans: React.FC<FiveSActionPlansProps> = ({
 
               {editingPlan.comentarios.length > 0 && (
                 <div className="space-y-2 pt-2 border-t border-slate-100 dark:border-slate-800">
-                  <span className="block text-[9px] uppercase font-bold text-slate-400">Histórico de Comentários</span>
-                  <div className="space-y-2 max-h-32 overflow-y-auto">
+                  <div className="flex items-center justify-between">
+                    <span className="block text-[9px] uppercase font-bold text-slate-400">
+                      Histórico de Comentários ({editingPlan.comentarios.length})
+                    </span>
+                  </div>
+                  <div className="space-y-2 max-h-40 overflow-y-auto pr-1">
                     {editingPlan.comentarios.map((cmt, cIdx) => (
-                      <div key={cIdx} className="bg-slate-50 dark:bg-slate-950/40 p-2 rounded-lg text-[11px] leading-relaxed text-slate-600 dark:text-slate-400">
-                        {cmt}
+                      <div 
+                        key={cIdx} 
+                        className="bg-slate-50 dark:bg-slate-950/40 p-2.5 rounded-lg text-[11px] leading-relaxed text-slate-600 dark:text-slate-400 flex items-start justify-between gap-2 border border-slate-100 dark:border-slate-800/80 group"
+                      >
+                        <span className="flex-1 whitespace-pre-wrap">{cmt}</span>
+                        {hasAccessToFillEditingPlan && (
+                          <div className="shrink-0 pt-0.5">
+                            {confirmDeleteCommentIdx === cIdx ? (
+                              <div className="flex items-center gap-1.5 bg-rose-50 dark:bg-rose-950/60 px-2 py-0.5 rounded-md border border-rose-200 dark:border-rose-900 animate-fadeIn text-[10px]">
+                                <span className="font-bold text-rose-600 dark:text-rose-400">Excluir?</span>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteComment(cIdx)}
+                                  className="font-extrabold text-rose-700 dark:text-rose-300 hover:underline cursor-pointer"
+                                  title="Confirmar exclusão deste comentário"
+                                >
+                                  Sim
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setConfirmDeleteCommentIdx(null)}
+                                  className="text-slate-500 hover:text-slate-700 dark:text-slate-400 cursor-pointer font-medium ml-1"
+                                >
+                                  Não
+                                </button>
+                              </div>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => setConfirmDeleteCommentIdx(cIdx)}
+                                className="p-1 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded text-slate-400 hover:text-rose-600 transition-colors cursor-pointer"
+                                title="Excluir este comentário"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
