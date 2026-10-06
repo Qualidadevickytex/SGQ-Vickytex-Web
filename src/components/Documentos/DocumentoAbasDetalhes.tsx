@@ -149,14 +149,22 @@ export const DocumentoAbasDetalhes: React.FC<DocumentoAbasDetalhesProps> = ({
     if (!activeFlow) return 0;
     switch (activeDoc.status) {
       case 'Rascunho': return 0;
-      case 'Elaboração': return 1;
-      case 'Revisão Técnica': return 2;
-      case 'Aprovação': return 3;
+      case 'Elaboração':
+      case 'Em Elaboração':
+        return 1;
+      case 'Revisão Técnica':
+      case 'Em Revisão':
+        return 2;
+      case 'Aprovação':
+      case 'Em Aprovação':
+        return 3;
       case 'Publicação': return 4;
       case 'Distribuição': return 5;
-      case 'Aceite': return 6;
-      case 'Nova Revisão': return 7;
-      case 'Obsoleto': return 8;
+      case 'Aceite':
+      case 'Homologado':
+        return 6;
+      case 'Nova Revisão': return 1;
+      case 'Obsoleto': return 7;
       default: return 0;
     }
   };
@@ -236,24 +244,38 @@ export const DocumentoAbasDetalhes: React.FC<DocumentoAbasDetalhesProps> = ({
       return null;
     }
 
-    // 1. Etapa de Elaboração: se não tiver assinatura do elaborador ou estiver em Rascunho/Elaboração
-    if (!activeDoc.assinaturaElaborador || activeDoc.status === 'Rascunho' || activeDoc.status === 'Elaboração' || activeDoc.status === 'Em Elaboração') {
+    // 1. Etapa de Elaboração: se o documento está em Rascunho / Elaboração
+    if (activeDoc.status === 'Rascunho' || activeDoc.status === 'Elaboração' || activeDoc.status === 'Em Elaboração') {
       return activeFlow.etapas.find(s => s.etapaNumero === 1 || s.perfilResponsavel === 'Elaborador') || activeFlow.etapas[0];
     }
 
-    // 2. Etapa de Revisão Técnica: se estiver em Revisão Técnica ou não tiver assinatura do revisor
-    if (!activeDoc.assinaturaRevisor || activeDoc.status === 'Revisão Técnica' || activeDoc.status === 'Em Revisão') {
-      return activeFlow.etapas.find(s => s.etapaNumero === 2 || s.perfilResponsavel === 'Supervisor') || activeFlow.etapas[1] || activeFlow.etapas[0];
+    // 2. Etapa de Revisão Técnica: se o documento está em Revisão Técnica / Em Revisão
+    if (activeDoc.status === 'Revisão Técnica' || activeDoc.status === 'Em Revisão') {
+      return activeFlow.etapas.find(s => s.etapaNumero === 2 || s.perfilResponsavel === 'Supervisor' || s.statusAlvo === 'Aprovação') || activeFlow.etapas[1] || activeFlow.etapas[0];
     }
 
-    // 3. Etapa de Aprovação / Qualidade: se estiver em Aprovação ou não tiver assinatura do aprovador
-    if (!activeDoc.assinaturaAprovador || activeDoc.status === 'Aprovação' || activeDoc.status === 'Em Aprovação') {
-      return activeFlow.etapas.find(s => s.etapaNumero === 3 || s.perfilResponsavel === 'Qualidade') || activeFlow.etapas[2] || activeFlow.etapas[1];
+    // 3. Etapa de Aprovação / Qualidade: se o documento está em Aprovação / Em Aprovação
+    if (activeDoc.status === 'Aprovação' || activeDoc.status === 'Em Aprovação') {
+      return activeFlow.etapas.find(s => s.etapaNumero === 3 || s.perfilResponsavel === 'Qualidade' || s.statusAlvo === 'Publicação' || s.statusAlvo === 'Homologado') || activeFlow.etapas[2] || activeFlow.etapas[1] || activeFlow.etapas[0];
     }
 
     // 4. Etapa de Gerência / Homologação: se estiver em Publicação e o fluxo tiver 4 ou mais etapas
-    if (activeDoc.status === 'Publicação' && activeFlow.etapas.length > 3) {
-      return activeFlow.etapas.find(s => s.etapaNumero === 4 || s.perfilResponsavel === 'Gerência' || s.perfilResponsavel === 'Diretoria') || activeFlow.etapas[3];
+    if (activeDoc.status === 'Publicação') {
+      if (activeFlow.etapas.length > 3) {
+        return activeFlow.etapas.find(s => s.etapaNumero === 4 || s.perfilResponsavel === 'Gerência' || s.perfilResponsavel === 'Diretoria' || s.statusAlvo === 'Homologado') || activeFlow.etapas[3];
+      }
+      return null;
+    }
+
+    // Fallback de retrocompatibilidade para outros status (ex: Nova Revisão) baseado nas assinaturas pendentes
+    if (!activeDoc.assinaturaElaborador) {
+      return activeFlow.etapas.find(s => s.etapaNumero === 1 || s.perfilResponsavel === 'Elaborador') || activeFlow.etapas[0];
+    }
+    if (!activeDoc.assinaturaRevisor) {
+      return activeFlow.etapas.find(s => s.etapaNumero === 2 || s.perfilResponsavel === 'Supervisor') || activeFlow.etapas[1] || activeFlow.etapas[0];
+    }
+    if (!activeDoc.assinaturaAprovador) {
+      return activeFlow.etapas.find(s => s.etapaNumero === 3 || s.perfilResponsavel === 'Qualidade') || activeFlow.etapas[2] || activeFlow.etapas[1];
     }
 
     return null;
@@ -283,21 +305,44 @@ export const DocumentoAbasDetalhes: React.FC<DocumentoAbasDetalhesProps> = ({
       updatedAt: new Date().toISOString()
     };
 
-    const targetPerfil = requiredPerfil || (getPendingStep()?.perfilResponsavel) || 'Elaborador';
+    const pendingStep = getPendingStep();
+    const stepNum = pendingStep?.etapaNumero;
     const signerName = currentUser?.name || currentUser?.email || 'Assinatura Eletrônica';
     const todayStr = new Date().toLocaleDateString('pt-BR');
 
-    // Assinar digitalmente de acordo com a etapa e o perfil
-    if (targetPerfil === 'Elaborador' || activeDoc.status === 'Rascunho' || activeDoc.status === 'Elaboração' || activeDoc.status === 'Em Elaboração') {
+    // Determinar a assinatura correta de acordo com a fase documental em andamento
+    const isElab = activeDoc.status === 'Rascunho' || activeDoc.status === 'Elaboração' || activeDoc.status === 'Em Elaboração' || stepNum === 1;
+    const isRev = activeDoc.status === 'Revisão Técnica' || activeDoc.status === 'Em Revisão' || stepNum === 2;
+    const isAprov = activeDoc.status === 'Aprovação' || activeDoc.status === 'Em Aprovação' || stepNum === 3;
+
+    if (isElab) {
       updatedDoc.assinaturaElaborador = signerName;
       updatedDoc.dataElaboracao = todayStr;
-    } else if (targetPerfil === 'Supervisor' || activeDoc.status === 'Revisão Técnica' || activeDoc.status === 'Em Revisão') {
+    } else if (isRev) {
       updatedDoc.assinaturaRevisor = signerName;
       updatedDoc.dataRevisao = todayStr;
-    } else {
+      // Garante consistência dos dados do elaborador caso estivesse vazio no mock
+      if (!updatedDoc.assinaturaElaborador) {
+        updatedDoc.assinaturaElaborador = activeDoc.elaborador || signerName;
+        updatedDoc.dataElaboracao = activeDoc.dataEmissao || todayStr;
+      }
+    } else if (isAprov) {
       updatedDoc.assinaturaAprovador = signerName;
       updatedDoc.dataAprovacao = todayStr;
       updatedDoc.feedbackAjuste = undefined; // limpa feedbacks anteriores
+      if (!updatedDoc.assinaturaElaborador) {
+        updatedDoc.assinaturaElaborador = activeDoc.elaborador || signerName;
+        updatedDoc.dataElaboracao = activeDoc.dataEmissao || todayStr;
+      }
+      if (!updatedDoc.assinaturaRevisor) {
+        updatedDoc.assinaturaRevisor = activeDoc.revisor || signerName;
+        updatedDoc.dataRevisao = activeDoc.dataEmissao || todayStr;
+      }
+    } else {
+      // Etapa 4 ou Publicação / Homologação Final
+      updatedDoc.assinaturaAprovador = updatedDoc.assinaturaAprovador || signerName;
+      updatedDoc.dataAprovacao = updatedDoc.dataAprovacao || todayStr;
+      updatedDoc.feedbackAjuste = undefined;
     }
 
     const docWithLogs = addDocumentLog(updatedDoc, actionName, `${detailName} por ${signerName} usando assinatura digital.`);
@@ -992,9 +1037,25 @@ export const DocumentoAbasDetalhes: React.FC<DocumentoAbasDetalhesProps> = ({
                 <div className="p-3 bg-white dark:bg-slate-900 border border-slate-150 dark:border-slate-800 rounded-lg">
                   <span className="block text-[8px] font-extrabold text-slate-400 uppercase tracking-wider mb-1">1. Elaborador</span>
                   <p className="font-semibold text-slate-800 dark:text-slate-200 truncate">{activeDoc.elaborador}</p>
-                  <span className="inline-flex items-center text-[9px] text-emerald-600 font-bold bg-emerald-50 px-1.5 py-0.5 rounded mt-1.5">
-                    ✓ Elaborado
-                  </span>
+                  {activeDoc.assinaturaElaborador ? (
+                    <div className="mt-1.5">
+                      <span className="inline-flex items-center text-[9px] text-emerald-600 font-bold bg-emerald-50 dark:bg-emerald-950/40 px-1.5 py-0.5 rounded">
+                        ✓ Elaborado
+                      </span>
+                      <p className="text-[8px] text-slate-400 mt-0.5 font-mono">{activeDoc.dataElaboracao || activeDoc.dataEmissao}</p>
+                    </div>
+                  ) : activeDoc.status === 'Rascunho' || activeDoc.status === 'Elaboração' || activeDoc.status === 'Em Elaboração' ? (
+                    <span className="inline-flex items-center text-[9px] text-amber-600 font-bold bg-amber-50 dark:bg-amber-950/40 px-1.5 py-0.5 rounded mt-1.5 animate-pulse">
+                      ⏱ Aguardando Elaboração
+                    </span>
+                  ) : (
+                    <div className="mt-1.5">
+                      <span className="inline-flex items-center text-[9px] text-emerald-600 font-bold bg-emerald-50 dark:bg-emerald-950/40 px-1.5 py-0.5 rounded">
+                        ✓ Elaborado
+                      </span>
+                      <p className="text-[8px] text-slate-400 mt-0.5 font-mono">{activeDoc.dataEmissao}</p>
+                    </div>
+                  )}
                 </div>
 
                 {/* Revisor Técnico */}
@@ -1003,15 +1064,22 @@ export const DocumentoAbasDetalhes: React.FC<DocumentoAbasDetalhesProps> = ({
                   <p className="font-semibold text-slate-800 dark:text-slate-200 truncate">{activeDoc.revisor}</p>
                   {activeDoc.assinaturaRevisor ? (
                     <div className="mt-1.5">
-                      <span className="inline-flex items-center text-[9px] text-emerald-600 font-bold bg-emerald-50 px-1.5 py-0.5 rounded">
+                      <span className="inline-flex items-center text-[9px] text-emerald-600 font-bold bg-emerald-50 dark:bg-emerald-950/40 px-1.5 py-0.5 rounded">
                         ✓ Revisado
                       </span>
                       <p className="text-[8px] text-slate-400 mt-0.5 font-mono">{activeDoc.dataRevisao}</p>
                     </div>
                   ) : activeDoc.status === 'Revisão Técnica' || activeDoc.status === 'Em Revisão' ? (
-                    <span className="inline-flex items-center text-[9px] text-amber-600 font-bold bg-amber-50 px-1.5 py-0.5 rounded mt-1.5 animate-pulse">
+                    <span className="inline-flex items-center text-[9px] text-amber-600 font-bold bg-amber-50 dark:bg-amber-950/40 px-1.5 py-0.5 rounded mt-1.5 animate-pulse">
                       ⏱ Aguardando
                     </span>
+                  ) : (activeDoc.status === 'Aprovação' || activeDoc.status === 'Em Aprovação' || activeDoc.status === 'Publicação' || activeDoc.status === 'Homologado' || activeDoc.status === 'Distribuição' || activeDoc.status === 'Aceite') ? (
+                    <div className="mt-1.5">
+                      <span className="inline-flex items-center text-[9px] text-emerald-600 font-bold bg-emerald-50 dark:bg-emerald-950/40 px-1.5 py-0.5 rounded">
+                        ✓ Revisado
+                      </span>
+                      <p className="text-[8px] text-slate-400 mt-0.5 font-mono">{activeDoc.dataRevisao || activeDoc.dataEmissao}</p>
+                    </div>
                   ) : (
                     <span className="text-[9px] text-slate-400 italic block mt-1.5">Pendente fluxo</span>
                   )}
@@ -1023,15 +1091,22 @@ export const DocumentoAbasDetalhes: React.FC<DocumentoAbasDetalhesProps> = ({
                   <p className="font-semibold text-slate-800 dark:text-slate-200 truncate">{activeDoc.aprovador}</p>
                   {activeDoc.assinaturaAprovador ? (
                     <div className="mt-1.5">
-                      <span className="inline-flex items-center text-[9px] text-emerald-600 font-bold bg-emerald-50 px-1.5 py-0.5 rounded">
+                      <span className="inline-flex items-center text-[9px] text-emerald-600 font-bold bg-emerald-50 dark:bg-emerald-950/40 px-1.5 py-0.5 rounded">
                         ✓ Aprovado
                       </span>
                       <p className="text-[8px] text-slate-400 mt-0.5 font-mono">{activeDoc.dataAprovacao}</p>
                     </div>
                   ) : activeDoc.status === 'Aprovação' || activeDoc.status === 'Em Aprovação' ? (
-                    <span className="inline-flex items-center text-[9px] text-blue-600 font-bold bg-blue-50 px-1.5 py-0.5 rounded mt-1.5 animate-pulse">
+                    <span className="inline-flex items-center text-[9px] text-blue-600 font-bold bg-blue-50 dark:bg-blue-950/40 px-1.5 py-0.5 rounded mt-1.5 animate-pulse">
                       ⏱ Aguardando
                     </span>
+                  ) : (activeDoc.status === 'Publicação' || activeDoc.status === 'Homologado' || activeDoc.status === 'Distribuição' || activeDoc.status === 'Aceite') ? (
+                    <div className="mt-1.5">
+                      <span className="inline-flex items-center text-[9px] text-emerald-600 font-bold bg-emerald-50 dark:bg-emerald-950/40 px-1.5 py-0.5 rounded">
+                        ✓ Aprovado
+                      </span>
+                      <p className="text-[8px] text-slate-400 mt-0.5 font-mono">{activeDoc.dataAprovacao || activeDoc.dataEmissao}</p>
+                    </div>
                   ) : (
                     <span className="text-[9px] text-slate-400 italic block mt-1.5">Pendente fluxo</span>
                   )}
@@ -1078,19 +1153,48 @@ export const DocumentoAbasDetalhes: React.FC<DocumentoAbasDetalhesProps> = ({
                   // Helper de permissão de assinatura
                   const canUserSign = () => {
                     if (currentUser?.role === 'Administrador' || currentUser?.role === 'Diretoria') return true;
-                    if (requiredPerfil === 'Elaborador') {
-                      return currentUser?.email === activeDoc.elaborador || currentUser?.role === 'Qualidade';
+                    
+                    if (pendingStep?.usuarioEspecifico) {
+                      if (currentUser?.email?.toLowerCase() === pendingStep.usuarioEspecifico.toLowerCase() ||
+                          currentUser?.name?.toLowerCase() === pendingStep.usuarioEspecifico.toLowerCase()) {
+                        return true;
+                      }
                     }
-                    if (requiredPerfil === 'Supervisor') {
-                      return currentUser?.role === 'Supervisor' || currentUser?.role === 'Qualidade';
+
+                    const isDesignatedElaborador = Boolean(
+                      activeDoc.elaborador && (
+                        currentUser?.email?.toLowerCase() === activeDoc.elaborador.toLowerCase() ||
+                        currentUser?.name?.toLowerCase() === activeDoc.elaborador.toLowerCase()
+                      )
+                    );
+
+                    const isDesignatedRevisor = Boolean(
+                      activeDoc.revisor && (
+                        currentUser?.email?.toLowerCase() === activeDoc.revisor.toLowerCase() ||
+                        currentUser?.name?.toLowerCase() === activeDoc.revisor.toLowerCase()
+                      )
+                    );
+
+                    const isDesignatedAprovador = Boolean(
+                      activeDoc.aprovador && (
+                        currentUser?.email?.toLowerCase() === activeDoc.aprovador.toLowerCase() ||
+                        currentUser?.name?.toLowerCase() === activeDoc.aprovador.toLowerCase()
+                      )
+                    );
+
+                    if (requiredPerfil === 'Elaborador') {
+                      return isDesignatedElaborador || currentUser?.role === 'Qualidade' || currentUser?.role === 'Supervisor' || currentUser?.role === 'Gestor' || currentUser?.role === 'Colaborador';
+                    }
+                    if (requiredPerfil === 'Supervisor' || requiredPerfil === 'Revisor') {
+                      return isDesignatedRevisor || currentUser?.role === 'Supervisor' || currentUser?.role === 'Qualidade' || currentUser?.role === 'Gestor';
                     }
                     if (requiredPerfil === 'Qualidade') {
-                      return currentUser?.role === 'Qualidade';
+                      return isDesignatedAprovador || currentUser?.role === 'Qualidade' || currentUser?.role === 'Gestor';
                     }
-                    if (requiredPerfil === 'Gerência' || requiredPerfil === 'Gerente') {
-                      return currentUser?.role === 'Gerência' || currentUser?.role === 'Gestor' || currentUser?.role === 'Qualidade';
+                    if (requiredPerfil === 'Gerência' || requiredPerfil === 'Gerente' || requiredPerfil === 'Diretoria') {
+                      return isDesignatedAprovador || currentUser?.role === 'Gerência' || currentUser?.role === 'Gestor' || currentUser?.role === 'Qualidade';
                     }
-                    return currentUser?.role === requiredPerfil;
+                    return currentUser?.role === requiredPerfil || isDesignatedRevisor || isDesignatedAprovador;
                   };
 
                   const hasPermission = canUserSign();
