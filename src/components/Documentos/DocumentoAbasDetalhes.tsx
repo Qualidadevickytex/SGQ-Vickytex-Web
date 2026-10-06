@@ -5,7 +5,7 @@ import {
   UserCheck, Download, Layers, Eye, Smartphone, Monitor, Tablet, Globe,
   KeyRound, XCircle, Check, Pencil, Save
 } from 'lucide-react';
-import { Documento, DocumentRevision, CopiaDistribuida, DocumentStatus, DocumentLog, DocumentReading } from '../../types';
+import { Documento, DocumentRevision, CopiaDistribuida, DocumentStatus, DocumentLog, DocumentReading, ApprovalFlowStep } from '../../types';
 import { getSavedFlows } from './FluxosParametrizados';
 import { useAuth } from '../../contexts/AuthContext';
 import { googleDriveService } from '../../services/google/drive.service';
@@ -199,16 +199,63 @@ export const DocumentoAbasDetalhes: React.FC<DocumentoAbasDetalhesProps> = ({
     return { ...doc, documentLogs: updatedLogs };
   };
 
+  // Helper para obter o próximo status lógico do ciclo de vida documental
+  const getNextLogicalStatus = (currentStatus: DocumentStatus, step?: ApprovalFlowStep | null): DocumentStatus => {
+    if (step && step.statusAlvo && step.statusAlvo !== currentStatus) {
+      return step.statusAlvo;
+    }
+    switch (currentStatus) {
+      case 'Rascunho':
+      case 'Elaboração':
+      case 'Em Elaboração':
+        return 'Revisão Técnica';
+      case 'Revisão Técnica':
+      case 'Em Revisão':
+        return 'Aprovação';
+      case 'Aprovação':
+      case 'Em Aprovação':
+        return (activeFlow && activeFlow.etapas.length > 3) ? 'Publicação' : 'Homologado';
+      case 'Publicação':
+        return 'Homologado';
+      default:
+        return 'Homologado';
+    }
+  };
+
   // Helper para obter a etapa atual pendente no fluxo parametrizado
-  const getPendingStep = () => {
+  const getPendingStep = (): ApprovalFlowStep | null => {
     if (!activeFlow || !activeFlow.etapas || activeFlow.etapas.length === 0) return null;
-    if (activeDoc.status === 'Rascunho') {
-      return activeFlow.etapas[0];
+
+    // Se o documento já estiver Homologado, em Distribuição, Aceite ou Obsoleto, o fluxo foi concluído
+    if (
+      activeDoc.status === 'Homologado' || 
+      activeDoc.status === 'Distribuição' || 
+      activeDoc.status === 'Aceite' || 
+      activeDoc.status === 'Obsoleto'
+    ) {
+      return null;
     }
-    const currentIndex = activeFlow.etapas.findIndex(step => step.statusAlvo === activeDoc.status);
-    if (currentIndex !== -1 && currentIndex + 1 < activeFlow.etapas.length) {
-      return activeFlow.etapas[currentIndex + 1];
+
+    // 1. Etapa de Elaboração: se não tiver assinatura do elaborador ou estiver em Rascunho/Elaboração
+    if (!activeDoc.assinaturaElaborador || activeDoc.status === 'Rascunho' || activeDoc.status === 'Elaboração' || activeDoc.status === 'Em Elaboração') {
+      return activeFlow.etapas.find(s => s.etapaNumero === 1 || s.perfilResponsavel === 'Elaborador') || activeFlow.etapas[0];
     }
+
+    // 2. Etapa de Revisão Técnica: se estiver em Revisão Técnica ou não tiver assinatura do revisor
+    if (!activeDoc.assinaturaRevisor || activeDoc.status === 'Revisão Técnica' || activeDoc.status === 'Em Revisão') {
+      return activeFlow.etapas.find(s => s.etapaNumero === 2 || s.perfilResponsavel === 'Supervisor') || activeFlow.etapas[1] || activeFlow.etapas[0];
+    }
+
+    // 3. Etapa de Aprovação / Qualidade: se estiver em Aprovação ou não tiver assinatura do aprovador
+    if (!activeDoc.assinaturaAprovador || activeDoc.status === 'Aprovação' || activeDoc.status === 'Em Aprovação') {
+      return activeFlow.etapas.find(s => s.etapaNumero === 3 || s.perfilResponsavel === 'Qualidade') || activeFlow.etapas[2] || activeFlow.etapas[1];
+    }
+
+    // 4. Etapa de Gerência / Homologação: se estiver em Publicação e o fluxo tiver 4 ou mais etapas
+    if (activeDoc.status === 'Publicação' && activeFlow.etapas.length > 3) {
+      return activeFlow.etapas.find(s => s.etapaNumero === 4 || s.perfilResponsavel === 'Gerência' || s.perfilResponsavel === 'Diretoria') || activeFlow.etapas[3];
+    }
+
     return null;
   };
 
@@ -240,11 +287,11 @@ export const DocumentoAbasDetalhes: React.FC<DocumentoAbasDetalhesProps> = ({
     const signerName = currentUser?.name || currentUser?.email || 'Assinatura Eletrônica';
     const todayStr = new Date().toLocaleDateString('pt-BR');
 
-    // Assinar digitalmente de acordo com a etapa
-    if (targetPerfil === 'Elaborador') {
+    // Assinar digitalmente de acordo com a etapa e o perfil
+    if (targetPerfil === 'Elaborador' || activeDoc.status === 'Rascunho' || activeDoc.status === 'Elaboração' || activeDoc.status === 'Em Elaboração') {
       updatedDoc.assinaturaElaborador = signerName;
       updatedDoc.dataElaboracao = todayStr;
-    } else if (targetPerfil === 'Supervisor') {
+    } else if (targetPerfil === 'Supervisor' || activeDoc.status === 'Revisão Técnica' || activeDoc.status === 'Em Revisão') {
       updatedDoc.assinaturaRevisor = signerName;
       updatedDoc.dataRevisao = todayStr;
     } else {
@@ -256,11 +303,11 @@ export const DocumentoAbasDetalhes: React.FC<DocumentoAbasDetalhesProps> = ({
     const docWithLogs = addDocumentLog(updatedDoc, actionName, `${detailName} por ${signerName} usando assinatura digital.`);
     
     onUpdateDocument(docWithLogs);
-    onAddLog(actionName, `${detailName} do documento ${activeDoc.codigo} efetuada.`, activeDoc.id);
+    onAddLog(actionName, `${detailName} do documento ${activeDoc.codigo} efetuada por ${signerName}.`, activeDoc.id);
     
     setIsSigning(false);
     setUserPassword('');
-    setActionSuccessMsg(`Etapa "${detailName}" assinada e avançada com sucesso!`);
+    setActionSuccessMsg(`Etapa "${detailName}" assinada e avançada para "${nextStatus}" com sucesso!`);
     setTimeout(() => setActionSuccessMsg(''), 4000);
     setActiveTab(1);
   };
@@ -1026,6 +1073,7 @@ export const DocumentoAbasDetalhes: React.FC<DocumentoAbasDetalhesProps> = ({
                   }
 
                   const requiredPerfil = pendingStep.perfilResponsavel;
+                  const targetNextStatus = getNextLogicalStatus(activeDoc.status, pendingStep);
                   
                   // Helper de permissão de assinatura
                   const canUserSign = () => {
@@ -1063,7 +1111,7 @@ export const DocumentoAbasDetalhes: React.FC<DocumentoAbasDetalhesProps> = ({
                           {pendingStep.descricao}
                         </h5>
                         <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
-                          Aprovação necessária para transicionar o documento de <span className="font-semibold text-slate-700 dark:text-slate-300">"{activeDoc.status}"</span> para <span className="font-semibold text-slate-700 dark:text-slate-300">"{pendingStep.statusAlvo}"</span>.
+                          Aprovação necessária para transicionar o documento de <span className="font-semibold text-slate-700 dark:text-slate-300">"{activeDoc.status}"</span> para <span className="font-semibold text-slate-700 dark:text-slate-300">"{targetNextStatus}"</span>.
                         </p>
                       </div>
 
@@ -1111,7 +1159,7 @@ export const DocumentoAbasDetalhes: React.FC<DocumentoAbasDetalhesProps> = ({
                               type="button"
                               disabled={isSigning}
                               onClick={() => handleAdvanceStatus(
-                                pendingStep.statusAlvo,
+                                targetNextStatus,
                                 `Aprovação: Etapa ${pendingStep.etapaNumero}`,
                                 pendingStep.descricao,
                                 pendingStep.perfilResponsavel

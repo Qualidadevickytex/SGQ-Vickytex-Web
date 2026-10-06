@@ -13,10 +13,10 @@ export const FLUXO_PADRAO_POP: ApprovalFlow = {
   tipoDocumento: 'POP',
   nome: 'Fluxo Padrão - Procedimento Operacional Padrão',
   etapas: [
-    { id: '1', etapaNumero: 1, perfilResponsavel: 'Elaborador', descricao: 'Elaboração inicial do procedimento', statusAlvo: 'Elaboração', statusSeRejeitado: 'Rascunho' },
-    { id: '2', etapaNumero: 2, perfilResponsavel: 'Supervisor', descricao: 'Revisão Técnica pelo supervisor da área', statusAlvo: 'Revisão Técnica', statusSeRejeitado: 'Elaboração' },
-    { id: '3', etapaNumero: 3, perfilResponsavel: 'Qualidade', descricao: 'Aprovação final de conformidade pela Qualidade', statusAlvo: 'Aprovação', statusSeRejeitado: 'Elaboração' },
-    { id: '4', etapaNumero: 4, perfilResponsavel: 'Gerência', descricao: 'Homologação e publicação pela Diretoria', statusAlvo: 'Publicação', statusSeRejeitado: 'Elaboração' }
+    { id: '1', etapaNumero: 1, perfilResponsavel: 'Elaborador', descricao: 'Elaboração inicial do procedimento', statusAlvo: 'Revisão Técnica', statusSeRejeitado: 'Rascunho' },
+    { id: '2', etapaNumero: 2, perfilResponsavel: 'Supervisor', descricao: 'Revisão Técnica pelo supervisor da área', statusAlvo: 'Aprovação', statusSeRejeitado: 'Elaboração' },
+    { id: '3', etapaNumero: 3, perfilResponsavel: 'Qualidade', descricao: 'Aprovação final de conformidade pela Qualidade', statusAlvo: 'Publicação', statusSeRejeitado: 'Elaboração' },
+    { id: '4', etapaNumero: 4, perfilResponsavel: 'Gerência', descricao: 'Homologação e publicação pela Diretoria', statusAlvo: 'Homologado', statusSeRejeitado: 'Elaboração' }
   ]
 };
 
@@ -25,7 +25,7 @@ export const FLUXO_PADRAO_FOR: ApprovalFlow = {
   tipoDocumento: 'FOR',
   nome: 'Fluxo Simplificado - Formulários e Registros',
   etapas: [
-    { id: '1', etapaNumero: 1, perfilResponsavel: 'Qualidade', descricao: 'Verificação e publicação direta', statusAlvo: 'Publicação', statusSeRejeitado: 'Rascunho' }
+    { id: '1', etapaNumero: 1, perfilResponsavel: 'Qualidade', descricao: 'Verificação e publicação direta', statusAlvo: 'Homologado', statusSeRejeitado: 'Rascunho' }
   ]
 };
 
@@ -34,9 +34,9 @@ export const FLUXO_PADRAO_IT: ApprovalFlow = {
   tipoDocumento: 'IT',
   nome: 'Fluxo Padrão - Instrução de Trabalho',
   etapas: [
-    { id: '1', etapaNumero: 1, perfilResponsavel: 'Elaborador', descricao: 'Elaboração do posto de trabalho', statusAlvo: 'Elaboração', statusSeRejeitado: 'Rascunho' },
-    { id: '2', etapaNumero: 2, perfilResponsavel: 'Supervisor', descricao: 'Validação operacional pelo Supervisor', statusAlvo: 'Revisão Técnica', statusSeRejeitado: 'Elaboração' },
-    { id: '3', etapaNumero: 3, perfilResponsavel: 'Qualidade', descricao: 'Homologação pela Qualidade', statusAlvo: 'Publicação', statusSeRejeitado: 'Elaboração' }
+    { id: '1', etapaNumero: 1, perfilResponsavel: 'Elaborador', descricao: 'Elaboração do posto de trabalho', statusAlvo: 'Revisão Técnica', statusSeRejeitado: 'Rascunho' },
+    { id: '2', etapaNumero: 2, perfilResponsavel: 'Supervisor', descricao: 'Validação operacional pelo Supervisor', statusAlvo: 'Aprovação', statusSeRejeitado: 'Elaboração' },
+    { id: '3', etapaNumero: 3, perfilResponsavel: 'Qualidade', descricao: 'Homologação pela Qualidade', statusAlvo: 'Homologado', statusSeRejeitado: 'Elaboração' }
   ]
 };
 
@@ -45,9 +45,9 @@ export const FLUXO_PADRAO_MAN: ApprovalFlow = {
   tipoDocumento: 'MAN',
   nome: 'Fluxo Rígido - Manual da Qualidade',
   etapas: [
-    { id: '1', etapaNumero: 1, perfilResponsavel: 'Qualidade', descricao: 'Elaboração detalhada do Manual', statusAlvo: 'Elaboração', statusSeRejeitado: 'Rascunho' },
-    { id: '2', etapaNumero: 2, perfilResponsavel: 'Gerência', descricao: 'Revisão Crítica pela Diretoria', statusAlvo: 'Aprovação', statusSeRejeitado: 'Elaboração' },
-    { id: '3', etapaNumero: 3, perfilResponsavel: 'Qualidade', descricao: 'Homologação Geral do SGQ', statusAlvo: 'Publicação', statusSeRejeitado: 'Elaboração' }
+    { id: '1', etapaNumero: 1, perfilResponsavel: 'Qualidade', descricao: 'Elaboração detalhada do Manual', statusAlvo: 'Aprovação', statusSeRejeitado: 'Rascunho' },
+    { id: '2', etapaNumero: 2, perfilResponsavel: 'Gerência', descricao: 'Revisão Crítica pela Diretoria', statusAlvo: 'Publicação', statusSeRejeitado: 'Elaboração' },
+    { id: '3', etapaNumero: 3, perfilResponsavel: 'Qualidade', descricao: 'Homologação Geral do SGQ', statusAlvo: 'Homologado', statusSeRejeitado: 'Elaboração' }
   ]
 };
 
@@ -56,27 +56,47 @@ export const FLUXO_PADRAO_LIST: ApprovalFlow = {
   tipoDocumento: 'LIST',
   nome: 'Fluxo Direto - Lista Mestra e Checklists',
   etapas: [
-    { id: '1', etapaNumero: 1, perfilResponsavel: 'Supervisor', descricao: 'Elaboração operacional', statusAlvo: 'Elaboração', statusSeRejeitado: 'Rascunho' },
-    { id: '2', etapaNumero: 2, perfilResponsavel: 'Qualidade', descricao: 'Verificação e publicação', statusAlvo: 'Publicação', statusSeRejeitado: 'Elaboração' }
+    { id: '1', etapaNumero: 1, perfilResponsavel: 'Supervisor', descricao: 'Elaboração operacional', statusAlvo: 'Aprovação', statusSeRejeitado: 'Rascunho' },
+    { id: '2', etapaNumero: 2, perfilResponsavel: 'Qualidade', descricao: 'Verificação e publicação', statusAlvo: 'Homologado', statusSeRejeitado: 'Elaboração' }
   ]
 };
 
 export const getSavedFlows = (): ApprovalFlow[] => {
+  const defaultFlows = [FLUXO_PADRAO_POP, FLUXO_PADRAO_FOR, FLUXO_PADRAO_IT, FLUXO_PADRAO_MAN, FLUXO_PADRAO_LIST];
   if (typeof window !== 'undefined') {
     const saved = localStorage.getItem('sgq_vickytex_fluxos_documentos');
     if (saved) {
       try {
-        return JSON.parse(saved);
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          // Atualiza etapas antigas que tinham statusAlvo redundante
+          const sanitized = parsed.map(flow => ({
+            ...flow,
+            etapas: flow.etapas.map((st: ApprovalFlowStep) => {
+              if (st.perfilResponsavel === 'Supervisor' && (st.statusAlvo === 'Revisão Técnica' || st.etapaNumero === 2)) {
+                return { ...st, statusAlvo: 'Aprovação' as DocumentStatus };
+              }
+              if (st.perfilResponsavel === 'Elaborador' && (st.statusAlvo === 'Elaboração' || st.etapaNumero === 1)) {
+                return { ...st, statusAlvo: 'Revisão Técnica' as DocumentStatus };
+              }
+              if (st.perfilResponsavel === 'Gerência' && (st.statusAlvo === 'Publicação' || st.etapaNumero === flow.etapas.length)) {
+                return { ...st, statusAlvo: 'Homologado' as DocumentStatus };
+              }
+              return st;
+            })
+          }));
+          localStorage.setItem('sgq_vickytex_fluxos_documentos', JSON.stringify(sanitized));
+          return sanitized;
+        }
       } catch (e) {
         // ignore
       }
     }
     // Salva os padrões se for a primeira vez
-    const defaultFlows = [FLUXO_PADRAO_POP, FLUXO_PADRAO_FOR, FLUXO_PADRAO_IT, FLUXO_PADRAO_MAN, FLUXO_PADRAO_LIST];
     localStorage.setItem('sgq_vickytex_fluxos_documentos', JSON.stringify(defaultFlows));
     return defaultFlows;
   }
-  return [FLUXO_PADRAO_POP, FLUXO_PADRAO_FOR, FLUXO_PADRAO_IT, FLUXO_PADRAO_MAN, FLUXO_PADRAO_LIST];
+  return defaultFlows;
 };
 
 export const FluxosParametrizados: React.FC<FluxosParametrizadosProps> = ({ onClose }) => {
