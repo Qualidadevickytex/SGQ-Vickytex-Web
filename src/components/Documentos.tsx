@@ -1,12 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { 
   LayoutDashboard, TableProperties, Settings, QrCode as QrIcon, 
-  X, Plus, FileText, Check, FileCheck, ArrowRight, Printer, ListCollapse 
+  X, Plus, FileText, Check, FileCheck, ArrowRight, Printer, ListCollapse,
+  Download, Copy
 } from 'lucide-react';
+import QRCode from 'qrcode';
 import { Documento, DocumentType, SectorType, DocumentStatus } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { useSectors } from '../hooks/useSectors';
 import { SECTORS, getSectors, DOCUMENT_TYPES, getDocumentTypes, PersonalizacaoGeral } from '../utils/mockData';
+import { printHtml } from '../utils/printHelper';
 import { getSavedFlows } from './Documentos/FluxosParametrizados';
 import { DocumentoDashboard } from './Documentos/DocumentoDashboard';
 import { DocumentoListaMestra } from './Documentos/DocumentoListaMestra';
@@ -56,6 +59,35 @@ export const Documentos: React.FC<DocumentosProps> = ({
 
   // Modal QR Code
   const [qrModalDoc, setQrModalDoc] = useState<Documento | null>(null);
+  const [qrCodeDataUrl, setQrCodeDataUrl] = useState<string>('');
+  const [isPrintingTag, setIsPrintingTag] = useState<boolean>(false);
+  const [tagActionSuccess, setTagActionSuccess] = useState<string>('');
+
+  useEffect(() => {
+    if (!qrModalDoc) {
+      setQrCodeDataUrl('');
+      setTagActionSuccess('');
+      return;
+    }
+
+    const docTargetUrl = qrModalDoc.googleDriveLink || 
+      `${window.location.origin}${window.location.pathname}?doc=${encodeURIComponent(qrModalDoc.codigo)}`;
+
+    QRCode.toDataURL(docTargetUrl, {
+      width: 280,
+      margin: 1,
+      color: {
+        dark: '#0f172a',
+        light: '#ffffff'
+      },
+      errorCorrectionLevel: 'M'
+    })
+      .then((url) => setQrCodeDataUrl(url))
+      .catch((err) => {
+        console.warn('Erro ao gerar QR Code:', err);
+        setQrCodeDataUrl('');
+      });
+  }, [qrModalDoc]);
 
   // Estado do formulário de novo/edição de documento
   const [formCodigo, setFormCodigo] = useState('');
@@ -238,57 +270,164 @@ export const Documentos: React.FC<DocumentosProps> = ({
     setEditingDoc(null);
   };
 
-  // Imprimir Tag QR Code de Identificação do Posto
+  // Imprimir Tag QR Code de Identificação do Posto (compatível com iframes e sem window.open)
   const handlePrintQrCode = () => {
     if (!qrModalDoc) return;
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) return;
+    setIsPrintingTag(true);
+    setTagActionSuccess('');
 
-    const content = `
-      <html>
-        <head>
-          <title>TAG DE IDENTIFICAÇÃO DE PROCESSO - VICKYTEX</title>
-          <style>
-            body { font-family: 'Inter', sans-serif; color: #333; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
-            .tag-card { border: 4px dashed #1e293b; padding: 30px; border-radius: 16px; text-align: center; max-width: 400px; width: 100%; box-sizing: border-box; }
-            .logo { font-weight: 900; font-size: 20px; letter-spacing: -1px; text-transform: uppercase; margin-bottom: 20px; color: #1e3a8a; }
-            .codigo { font-family: monospace; font-size: 28px; font-weight: 900; color: #2563eb; margin: 15px 0; }
-            .titulo { font-size: 16px; font-weight: 700; margin-bottom: 10px; color: #1e293b; }
-            .info { font-size: 11px; color: #64748b; margin-top: 15px; border-top: 1px solid #e2e8f0; padding-top: 10px; }
-            .qr-placeholder { border: 4px solid #1e293b; padding: 20px; display: inline-block; margin-top: 15px; border-radius: 12px; background-color: #f8fafc; font-weight: bold; font-family: monospace; }
-          </style>
-        </head>
-        <body>
-          <div class="tag-card">
-            <div class="logo">VICKYTEX TÊXTIL</div>
-            <div class="titulo">${qrModalDoc.titulo}</div>
-            <div class="codigo">${qrModalDoc.codigo}</div>
-            
-            <div class="qr-placeholder">
-              <svg width="150" height="150" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                <rect x="2" y="2" width="8" height="8" rx="1"></rect>
-                <rect x="14" y="2" width="8" height="8" rx="1"></rect>
-                <rect x="2" y="14" width="8" height="8" rx="1"></rect>
-                <rect x="14" y="14" width="8" height="8" rx="1"></rect>
-                <path d="M6 6h.01M18 6h.01M6 18h.01M18 18h.01"></path>
-              </svg>
-              <div style="font-size: 9px; margin-top: 5px; color: #64748b;">ESCANEIE PARA ACESSAR O PROCEDIMENTO VIGENTE</div>
-            </div>
+    const qrImgTag = qrCodeDataUrl 
+      ? `<img src="${qrCodeDataUrl}" alt="QR Code ${qrModalDoc.codigo}" style="width: 170px; height: 170px; display: block; margin: 0 auto; object-fit: contain;" />`
+      : `
+        <div style="width: 140px; height: 140px; border: 2px dashed #94a3b8; display: flex; align-items: center; justify-content: center; margin: 0 auto; font-family: monospace; font-size: 11px; color: #475569;">
+          [QR CODE: ${qrModalDoc.codigo}]
+        </div>
+      `;
 
-            <div class="info">
-              Setor: <strong>${qrModalDoc.setor}</strong> | Revisão: <strong>Rev ${qrModalDoc.revisao.toString().padStart(2, '0')}</strong><br/>
-              Status: <span style="font-weight: bold; color: #16a34a;">VIGENTE (CONFORME ISO 9001:2015)</span>
+    const bodyContent = `
+      <div style="display: flex; justify-content: center; align-items: center; min-height: 90vh; padding: 20px;">
+        <div style="border: 3px dashed #0f172a; padding: 28px 22px; border-radius: 16px; text-align: center; max-width: 380px; width: 100%; box-sizing: border-box; background: #ffffff;">
+          
+          <div style="font-weight: 900; font-size: 14px; letter-spacing: 2px; text-transform: uppercase; color: #2563eb; margin-bottom: 3px;">
+            VICKYTEX TÊXTIL
+          </div>
+          <div style="font-size: 9px; font-weight: 700; color: #64748b; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 14px;">
+            SISTEMA DE GESTÃO DA QUALIDADE (ISO 9001:2015)
+          </div>
+
+          <div style="font-size: 14px; font-weight: 800; color: #0f172a; line-height: 1.35; margin-bottom: 8px;">
+            ${qrModalDoc.titulo}
+          </div>
+
+          <div style="font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 22px; font-weight: 900; color: #1e3a8a; margin: 10px 0;">
+            ${qrModalDoc.codigo}
+          </div>
+
+          <div style="padding: 12px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; display: inline-block; margin: 10px 0;">
+            ${qrImgTag}
+            <div style="font-size: 8px; font-weight: 800; letter-spacing: 0.5px; text-transform: uppercase; margin-top: 8px; color: #475569;">
+              Aponte a câmera para abrir o procedimento
             </div>
           </div>
-          <script>
-            window.onload = function() { window.print(); }
-          </script>
-        </body>
-      </html>
+
+          <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #e2e8f0; font-size: 11px; color: #475569; line-height: 1.6;">
+            <div>Setor: <strong style="color: #0f172a;">${qrModalDoc.setor}</strong> &nbsp;|&nbsp; Revisão: <strong style="color: #0f172a;">Rev ${qrModalDoc.revisao.toString().padStart(2, '0')}</strong></div>
+            <div>Status: <strong style="color: #16a34a;">VIGENTE (CONFORME ISO 9001:2015)</strong></div>
+            ${qrModalDoc.dataEmissao ? `<div style="font-size: 9px; color: #94a3b8; margin-top: 4px;">Data de Emissão: ${qrModalDoc.dataEmissao}</div>` : ''}
+          </div>
+
+        </div>
+      </div>
     `;
 
-    printWindow.document.write(content);
-    printWindow.document.close();
+    printHtml(`TAG-POSTO-${qrModalDoc.codigo}`, bodyContent);
+    setTagActionSuccess('Diálogo de impressão aberto!');
+    setTimeout(() => {
+      setIsPrintingTag(false);
+      setTimeout(() => setTagActionSuccess(''), 4000);
+    }, 1000);
+  };
+
+  // Baixar a Tag de Identificação como imagem PNG de alta resolução
+  const handleDownloadTagImage = () => {
+    if (!qrModalDoc) return;
+    setTagActionSuccess('');
+
+    const canvas = document.createElement('canvas');
+    canvas.width = 650;
+    canvas.height = 800;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    // Fundo branco
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // Borda pontilhada
+    ctx.strokeStyle = '#0f172a';
+    ctx.lineWidth = 4;
+    ctx.setLineDash([12, 8]);
+    ctx.strokeRect(24, 24, canvas.width - 48, canvas.height - 48);
+    ctx.setLineDash([]);
+
+    // Cabeçalho
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#2563eb';
+    ctx.font = 'bold 22px system-ui, -apple-system, sans-serif';
+    ctx.fillText('VICKYTEX TÊXTIL', canvas.width / 2, 75);
+
+    ctx.fillStyle = '#64748b';
+    ctx.font = 'bold 12px system-ui, -apple-system, sans-serif';
+    ctx.fillText('SISTEMA DE GESTÃO DA QUALIDADE (ISO 9001:2015)', canvas.width / 2, 102);
+
+    // Título do documento
+    ctx.fillStyle = '#0f172a';
+    ctx.font = 'bold 18px system-ui, -apple-system, sans-serif';
+    const words = qrModalDoc.titulo.split(' ');
+    let line = '';
+    let y = 145;
+    for (let i = 0; i < words.length; i++) {
+      const testLine = line + words[i] + ' ';
+      const metrics = ctx.measureText(testLine);
+      if (metrics.width > 540 && i > 0) {
+        ctx.fillText(line.trim(), canvas.width / 2, y);
+        line = words[i] + ' ';
+        y += 26;
+      } else {
+        line = testLine;
+      }
+    }
+    ctx.fillText(line.trim(), canvas.width / 2, y);
+
+    // Código do documento
+    ctx.fillStyle = '#1e3a8a';
+    ctx.font = '900 32px ui-monospace, monospace';
+    ctx.fillText(qrModalDoc.codigo, canvas.width / 2, y + 50);
+
+    const finishDownload = (qrImg?: HTMLImageElement) => {
+      const qrY = y + 75;
+      if (qrImg) {
+        ctx.drawImage(qrImg, canvas.width / 2 - 110, qrY, 220, 220);
+      }
+
+      ctx.fillStyle = '#64748b';
+      ctx.font = 'bold 11px system-ui, -apple-system, sans-serif';
+      ctx.fillText('APONTE A CÂMERA PARA ACESSAR O PROCEDIMENTO VIGENTE', canvas.width / 2, qrY + 248);
+
+      // Linha separadora
+      ctx.strokeStyle = '#e2e8f0';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(60, qrY + 270);
+      ctx.lineTo(canvas.width - 60, qrY + 270);
+      ctx.stroke();
+
+      // Metadados
+      ctx.fillStyle = '#0f172a';
+      ctx.font = '15px system-ui, -apple-system, sans-serif';
+      ctx.fillText(`Setor: ${qrModalDoc.setor}   |   Revisão: Rev ${qrModalDoc.revisao.toString().padStart(2, '0')}`, canvas.width / 2, qrY + 302);
+
+      ctx.fillStyle = '#16a34a';
+      ctx.font = 'bold 14px system-ui, -apple-system, sans-serif';
+      ctx.fillText('STATUS: VIGENTE (CONFORME ISO 9001:2015)', canvas.width / 2, qrY + 330);
+
+      // Baixar arquivo
+      const link = document.createElement('a');
+      link.download = `TAG_${qrModalDoc.codigo}.png`;
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+
+      setTagActionSuccess('Imagem PNG baixada com sucesso!');
+      setTimeout(() => setTagActionSuccess(''), 4000);
+    };
+
+    if (qrCodeDataUrl) {
+      const img = new Image();
+      img.onload = () => finishDownload(img);
+      img.src = qrCodeDataUrl;
+    } else {
+      finishDownload();
+    }
   };
 
   // Permissões granulares do módulo de Documentos (ISO 7.5)
@@ -632,9 +771,22 @@ export const Documentos: React.FC<DocumentosProps> = ({
               <h5 className="text-xs font-extrabold text-slate-800 dark:text-slate-100 leading-snug line-clamp-2">{qrModalDoc.titulo}</h5>
               <div className="font-mono text-lg font-black text-slate-900 dark:text-white">{qrModalDoc.codigo}</div>
               
-              {/* Ícone de QR grande */}
-              <div className="p-3 bg-white dark:bg-slate-950 inline-block border border-slate-200 dark:border-slate-800 rounded-lg">
-                <QrIcon className="w-24 h-24 text-slate-900 dark:text-white" />
+              {/* QR Code Real Escaneável */}
+              <div className="p-2.5 bg-white inline-block border border-slate-200 dark:border-slate-800 rounded-xl shadow-2xs">
+                {qrCodeDataUrl ? (
+                  <img 
+                    src={qrCodeDataUrl} 
+                    alt={`QR Code ${qrModalDoc.codigo}`} 
+                    className="w-28 h-28 object-contain rounded" 
+                  />
+                ) : (
+                  <div className="w-28 h-28 flex items-center justify-center">
+                    <QrIcon className="w-20 h-20 text-slate-900" />
+                  </div>
+                )}
+                <div className="text-[8px] font-bold text-slate-400 mt-1 tracking-wider uppercase">
+                  Acesso Rápido ao SGQ
+                </div>
               </div>
 
               <div className="text-[9px] text-slate-400 font-medium space-y-0.5">
@@ -644,20 +796,39 @@ export const Documentos: React.FC<DocumentosProps> = ({
               </div>
             </div>
 
+            {tagActionSuccess && (
+              <div className="p-2 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 rounded-xl text-emerald-700 dark:text-emerald-300 text-[11px] font-bold flex items-center justify-center gap-1.5 animate-in fade-in">
+                <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                <span>{tagActionSuccess}</span>
+              </div>
+            )}
+
             {/* Ações */}
-            <div className="flex gap-2">
+            <div className="flex flex-col sm:flex-row gap-2">
               <button
+                type="button"
                 onClick={() => setQrModalDoc(null)}
-                className="flex-1 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold rounded-xl text-xs cursor-pointer"
+                className="py-2.5 px-3 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold rounded-xl text-xs cursor-pointer transition-colors"
               >
                 Fechar
               </button>
               <button
+                type="button"
+                onClick={handleDownloadTagImage}
+                className="flex-1 py-2.5 px-3 bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-100 font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
+                title="Baixar imagem em alta resolução para impressão em etiquetas"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>Baixar PNG</span>
+              </button>
+              <button
+                type="button"
+                disabled={isPrintingTag}
                 onClick={handlePrintQrCode}
-                className="flex-1 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1 shadow-2xs cursor-pointer"
+                className="flex-1 py-2.5 px-3 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-2xs cursor-pointer transition-colors"
               >
                 <Printer className="w-3.5 h-3.5" />
-                <span>Imprimir Tag</span>
+                <span>{isPrintingTag ? 'Preparando...' : 'Imprimir Tag'}</span>
               </button>
             </div>
           </div>

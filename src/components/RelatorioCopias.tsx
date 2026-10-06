@@ -26,6 +26,7 @@ import {
   Calendar,
   Layers2
 } from 'lucide-react';
+import { printHtml } from '../utils/printHelper';
 import { 
   ResponsiveContainer, 
   BarChart, 
@@ -313,16 +314,7 @@ export const RelatorioCopias: React.FC<RelatorioCopiasProps> = ({
       </div>
     `;
 
-    printContainer.innerHTML = content;
-    document.body.appendChild(printContainer);
-
-    const printWindow = window.open('', '_blank');
-    if (printWindow) {
-      printWindow.document.write('<html><head><title>Relatório de Rastreabilidade de Cópias - SGQ</title></head><body>');
-      printWindow.document.write(content);
-      printWindow.document.write('</body></html>');
-      printWindow.document.close();
-    }
+    printHtml('Relatório de Rastreabilidade de Cópias - SGQ Vickytex', content);
   };
 
   // Abrir modal de simulação de auditoria

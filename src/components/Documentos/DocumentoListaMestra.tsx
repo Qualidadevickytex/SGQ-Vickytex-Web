@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Search, Filter, ArrowUpDown, FileSpreadsheet, Printer, QrCode as QrIcon, Plus, Eye, Check, Trash2 } from 'lucide-react';
 import { Documento, DocumentType, SectorType, DocumentStatus } from '../../types';
+import { printHtml } from '../../utils/printHelper';
 
 interface DocumentoListaMestraProps {
   documents: Documento[];
@@ -140,11 +141,8 @@ export const DocumentoListaMestra: React.FC<DocumentoListaMestraProps> = ({
     document.body.removeChild(link);
   };
 
-  // Imprimir / Exportar para PDF a Lista Mestra Filtrada
+  // Imprimir / Exportar para PDF a Lista Mestra Filtrada (sem popup blocker)
   const handlePrint = () => {
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) return;
-
     const tableRows = sortedDocs.map(doc => `
       <tr>
         <td style="font-family: monospace; font-weight: bold; padding: 8px; border: 1px solid #ddd;">${doc.codigo}</td>
@@ -159,52 +157,40 @@ export const DocumentoListaMestra: React.FC<DocumentoListaMestraProps> = ({
       </tr>
     `).join('');
 
-    const content = `
-      <html>
-        <head>
-          <title>Lista Mestra de Documentos - Vickytex Têxtil (ISO 9001)</title>
-          <style>
-            body { font-family: 'Inter', system-ui, sans-serif; color: #333; margin: 30px; }
-            h1 { font-size: 20px; font-weight: 800; margin-bottom: 5px; }
-            p { font-size: 11px; color: #666; margin-top: 0; margin-bottom: 20px; }
-            table { width: 100%; border-collapse: collapse; font-size: 11px; }
-            th { background-color: #f4f6f9; font-weight: bold; text-align: left; padding: 10px; border: 1px solid #ddd; }
-            @media print {
-              button { display: none; }
-            }
-          </style>
-        </head>
-        <body>
-          <h1>Vickytex Indústria Têxtil Ltda.</h1>
-          <p><strong>LISTA MESTRA DE INFORMAÇÕES DOCUMENTADAS (ISO 9001:2015)</strong><br/>
-             Gerado em: ${new Date().toLocaleString('pt-BR')} | Total de Documentos: ${sortedDocs.length}</p>
-          <table>
-            <thead>
-              <tr>
-                <th>Código</th>
-                <th>Título</th>
-                <th>Tipo</th>
-                <th>Setor / Depto</th>
-                <th>Responsável</th>
-                <th>Status</th>
-                <th>Revisão</th>
-                <th>Data Emissão</th>
-                <th>Próxima Revisão</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${tableRows}
-            </tbody>
-          </table>
-          <script>
-            window.onload = function() { window.print(); }
-          </script>
-        </body>
-      </html>
+    const styles = `
+      body { font-family: 'Inter', system-ui, sans-serif; color: #333; margin: 20px; }
+      h1 { font-size: 18px; font-weight: 800; margin-bottom: 4px; color: #0f172a; }
+      p { font-size: 11px; color: #64748b; margin-top: 0; margin-bottom: 16px; }
+      table { width: 100%; border-collapse: collapse; font-size: 11px; }
+      th { background-color: #f8fafc; font-weight: bold; text-align: left; padding: 8px; border: 1px solid #cbd5e1; }
+      td { border: 1px solid #e2e8f0; }
     `;
 
-    printWindow.document.write(content);
-    printWindow.document.close();
+    const bodyContent = `
+      <h1>Vickytex Indústria Têxtil Ltda.</h1>
+      <p><strong>LISTA MESTRA DE INFORMAÇÕES DOCUMENTADAS (ISO 9001:2015)</strong><br/>
+         Gerado em: ${new Date().toLocaleString('pt-BR')} | Total de Documentos: ${sortedDocs.length}</p>
+      <table>
+        <thead>
+          <tr>
+            <th>Código</th>
+            <th>Título</th>
+            <th>Tipo</th>
+            <th>Setor / Depto</th>
+            <th>Responsável</th>
+            <th>Status</th>
+            <th>Revisão</th>
+            <th>Data Emissão</th>
+            <th>Próxima Revisão</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${tableRows}
+        </tbody>
+      </table>
+    `;
+
+    printHtml('Lista Mestra de Documentos - Vickytex Têxtil (ISO 9001)', bodyContent, styles);
   };
 
   const getStatusColor = (status: DocumentStatus) => {
