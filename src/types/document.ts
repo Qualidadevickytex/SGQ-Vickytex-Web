@@ -15,6 +15,7 @@ export type DocumentStatus =
   | 'Publicação'
   | 'Distribuição'
   | 'Aceite'
+  | 'Aceite de Leitura'
   | 'Nova Revisão'
   | 'Obsoleto'
   | 'Em Elaboração'

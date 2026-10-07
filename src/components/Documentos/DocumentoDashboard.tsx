@@ -16,6 +16,7 @@ export const DocumentoDashboard: React.FC<DocumentoDashboardProps> = ({ document
     doc.status === 'Publicação' || 
     doc.status === 'Distribuição' || 
     doc.status === 'Aceite' || 
+    doc.status === 'Aceite de Leitura' || 
     doc.status === 'Homologado'
   );
 

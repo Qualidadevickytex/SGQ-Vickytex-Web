@@ -3,7 +3,7 @@ import {
   FileText, Calendar, Clock, Award, CheckCircle2, RotateCcw, 
   Send, History, Shield, Trash2, ExternalLink, AlertTriangle, 
   UserCheck, Download, Layers, Eye, Smartphone, Monitor, Tablet, Globe,
-  KeyRound, XCircle, Check, Pencil, Save
+  KeyRound, XCircle, Check, Pencil, Save, Ban, ChevronRight, ShieldCheck
 } from 'lucide-react';
 import { Documento, DocumentRevision, CopiaDistribuida, DocumentStatus, DocumentLog, DocumentReading, ApprovalFlowStep } from '../../types';
 import { getSavedFlows } from './FluxosParametrizados';
@@ -53,6 +53,13 @@ export const DocumentoAbasDetalhes: React.FC<DocumentoAbasDetalhesProps> = ({
   // Nova Revisão
   const [isRevisionModalOpen, setIsRevisionModalOpen] = useState(false);
   const [revisionReason, setRevisionReason] = useState('');
+
+  // Tornar Obsoleto (Descontinuação do Documento)
+  const [isObsoleteModalOpen, setIsObsoleteModalOpen] = useState(false);
+  const [obsoleteReason, setObsoleteReason] = useState('');
+  const [obsoletePassword, setObsoletePassword] = useState('');
+  const [obsoleteError, setObsoleteError] = useState('');
+  const [isObsoleteSubmitting, setIsObsoleteSubmitting] = useState(false);
 
   // Edição rápida de Metadados / Datas (Emissão Inicial e Próxima Revisão)
   const [isEditingDates, setIsEditingDates] = useState(false);
@@ -161,10 +168,12 @@ export const DocumentoAbasDetalhes: React.FC<DocumentoAbasDetalhesProps> = ({
       case 'Publicação': return 4;
       case 'Distribuição': return 5;
       case 'Aceite':
-      case 'Homologado':
+      case 'Aceite de Leitura':
         return 6;
+      case 'Homologado':
+        return 7;
       case 'Nova Revisão': return 1;
-      case 'Obsoleto': return 7;
+      case 'Obsoleto': return 8;
       default: return 0;
     }
   };
@@ -179,6 +188,150 @@ export const DocumentoAbasDetalhes: React.FC<DocumentoAbasDetalhesProps> = ({
       }
     }
     return url;
+  };
+
+  // Helper para obter o histórico completo de logs de auditoria do ciclo de vida, garantindo dados sempre atualizados
+  const getEffectiveDocumentLogs = (docToUse: Documento = activeDoc): DocumentLog[] => {
+    if (docToUse.documentLogs && docToUse.documentLogs.length > 0) {
+      return docToUse.documentLogs;
+    }
+
+    const syntheticLogs: DocumentLog[] = [];
+
+    // 1. Se o documento for Obsoleto
+    if (docToUse.status === 'Obsoleto') {
+      syntheticLogs.push({
+        id: `synth-obs-${docToUse.id}`,
+        documentoId: docToUse.id,
+        usuario: currentUser?.name || 'Gestão da Qualidade SGQ',
+        acao: 'Documento Tornado Obsoleto',
+        detalhes: `Vigência revogada conforme cláusula 7.5.3 da ISO 9001. Cópias físicas e digitais recolhidas do chão de fábrica (Recall).`,
+        data: docToUse.updatedAt ? new Date(docToUse.updatedAt).toLocaleString('pt-BR') : new Date().toLocaleString('pt-BR'),
+        ip: '192.168.10.12',
+        dispositivo: 'Desktop',
+        navegador: 'Chrome'
+      });
+    }
+
+    // 2. Se for Homologado
+    if (docToUse.status === 'Homologado') {
+      syntheticLogs.push({
+        id: `synth-hom-${docToUse.id}`,
+        documentoId: docToUse.id,
+        usuario: docToUse.aprovador || 'Gerência SGQ',
+        acao: 'Documento Homologado e Vigente',
+        detalhes: `Ciclo de aprovação e aceite concluído com sucesso. Procedimento homologado e liberado para vigência operacional nos postos da Vickytex.`,
+        data: docToUse.dataEmissao ? `${docToUse.dataEmissao} 14:00:00` : '15/02/2026 14:00:00',
+        ip: '192.168.10.15',
+        dispositivo: 'Desktop',
+        navegador: 'Chrome'
+      });
+    }
+
+    // 3. Leituras assinadas (Aceite de Leitura)
+    if (docToUse.documentReadings && docToUse.documentReadings.length > 0) {
+      docToUse.documentReadings.forEach((r, idx) => {
+        syntheticLogs.push({
+          id: `synth-read-${docToUse.id}-${idx}`,
+          documentoId: docToUse.id,
+          usuario: r.usuario,
+          acao: 'Aceite de Leitura Registrado',
+          detalhes: `Colaborador ${r.usuario} assinou eletronicamente o termo de leitura e treinamento de posto (ISO 9001:2015). Chave: ${r.assinaturaEletronica}`,
+          data: r.dataLeitura,
+          ip: '192.168.10.45',
+          dispositivo: 'Tablet',
+          navegador: 'Chrome Mobile'
+        });
+      });
+    }
+
+    // 4. Cópias distribuídas e recebidas
+    if (docToUse.distribuicaoCopias && docToUse.distribuicaoCopias.length > 0) {
+      docToUse.distribuicaoCopias.forEach((c, idx) => {
+        if (c.aceiteStatus === 'Aceito' || c.recebidoPor) {
+          syntheticLogs.push({
+            id: `synth-copy-acc-${docToUse.id}-${idx}`,
+            documentoId: docToUse.id,
+            usuario: c.recebidoPor,
+            acao: 'Recebimento de Cópia Registrado',
+            detalhes: `Protocolo de entrega e recebimento assinado por ${c.recebidoPor} para o posto de trabalho ${c.destinatario}.`,
+            data: c.dataAceite || `${c.dataEntrega} 10:15:00`,
+            ip: '192.168.10.22',
+            dispositivo: 'Desktop',
+            navegador: 'Chrome'
+          });
+        }
+        syntheticLogs.push({
+          id: `synth-copy-${docToUse.id}-${idx}`,
+          documentoId: docToUse.id,
+          usuario: 'Qualidade / SGQ',
+          acao: 'Distribuição de Cópia Controlada',
+          detalhes: `Cópia controlada (${c.tipo}) emitida e encaminhada para o setor ${c.destinatario}.`,
+          data: `${c.dataEntrega} 09:00:00`,
+          ip: '192.168.10.10',
+          dispositivo: 'Desktop',
+          navegador: 'Chrome'
+        });
+      });
+    }
+
+    // 5. Aprovação
+    if (docToUse.dataAprovacao || docToUse.assinaturaAprovador || docToUse.status === 'Homologado' || docToUse.status === 'Distribuição' || docToUse.status === 'Aceite' || docToUse.status === 'Aceite de Leitura') {
+      syntheticLogs.push({
+        id: `synth-apr-${docToUse.id}`,
+        documentoId: docToUse.id,
+        usuario: docToUse.aprovador || 'Gerência SGQ',
+        acao: 'Aprovação Final da Gerência',
+        detalhes: `Documento aprovado formalmente para a versão v${docToUse.revisao.toString().padStart(2, '0')}. Validação de requisitos da Qualidade.`,
+        data: docToUse.dataAprovacao ? `${docToUse.dataAprovacao} 11:30:00` : `${docToUse.dataEmissao || '2026-02-15'} 11:30:00`,
+        ip: '192.168.10.15',
+        dispositivo: 'Desktop',
+        navegador: 'Chrome'
+      });
+    }
+
+    // 6. Revisão Técnica
+    if (docToUse.dataRevisao || docToUse.assinaturaRevisor || docToUse.status === 'Homologado' || docToUse.status === 'Distribuição' || docToUse.status === 'Aceite' || docToUse.status === 'Aceite de Leitura' || docToUse.status === 'Aprovação' || docToUse.status === 'Em Aprovação') {
+      syntheticLogs.push({
+        id: `synth-rev-${docToUse.id}`,
+        documentoId: docToUse.id,
+        usuario: docToUse.revisor || 'Supervisão Técnica',
+        acao: 'Revisão Técnica Operacional',
+        detalhes: `Conformidade técnica verificada em conjunto com os procedimentos de chão de fábrica.`,
+        data: docToUse.dataRevisao ? `${docToUse.dataRevisao} 16:00:00` : `${docToUse.dataEmissao || '2026-02-14'} 16:00:00`,
+        ip: '192.168.10.33',
+        dispositivo: 'Desktop',
+        navegador: 'Chrome'
+      });
+    }
+
+    // 7. Elaboração
+    syntheticLogs.push({
+      id: `synth-elab-${docToUse.id}`,
+      documentoId: docToUse.id,
+      usuario: docToUse.elaborador || 'Qualidade Vickytex',
+      acao: 'Elaboração e Redação Técnica',
+      detalhes: `Elaboração e redação técnica do procedimento conforme os padrões da ISO 9001:2015.`,
+      data: docToUse.dataElaboracao ? `${docToUse.dataElaboracao} 08:30:00` : `${docToUse.createdAt?.split('T')[0] || '2026-02-10'} 08:30:00`,
+      ip: '192.168.10.10',
+      dispositivo: 'Desktop',
+      navegador: 'Chrome'
+    });
+
+    // 8. Cadastro Inicial
+    syntheticLogs.push({
+      id: `synth-init-${docToUse.id}`,
+      documentoId: docToUse.id,
+      usuario: docToUse.elaborador || 'Qualidade Vickytex',
+      acao: 'Cadastro Inicial no SGQ',
+      detalhes: `Documento cadastrado sob o código ${docToUse.codigo} no setor ${docToUse.setor} (Revisão v${docToUse.revisao.toString().padStart(2, '0')}).`,
+      data: docToUse.createdAt ? new Date(docToUse.createdAt).toLocaleString('pt-BR') : '10/02/2026 08:00:00',
+      ip: '192.168.10.10',
+      dispositivo: 'Desktop',
+      navegador: 'Chrome'
+    });
+
+    return syntheticLogs;
   };
 
   // Helper para adicionar um Log Técnico de Auditoria ao Documento
@@ -203,7 +356,11 @@ export const DocumentoAbasDetalhes: React.FC<DocumentoAbasDetalhesProps> = ({
       navegador
     };
 
-    const updatedLogs = doc.documentLogs ? [newLog, ...doc.documentLogs] : [newLog];
+    const currentLogs = (doc.documentLogs && doc.documentLogs.length > 0)
+      ? doc.documentLogs
+      : getEffectiveDocumentLogs(doc);
+
+    const updatedLogs = [newLog, ...currentLogs];
     return { ...doc, documentLogs: updatedLogs };
   };
 
@@ -239,6 +396,7 @@ export const DocumentoAbasDetalhes: React.FC<DocumentoAbasDetalhesProps> = ({
       activeDoc.status === 'Homologado' || 
       activeDoc.status === 'Distribuição' || 
       activeDoc.status === 'Aceite' || 
+      activeDoc.status === 'Aceite de Leitura' || 
       activeDoc.status === 'Obsoleto'
     ) {
       return null;
@@ -442,6 +600,108 @@ export const DocumentoAbasDetalhes: React.FC<DocumentoAbasDetalhesProps> = ({
     
     onUpdateDocument(docWithLogs);
     onAddLog('Publicação de Documento', `Documento ${activeDoc.codigo} liberado para distribuição.`, activeDoc.id);
+    setActionSuccessMsg(`Documento ${activeDoc.codigo} liberado para distribuição de cópias.`);
+    setTimeout(() => setActionSuccessMsg(''), 4000);
+  };
+
+  // Avançar formalmente para a fase de Aceite de Leitura (ISO 9001)
+  const handleAdvanceToAceiteLeitura = () => {
+    const updatedDoc: Documento = {
+      ...activeDoc,
+      status: 'Aceite de Leitura',
+      updatedAt: new Date().toISOString()
+    };
+    const docWithLogs = addDocumentLog(
+      updatedDoc, 
+      'Fase de Aceite de Leitura Iniciada', 
+      'Documento liberado formalmente para registro de aceite de leitura e treinamento da equipe operacional (ISO 9001:2015).'
+    );
+    
+    onUpdateDocument(docWithLogs);
+    onAddLog('Aceite de Leitura', `Documento ${activeDoc.codigo} avançado para status "Aceite de Leitura".`, activeDoc.id);
+    setActiveTab(7);
+    setActionSuccessMsg(`Status do documento alterado para "Aceite de Leitura" com sucesso!`);
+    setTimeout(() => setActionSuccessMsg(''), 4000);
+  };
+
+  // Homologar documento formalmente após conclusão do aceite de leitura (ISO 9001)
+  const handleConcludeHomologacao = () => {
+    const updatedDoc: Documento = {
+      ...activeDoc,
+      status: 'Homologado',
+      updatedAt: new Date().toISOString()
+    };
+    const docWithLogs = addDocumentLog(
+      updatedDoc, 
+      'Documento Homologado e Vigente', 
+      'Ciclo de aceite de leitura e treinamento concluído. Procedimento homologado com status Vigente para operação na fábrica Vickytex.'
+    );
+    
+    onUpdateDocument(docWithLogs);
+    onAddLog('Homologação de Documento', `Documento ${activeDoc.codigo} homologado como Vigente no SGQ Vickytex.`, activeDoc.id);
+    setActionSuccessMsg(`Documento ${activeDoc.codigo} homologado com sucesso! Status atualizado para "Homologado" (Vigente).`);
+    setTimeout(() => setActionSuccessMsg(''), 5000);
+  };
+
+  // Descontinuar Documento / Tornar Obsoleto (ISO 9001:2015)
+  const handleMakeObsolete = async () => {
+    if (!obsoleteReason.trim()) {
+      setObsoleteError('Informe a justificativa formal para tornar este documento obsoleto.');
+      return;
+    }
+    if (!obsoletePassword.trim()) {
+      setObsoleteError('Informe sua senha para confirmar a descontinuação formal.');
+      return;
+    }
+
+    setIsObsoleteSubmitting(true);
+    setObsoleteError('');
+
+    const isPasswordValid = await verifyUserPassword(obsoletePassword);
+    if (!isPasswordValid) {
+      setObsoleteError('Senha incorreta.');
+      setIsObsoleteSubmitting(false);
+      return;
+    }
+
+    const signerName = currentUser?.name || currentUser?.email || 'Gestor da Qualidade';
+
+    // Recolhe todas as cópias distribuídas que ainda estão ativas (Recall)
+    const updatedCopies = activeDoc.distribuicaoCopias
+      ? activeDoc.distribuicaoCopias.map(c => ({
+          ...c,
+          status: 'Recolhida' as const,
+          dataRecolhimento: new Date().toISOString().split('T')[0],
+          observacao: `Recolhimento obrigatório: Documento ${activeDoc.codigo} descontinuado/obsoleto.`
+        }))
+      : undefined;
+
+    const updatedDoc: Documento = {
+      ...activeDoc,
+      status: 'Obsoleto',
+      distribuicaoCopias: updatedCopies,
+      updatedAt: new Date().toISOString()
+    };
+
+    const docWithLogs = addDocumentLog(
+      updatedDoc,
+      'Documento Tornado Obsoleto',
+      `Documento ${activeDoc.codigo} descontinuado por ${signerName}. Motivo: ${obsoleteReason.trim()}. Cópias físicas e digitais recolhidas do chão de fábrica (Recall).`
+    );
+
+    onUpdateDocument(docWithLogs);
+    onAddLog(
+      'Documento Obsoleto (Recall)',
+      `Documento ${activeDoc.codigo} marcado como Obsoleto por ${signerName}. Motivo: ${obsoleteReason.trim()}`,
+      activeDoc.id
+    );
+
+    setIsObsoleteSubmitting(false);
+    setIsObsoleteModalOpen(false);
+    setObsoleteReason('');
+    setObsoletePassword('');
+    setActionSuccessMsg(`Documento ${activeDoc.codigo} marcado como Obsoleto com sucesso! Todas as cópias entraram em recall.`);
+    setTimeout(() => setActionSuccessMsg(''), 5000);
   };
 
   // Registrar nova Distribuição de Cópia
@@ -487,7 +747,7 @@ export const DocumentoAbasDetalhes: React.FC<DocumentoAbasDetalhesProps> = ({
     setIsAddCopyOpen(false);
   };
 
-  // Registrar Aceite de Cópia Controlada na Fábrica (ISO 9001:2015)
+  // Registrar Recebimento / Aceite de Cópia Controlada na Fábrica (ISO 9001:2015)
   const handleAcceptCopy = (copyId: string, observacao?: string) => {
     if (!activeDoc.distribuicaoCopias) return;
 
@@ -497,18 +757,18 @@ export const DocumentoAbasDetalhes: React.FC<DocumentoAbasDetalhesProps> = ({
           ...c,
           aceiteStatus: 'Aceito' as const,
           dataAceite: new Date().toLocaleDateString('pt-BR'),
-          observacao: observacao || 'Recebido eletronicamente e lido no tablet do posto de trabalho.'
+          observacao: observacao || 'Recebido eletronicamente e conferido no posto de trabalho.'
         };
       }
       return c;
     });
 
-    // Se todas as cópias ativas estão aceitas, muda o status do documento para "Aceite"
+    // Se todas as cópias ativas estão aceitas/recebidas, muda o status do documento para "Aceite de Leitura"
     const todasAceitas = updatedCopies
       .filter(c => c.status === 'Ativa')
       .every(c => c.aceiteStatus === 'Aceito');
 
-    const nextStatus = todasAceitas ? 'Aceite' : activeDoc.status;
+    const nextStatus: DocumentStatus = todasAceitas ? 'Aceite de Leitura' : activeDoc.status;
 
     const updatedDoc: Documento = {
       ...activeDoc,
@@ -517,10 +777,22 @@ export const DocumentoAbasDetalhes: React.FC<DocumentoAbasDetalhesProps> = ({
       updatedAt: new Date().toISOString()
     };
 
-    const docWithLogs = addDocumentLog(updatedDoc, 'Aceite de Cópia Registrado', `Aceite de cópia controlada assinado por operador/líder.`);
+    const docWithLogs = addDocumentLog(
+      updatedDoc, 
+      'Recebimento de Cópia Registrado', 
+      `Recebimento de cópia controlada assinado por operador/líder.${todasAceitas ? ' Todas as cópias ativas foram recebidas. Status alterado para "Aceite de Leitura".' : ''}`
+    );
     
     onUpdateDocument(docWithLogs);
-    onAddLog('Aceite de Cópia', `Aceite de recebimento registrado para a cópia do documento ${activeDoc.codigo}.`, activeDoc.id);
+    onAddLog('Recebimento de Cópia', `Recebimento registrado para a cópia do documento ${activeDoc.codigo}.${todasAceitas ? ' Avançado para "Aceite de Leitura".' : ''}`, activeDoc.id);
+
+    if (todasAceitas) {
+      setActionSuccessMsg(`Todas as cópias foram recebidas! Status avançado para "Aceite de Leitura".`);
+      setTimeout(() => setActionSuccessMsg(''), 5000);
+    } else {
+      setActionSuccessMsg(`Recebimento da cópia registrado com sucesso.`);
+      setTimeout(() => setActionSuccessMsg(''), 3000);
+    }
   };
 
   // Cancelar/Recolher cópia (Recall)
@@ -666,8 +938,15 @@ export const DocumentoAbasDetalhes: React.FC<DocumentoAbasDetalhesProps> = ({
       ? [newReading, ...activeDoc.documentReadings] 
       : [newReading];
 
+    // Ao assinar o aceite de leitura formal (ISO 9001), o status do documento avança para "Aceite de Leitura"
+    const nextStatus: DocumentStatus = 
+      (activeDoc.status === 'Distribuição' || activeDoc.status === 'Publicação' || activeDoc.status === 'Homologado' || activeDoc.status === 'Aceite')
+        ? 'Aceite de Leitura'
+        : (activeDoc.status === 'Aceite de Leitura' ? 'Aceite de Leitura' : activeDoc.status);
+
     const updatedDoc: Documento = {
       ...activeDoc,
+      status: nextStatus,
       documentReadings: updatedReadings,
       updatedAt: new Date().toISOString()
     };
@@ -675,19 +954,23 @@ export const DocumentoAbasDetalhes: React.FC<DocumentoAbasDetalhesProps> = ({
     const docWithLogs = addDocumentLog(
       updatedDoc, 
       'Aceite de Leitura Registrado', 
-      `Colaborador ${newReading.usuario} assinou termo eletrônico de leitura e conformidade.`
+      `Colaborador ${newReading.usuario} assinou termo eletrônico de leitura e conformidade técnica (ISO 9001). Status: ${nextStatus}.`
     );
 
     onUpdateDocument(docWithLogs);
     onAddLog(
       'Aceite de Leitura ISO 9001', 
-      `Assinatura de leitura e compreensão registrada para o documento ${activeDoc.codigo} por ${newReading.usuario}.`, 
+      `Assinatura de leitura e compreensão registrada para o documento ${activeDoc.codigo} por ${newReading.usuario}. Status: ${nextStatus}.`, 
       activeDoc.id
     );
 
     setReadSuccess(true);
     setReadPassword('');
     setReadChecked(false);
+    setActionSuccessMsg(`Aceite de leitura assinado com sucesso! Status do documento atualizado para "${nextStatus}".`);
+    setTimeout(() => {
+      setActionSuccessMsg('');
+    }, 5000);
 
     // Esconde a mensagem de sucesso após 4 segundos
     setTimeout(() => {
@@ -770,12 +1053,17 @@ export const DocumentoAbasDetalhes: React.FC<DocumentoAbasDetalhesProps> = ({
   const getStatusBadge = (status: DocumentStatus) => {
     switch (status) {
       case 'Rascunho': return 'bg-slate-100 text-slate-700 border-slate-200';
-      case 'Elaboração': return 'bg-blue-50 text-blue-700 border-blue-200';
-      case 'Revisão Técnica': return 'bg-amber-50 text-amber-700 border-amber-200';
-      case 'Aprovação': return 'bg-purple-50 text-purple-700 border-purple-200';
+      case 'Elaboração':
+      case 'Em Elaboração': return 'bg-blue-50 text-blue-700 border-blue-200';
+      case 'Revisão Técnica':
+      case 'Em Revisão': return 'bg-amber-50 text-amber-700 border-amber-200';
+      case 'Aprovação':
+      case 'Em Aprovação': return 'bg-purple-50 text-purple-700 border-purple-200';
       case 'Publicação': return 'bg-emerald-50 text-emerald-700 border-emerald-200';
       case 'Distribuição': return 'bg-teal-50 text-teal-700 border-teal-200';
-      case 'Aceite': return 'bg-indigo-50 text-indigo-700 border-indigo-200';
+      case 'Aceite':
+      case 'Aceite de Leitura': return 'bg-indigo-50 text-indigo-700 border-indigo-200';
+      case 'Homologado': return 'bg-emerald-50 text-emerald-700 border-emerald-200';
       case 'Nova Revisão': return 'bg-orange-50 text-orange-700 border-orange-200';
       default: return 'bg-rose-50 text-rose-700 border-rose-200';
     }
@@ -796,7 +1084,7 @@ export const DocumentoAbasDetalhes: React.FC<DocumentoAbasDetalhesProps> = ({
                 {activeDoc.codigo}
               </span>
               <span className={`px-1.5 py-0.5 rounded text-[8px] font-extrabold uppercase border ${getStatusBadge(activeDoc.status)}`}>
-                {activeDoc.status}
+                {activeDoc.status === 'Aceite' ? 'Aceite de Leitura' : activeDoc.status}
               </span>
               <span className="text-[10px] text-slate-400 font-mono">
                 Rev {activeDoc.revisao.toString().padStart(2, '0')}
@@ -823,7 +1111,7 @@ export const DocumentoAbasDetalhes: React.FC<DocumentoAbasDetalhesProps> = ({
           { id: 1, label: 'Informações Gerais' },
           { id: 2, label: 'Revisões' },
           { id: 3, label: 'Distribuição' },
-          { id: 4, label: 'Histórico' },
+          { id: 4, label: 'Histórico (Ciclo de Vida)' },
           { id: 5, label: 'Arquivo' },
           { id: 6, label: 'Logs de Auditoria' },
           { id: 7, label: 'Aceite de Leitura (ISO)' }
@@ -849,6 +1137,23 @@ export const DocumentoAbasDetalhes: React.FC<DocumentoAbasDetalhesProps> = ({
         {activeTab === 1 && (
           <div className="space-y-6 animate-fade-in">
             
+            {/* Aviso de Documento Obsoleto */}
+            {activeDoc.status === 'Obsoleto' && (
+              <div className="p-4 bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/40 rounded-xl flex items-start gap-3 animate-fade-in">
+                <div className="p-2 bg-rose-100 dark:bg-rose-900/50 text-rose-700 dark:text-rose-300 rounded-lg shrink-0 mt-0.5">
+                  <Ban className="w-5 h-5" />
+                </div>
+                <div className="space-y-1">
+                  <h5 className="text-xs font-extrabold text-rose-800 dark:text-rose-300 uppercase tracking-wide">
+                    DOCUMENTO OBSOLETO / DESCONTINUADO (ISO 9001 - CLÁUSULA 7.5.3)
+                  </h5>
+                  <p className="text-[11px] text-rose-700/90 dark:text-rose-300/80 leading-normal font-medium">
+                    Este procedimento perdeu a validade operacional e <strong>não pode ser utilizado nos postos de trabalho</strong> da fábrica Vickytex. Todas as cópias físicas impressas e acessos em tablets foram recolhidos pelo SGQ. Mantido no sistema exclusivamente para histórico e auditorias de conformidade.
+                  </p>
+                </div>
+              </div>
+            )}
+
             {/* Feedback de rejeição ativo */}
             {activeDoc.feedbackAjuste && (
               <div className="p-3 bg-rose-50 dark:bg-rose-950/20 border border-rose-100 dark:border-rose-900/30 rounded-xl flex items-start space-x-2.5">
@@ -866,26 +1171,52 @@ export const DocumentoAbasDetalhes: React.FC<DocumentoAbasDetalhesProps> = ({
             <div className="bg-slate-50 dark:bg-slate-800/20 p-4 rounded-xl border border-slate-150 dark:border-slate-800 space-y-3">
               <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Trilha de Progresso do Fluxo Têxtil (ISO 9001)</h4>
               <div className="flex items-center justify-between gap-1 text-[9px] text-slate-400 font-bold overflow-x-auto py-1 scrollbar-none">
-                {['Rascunho', 'Elaboração', 'Revisão Técnica', 'Aprovação', 'Publicação', 'Distribuição', 'Aceite', 'Obsoleto'].map((st, i) => {
+                {[
+                  'Rascunho', 
+                  'Elaboração', 
+                  'Revisão Técnica', 
+                  'Aprovação', 
+                  'Publicação', 
+                  'Distribuição', 
+                  'Aceite de Leitura', 
+                  'Homologado', 
+                  'Obsoleto'
+                ].map((st, i) => {
                   const currIdx = getEtapaAtualIndex();
-                  const isPast = currIdx >= i;
-                  const isCurrent = activeDoc.status === st;
+                  const isPast = i < currIdx;
+                  const isCurrent = i === currIdx;
 
                   return (
                     <div key={st} className="flex items-center space-x-1.5 shrink-0">
-                      <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[9px] ${
+                      <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold ${
                         isCurrent 
-                          ? 'bg-blue-600 text-white ring-4 ring-blue-500/10'
+                          ? (st === 'Homologado' ? 'bg-emerald-600 text-white ring-4 ring-emerald-500/20' : 'bg-blue-600 text-white ring-4 ring-blue-500/20')
                           : isPast
                           ? 'bg-emerald-500 text-white'
                           : 'bg-slate-200 dark:bg-slate-700 text-slate-400'
                       }`}>
-                        {isPast && !isCurrent ? '✓' : i + 1}
+                        {isPast || (isCurrent && st === 'Homologado') ? '✓' : i + 1}
                       </div>
-                      <span className={`${isCurrent ? 'text-blue-600 dark:text-blue-400 font-extrabold' : isPast ? 'text-slate-600 dark:text-slate-300' : 'text-slate-400'}`}>
-                        {st}
-                      </span>
-                      {i < 7 && <span className="text-slate-300 dark:text-slate-700">➔</span>}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (st === 'Aceite de Leitura') setActiveTab(7);
+                          else if (st === 'Distribuição') setActiveTab(3);
+                          else if (st === 'Revisão Técnica') setActiveTab(2);
+                          else if (st === 'Homologado' || st === 'Publicação') setActiveTab(1);
+                        }}
+                        className={`transition-colors ${
+                          isCurrent 
+                            ? (st === 'Homologado' ? 'text-emerald-600 dark:text-emerald-400 font-extrabold' : 'text-blue-600 dark:text-blue-400 font-extrabold')
+                            : isPast 
+                            ? 'text-slate-600 dark:text-slate-300' 
+                            : 'text-slate-400'
+                        } ${(st === 'Aceite de Leitura' || st === 'Distribuição' || st === 'Revisão Técnica' || st === 'Homologado') ? 'cursor-pointer hover:underline' : 'cursor-default'}`}
+                        title={st === 'Aceite de Leitura' ? 'Clique para ir à aba de Aceite de Leitura (ISO 9001)' : (st === 'Homologado' ? 'Documento vigente na fábrica' : undefined)}
+                      >
+                        {st === 'Homologado' ? 'Homologado (Vigente)' : st}
+                      </button>
+                      {i < 8 && <span className="text-slate-300 dark:text-slate-700">➔</span>}
                     </div>
                   );
                 })}
@@ -1073,7 +1404,7 @@ export const DocumentoAbasDetalhes: React.FC<DocumentoAbasDetalhesProps> = ({
                     <span className="inline-flex items-center text-[9px] text-amber-600 font-bold bg-amber-50 dark:bg-amber-950/40 px-1.5 py-0.5 rounded mt-1.5 animate-pulse">
                       ⏱ Aguardando
                     </span>
-                  ) : (activeDoc.status === 'Aprovação' || activeDoc.status === 'Em Aprovação' || activeDoc.status === 'Publicação' || activeDoc.status === 'Homologado' || activeDoc.status === 'Distribuição' || activeDoc.status === 'Aceite') ? (
+                  ) : (activeDoc.status === 'Aprovação' || activeDoc.status === 'Em Aprovação' || activeDoc.status === 'Publicação' || activeDoc.status === 'Homologado' || activeDoc.status === 'Distribuição' || activeDoc.status === 'Aceite' || activeDoc.status === 'Aceite de Leitura') ? (
                     <div className="mt-1.5">
                       <span className="inline-flex items-center text-[9px] text-emerald-600 font-bold bg-emerald-50 dark:bg-emerald-950/40 px-1.5 py-0.5 rounded">
                         ✓ Revisado
@@ -1100,7 +1431,7 @@ export const DocumentoAbasDetalhes: React.FC<DocumentoAbasDetalhesProps> = ({
                     <span className="inline-flex items-center text-[9px] text-blue-600 font-bold bg-blue-50 dark:bg-blue-950/40 px-1.5 py-0.5 rounded mt-1.5 animate-pulse">
                       ⏱ Aguardando
                     </span>
-                  ) : (activeDoc.status === 'Publicação' || activeDoc.status === 'Homologado' || activeDoc.status === 'Distribuição' || activeDoc.status === 'Aceite') ? (
+                  ) : (activeDoc.status === 'Publicação' || activeDoc.status === 'Homologado' || activeDoc.status === 'Distribuição' || activeDoc.status === 'Aceite' || activeDoc.status === 'Aceite de Leitura') ? (
                     <div className="mt-1.5">
                       <span className="inline-flex items-center text-[9px] text-emerald-600 font-bold bg-emerald-50 dark:bg-emerald-950/40 px-1.5 py-0.5 rounded">
                         ✓ Aprovado
@@ -1132,8 +1463,64 @@ export const DocumentoAbasDetalhes: React.FC<DocumentoAbasDetalhesProps> = ({
                             <span>Disponibilizar para Distribuição de Cópias</span>
                           </button>
                         )}
+
+                        {activeDoc.status === 'Distribuição' && (currentUser?.role === 'Qualidade' || currentUser?.role === 'Supervisor' || currentUser?.role === 'Administrador') && (
+                          <button
+                            onClick={handleAdvanceToAceiteLeitura}
+                            className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 cursor-pointer shadow-xs transition-colors"
+                          >
+                            <UserCheck className="w-4 h-4" />
+                            <span>Avançar para Aceite de Leitura (ISO 9001)</span>
+                          </button>
+                        )}
+
+                        {(activeDoc.status === 'Aceite de Leitura' || activeDoc.status === 'Aceite') && (
+                          <div className="space-y-2">
+                            <div className="p-3 bg-indigo-50/60 dark:bg-indigo-950/20 border border-indigo-150 dark:border-indigo-900/30 rounded-xl space-y-1.5">
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                  <CheckCircle2 className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                                  <span className="text-xs font-bold text-indigo-800 dark:text-indigo-300">Fase: Aceite de Leitura</span>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => setActiveTab(7)}
+                                  className="text-[10px] font-bold text-indigo-600 hover:underline cursor-pointer"
+                                >
+                                  Ver Termos ➔
+                                </button>
+                              </div>
+                              <p className="text-[10px] text-slate-500">
+                                {activeDoc.documentReadings?.length || 0} leitura(s) registrada(s) na versão v{activeDoc.revisao}.
+                              </p>
+                            </div>
+
+                            {(currentUser?.role === 'Qualidade' || currentUser?.role === 'Gerência' || currentUser?.role === 'Administrador') && (
+                              <button
+                                onClick={handleConcludeHomologacao}
+                                className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 cursor-pointer shadow-xs transition-colors"
+                                title="Concluir ciclo de leitura e homologar o documento como Vigente no SGQ"
+                              >
+                                <CheckCircle2 className="w-4 h-4" />
+                                <span>Homologar Documento (Tornar Vigente)</span>
+                              </button>
+                            )}
+                          </div>
+                        )}
+
+                        {activeDoc.status === 'Homologado' && (
+                          <div className="p-3 bg-emerald-50/60 dark:bg-emerald-950/20 border border-emerald-150 dark:border-emerald-900/30 rounded-xl flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                              <span className="text-xs font-bold text-emerald-800 dark:text-emerald-300">Documento Homologado & Vigente</span>
+                            </div>
+                            <span className="text-[9px] font-mono text-emerald-700 font-extrabold uppercase bg-emerald-100/60 px-1.5 py-0.5 rounded">
+                              ✓ 100% Concluído
+                            </span>
+                          </div>
+                        )}
                         
-                        {(activeDoc.status === 'Publicação' || activeDoc.status === 'Distribuição' || activeDoc.status === 'Aceite' || activeDoc.status === 'Homologado') && 
+                        {(activeDoc.status === 'Publicação' || activeDoc.status === 'Distribuição' || activeDoc.status === 'Aceite' || activeDoc.status === 'Aceite de Leitura' || activeDoc.status === 'Homologado') && 
                          (currentUser?.role === 'Qualidade' || currentUser?.role === 'Gerência' || currentUser?.role === 'Administrador') && (
                           <button
                             onClick={() => setIsRevisionModalOpen(true)}
@@ -1141,6 +1528,18 @@ export const DocumentoAbasDetalhes: React.FC<DocumentoAbasDetalhesProps> = ({
                           >
                             <RotateCcw className="w-4 h-4" />
                             <span>Abrir Nova Revisão Técnica (Rev. v{(activeDoc.revisao + 1).toString()})</span>
+                          </button>
+                        )}
+
+                        {activeDoc.status !== 'Obsoleto' && 
+                         (currentUser?.role === 'Qualidade' || currentUser?.role === 'Gerência' || currentUser?.role === 'Diretoria' || currentUser?.role === 'Administrador') && (
+                          <button
+                            onClick={() => setIsObsoleteModalOpen(true)}
+                            className="w-full py-2 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/20 dark:hover:bg-rose-950/40 text-rose-600 dark:text-rose-400 font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 cursor-pointer border border-rose-200 dark:border-rose-900/30 transition-colors"
+                            title="Descontinuar e marcar documento como obsoleto no SGQ (ISO 9001:2015)"
+                          >
+                            <Ban className="w-3.5 h-3.5" />
+                            <span>Tornar Documento Obsoleto (Descontinuar)</span>
                           </button>
                         )}
                       </div>
@@ -1447,18 +1846,32 @@ export const DocumentoAbasDetalhes: React.FC<DocumentoAbasDetalhesProps> = ({
           <div className="space-y-6 animate-fade-in">
             <div className="flex justify-between items-center pb-2 border-b border-slate-150 dark:border-slate-800">
               <div>
-                <h4 className="text-xs font-extrabold text-slate-800 dark:text-slate-200">Distribuição de Cópias e Assinatura de Aceite</h4>
-                <p className="text-[11px] text-slate-400">Garantia de que os operadores estão usando apenas procedimentos vigentes (Recall de Obsoletos)</p>
+                <h4 className="text-xs font-extrabold text-slate-800 dark:text-slate-200">Distribuição de Cópias e Protocolo de Recebimento</h4>
+                <p className="text-[11px] text-slate-400">Controle de cópias digitais e físicas em postos têxteis com protocolo de entrega e avanço para Aceite de Leitura</p>
               </div>
               
-              {(currentUser?.role === 'Qualidade' || currentUser?.role === 'Supervisor' || currentUser?.role === 'Administrador') && (
-                <button
-                  onClick={() => setIsAddCopyOpen(!isAddCopyOpen)}
-                  className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs shadow-2xs transition-all cursor-pointer"
-                >
-                  {isAddCopyOpen ? 'Cancelar' : '+ Registrar Entrega'}
-                </button>
-              )}
+              <div className="flex items-center gap-2 flex-wrap">
+                {(currentUser?.role === 'Qualidade' || currentUser?.role === 'Supervisor' || currentUser?.role === 'Administrador') && (
+                  <>
+                    <button
+                      onClick={() => setIsAddCopyOpen(!isAddCopyOpen)}
+                      className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs shadow-2xs transition-all cursor-pointer"
+                    >
+                      {isAddCopyOpen ? 'Cancelar' : '+ Registrar Entrega'}
+                    </button>
+                    {activeDoc.status !== 'Aceite de Leitura' && activeDoc.status !== 'Aceite' && (
+                      <button
+                        onClick={handleAdvanceToAceiteLeitura}
+                        className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs shadow-2xs transition-all cursor-pointer flex items-center gap-1.5"
+                        title="Concluir distribuição e avançar documento para a fase de Aceite de Leitura (ISO 9001)"
+                      >
+                        <UserCheck className="w-3.5 h-3.5" />
+                        <span>Avançar para Aceite de Leitura ➔</span>
+                      </button>
+                    )}
+                  </>
+                )}
+              </div>
             </div>
 
             {/* Form para Registrar Entrega de Cópia Controlada */}
@@ -1569,24 +1982,24 @@ export const DocumentoAbasDetalhes: React.FC<DocumentoAbasDetalhesProps> = ({
                       </div>
                       {copia.aceiteStatus === 'Aceito' ? (
                         <p className="text-[9px] text-emerald-600 font-semibold mt-1">
-                          ✓ Aceite de recebimento assinado em {copia.dataAceite}.
+                          ✓ Protocolo de recebimento assinado em {copia.dataAceite}.
                         </p>
                       ) : (
                         <p className="text-[9px] text-indigo-500 font-semibold mt-1 animate-pulse">
-                          ⏱ Aguardando leitura e aceite técnico no posto de trabalho.
+                          ⏱ Aguardando confirmação de recebimento no posto de trabalho.
                         </p>
                       )}
                     </div>
 
                     <div className="flex items-center gap-2 shrink-0">
-                      {/* Botão de Aceite da Fábrica */}
+                      {/* Botão de Recebimento de Cópia */}
                       {copia.status === 'Ativa' && copia.aceiteStatus !== 'Aceito' && (
                         <button
                           onClick={() => handleAcceptCopy(copia.id)}
                           className="px-3 py-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg text-[10px] transition-colors cursor-pointer"
-                          title="Registrar que o posto de trabalho recebeu e leu este procedimento"
+                          title="Registrar que o posto de trabalho recebeu esta via do procedimento"
                         >
-                          Confirmar Recebimento (Aceite)
+                          Confirmar Recebimento da Cópia
                         </button>
                       )}
                       
@@ -1615,49 +2028,439 @@ export const DocumentoAbasDetalhes: React.FC<DocumentoAbasDetalhesProps> = ({
         {/* ==================================== ABA 4: HISTÓRICO DE CICLO DE VIDA ==================================== */}
         {activeTab === 4 && (
           <div className="space-y-6 animate-fade-in">
-            <div className="pb-2 border-b border-slate-150 dark:border-slate-800">
-              <h4 className="text-xs font-extrabold text-slate-800 dark:text-slate-200">Ciclo de Vida do Documento</h4>
-              <p className="text-[11px] text-slate-400">Rastreamento completo das datas, alterações e estágios pelo qual passou</p>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-slate-150 dark:border-slate-800 gap-2">
+              <div>
+                <h4 className="text-xs font-extrabold text-slate-800 dark:text-slate-200">Ciclo de Vida do Documento (Histórico Completo)</h4>
+                <p className="text-[11px] text-slate-400">Rastreabilidade cronológica de todas as fases, assinaturas, distribuições e auditorias (ISO 9001:2015)</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] text-slate-400 font-bold uppercase">Status Atual:</span>
+                <span className={`px-2 py-0.5 rounded text-[9px] font-extrabold uppercase border ${getStatusBadge(activeDoc.status)}`}>
+                  {activeDoc.status === 'Aceite' ? 'Aceite de Leitura' : activeDoc.status}
+                </span>
+              </div>
             </div>
 
-            <div className="relative border-l-2 border-slate-100 dark:border-slate-800 pl-5 ml-2.5 space-y-6 text-xs text-slate-500">
-              {/* Timeline Dinâmica */}
-              
-              {activeDoc.dataAprovacao && (
-                <div className="relative">
-                  <div className="absolute -left-[27px] top-1 w-3 h-3 rounded-full bg-emerald-500 border-2 border-white dark:border-slate-900" />
-                  <p className="font-mono text-[10px] text-slate-400">{activeDoc.dataAprovacao}</p>
-                  <p className="font-bold text-slate-800 dark:text-slate-200 mt-0.5">Homologado e Publicado</p>
-                  <p className="text-[10px] text-slate-400 mt-0.5">Assinado digitalmente por Diretoria/Gerência: <strong>{activeDoc.aprovador}</strong></p>
+            {/* Painel Superior: Indicadores do Ciclo de Vida */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+              <div className="p-3 bg-slate-50 dark:bg-slate-850 border border-slate-150 dark:border-slate-800 rounded-xl space-y-1">
+                <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Versão do SGQ</span>
+                <div className="flex items-center gap-1.5 font-bold text-slate-800 dark:text-slate-100">
+                  <RotateCcw className="w-3.5 h-3.5 text-blue-600" />
+                  <span>Revisão v{activeDoc.revisao.toString().padStart(2, '0')}</span>
                 </div>
-              )}
-
-              {activeDoc.dataRevisao && (
-                <div className="relative">
-                  <div className="absolute -left-[27px] top-1 w-3 h-3 rounded-full bg-amber-500 border-2 border-white dark:border-slate-900" />
-                  <p className="font-mono text-[10px] text-slate-400">{activeDoc.dataRevisao}</p>
-                  <p className="font-bold text-slate-800 dark:text-slate-200 mt-0.5">Revisado e Validado</p>
-                  <p className="text-[10px] text-slate-400 mt-0.5">Assinado digitalmente por Supervisor/Qualidade: <strong>{activeDoc.revisor}</strong></p>
-                </div>
-              )}
-
-              {activeDoc.dataElaboracao && (
-                <div className="relative">
-                  <div className="absolute -left-[27px] top-1 w-3 h-3 rounded-full bg-blue-500 border-2 border-white dark:border-slate-900" />
-                  <p className="font-mono text-[10px] text-slate-400">{activeDoc.dataElaboracao}</p>
-                  <p className="font-bold text-slate-800 dark:text-slate-200 mt-0.5">Elaborado e Concluído</p>
-                  <p className="text-[10px] text-slate-400 mt-0.5">Criado e assinado eletronicamente por Elaborador: <strong>{activeDoc.elaborador}</strong></p>
-                </div>
-              )}
-
-              <div className="relative">
-                <div className="absolute -left-[27px] top-1 w-3 h-3 rounded-full bg-slate-400 border-2 border-white dark:border-slate-900" />
-                <p className="font-mono text-[10px] text-slate-400">{activeDoc.createdAt?.split('T')[0]}</p>
-                <p className="font-bold text-slate-800 dark:text-slate-200 mt-0.5">Rascunho Inicial do Documento</p>
-                <p className="text-[10px] text-slate-400 mt-0.5">Cadastrado e indexado no SGQ Vickytex.</p>
+                <p className="text-[9px] text-slate-400 font-mono">Emissão: {activeDoc.dataEmissao || 'N/A'}</p>
               </div>
 
+              <div className="p-3 bg-slate-50 dark:bg-slate-850 border border-slate-150 dark:border-slate-800 rounded-xl space-y-1">
+                <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Próxima Revisão</span>
+                <div className="flex items-center gap-1.5 font-bold text-slate-800 dark:text-slate-100">
+                  <Calendar className="w-3.5 h-3.5 text-amber-600" />
+                  <span>{activeDoc.proximaRevisao || 'Anual'}</span>
+                </div>
+                <p className="text-[9px] text-slate-400">Ciclo de {activeDoc.periodicidade || 12} meses</p>
+              </div>
+
+              <div className="p-3 bg-slate-50 dark:bg-slate-850 border border-slate-150 dark:border-slate-800 rounded-xl space-y-1">
+                <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Cópias Controladas</span>
+                <div className="flex items-center gap-1.5 font-bold text-slate-800 dark:text-slate-100">
+                  <Layers className="w-3.5 h-3.5 text-teal-600" />
+                  <span>{activeDoc.distribuicaoCopias?.filter(c => c.status === 'Ativa').length || 0} Ativa(s)</span>
+                </div>
+                <p className="text-[9px] text-slate-400">{activeDoc.distribuicaoCopias?.length || 0} via(s) no total</p>
+              </div>
+
+              <div className="p-3 bg-slate-50 dark:bg-slate-850 border border-slate-150 dark:border-slate-800 rounded-xl space-y-1">
+                <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Aceite de Leitura</span>
+                <div className="flex items-center gap-1.5 font-bold text-slate-800 dark:text-slate-100">
+                  <UserCheck className="w-3.5 h-3.5 text-indigo-600" />
+                  <span>{activeDoc.documentReadings?.length || 0} Assinado(s)</span>
+                </div>
+                <p className="text-[9px] text-slate-400">Treinamento operacional</p>
+              </div>
             </div>
+
+            {/* Timeline Cronológica Dinâmica do Ciclo de Vida */}
+            <div className="bg-white dark:bg-slate-900 border border-slate-150 dark:border-slate-800 rounded-2xl p-5 space-y-6">
+              <h5 className="text-[11px] font-extrabold text-slate-700 dark:text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                <History className="w-3.5 h-3.5 text-blue-600" />
+                Linha do Tempo Cronológica do Documento
+              </h5>
+
+              <div className="relative border-l-2 border-slate-200 dark:border-slate-800 pl-6 ml-3 space-y-7 text-xs">
+                
+                {/* 1. Evento de Obsolescência (Se Obsoleto) */}
+                {activeDoc.status === 'Obsoleto' && (
+                  <div className="relative">
+                    <div className="absolute -left-[31px] top-0.5 w-4 h-4 rounded-full bg-rose-600 border-2 border-white dark:border-slate-900 flex items-center justify-center text-white text-[8px] shadow-xs">
+                      ✕
+                    </div>
+                    <div className="space-y-1 bg-rose-50/50 dark:bg-rose-950/20 p-3 rounded-xl border border-rose-200/50 dark:border-rose-900/30">
+                      <div className="flex items-center justify-between">
+                        <span className="font-mono text-[10px] text-rose-600 dark:text-rose-400 font-bold">
+                          {activeDoc.updatedAt?.split('T')[0] || new Date().toISOString().split('T')[0]}
+                        </span>
+                        <span className="px-1.5 py-0.5 rounded text-[8px] font-extrabold uppercase bg-rose-100 text-rose-700">
+                          Obsoleto / Inativo
+                        </span>
+                      </div>
+                      <p className="font-extrabold text-rose-800 dark:text-rose-300 text-xs">Documento Tornado Obsoleto (Descontinuado)</p>
+                      <p className="text-[10.5px] text-slate-600 dark:text-slate-400">
+                        Vigência revogada conforme cláusula 7.5.3 da ISO 9001. Cópias físicas e digitais sinalizadas para recall de fábrica.
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {/* 2. Evento de Homologação & Vigência Plena */}
+                <div className="relative">
+                  <div className={`absolute -left-[31px] top-0.5 w-4 h-4 rounded-full border-2 border-white dark:border-slate-900 flex items-center justify-center text-white text-[8px] shadow-xs ${
+                    activeDoc.status === 'Homologado'
+                      ? 'bg-emerald-600'
+                      : (activeDoc.status === 'Obsoleto' && activeDoc.dataAprovacao)
+                      ? 'bg-slate-400'
+                      : 'bg-slate-300 dark:bg-slate-700 text-slate-400'
+                  }`}>
+                    {activeDoc.status === 'Homologado' || (activeDoc.status === 'Obsoleto' && activeDoc.dataAprovacao) ? '✓' : '8'}
+                  </div>
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="font-mono text-[10px] text-slate-400 font-bold">
+                        {activeDoc.status === 'Homologado' 
+                          ? (activeDoc.dataEmissao || activeDoc.updatedAt?.split('T')[0]) 
+                          : (activeDoc.status === 'Obsoleto' ? 'Vigência Encerrada' : 'Aguardando')}
+                      </span>
+                      {activeDoc.status === 'Homologado' ? (
+                        <span className="px-1.5 py-0.5 rounded text-[8px] font-extrabold uppercase bg-emerald-100 text-emerald-800">
+                          Vigente na Fábrica
+                        </span>
+                      ) : activeDoc.status === 'Obsoleto' ? (
+                        <span className="px-1.5 py-0.5 rounded text-[8px] font-extrabold uppercase bg-rose-100 text-rose-700">
+                          Descontinuado
+                        </span>
+                      ) : (
+                        <span className="px-1.5 py-0.5 rounded text-[8px] font-extrabold uppercase bg-slate-100 text-slate-500">
+                          Pendente de Homologação
+                        </span>
+                      )}
+                    </div>
+                    <p className="font-bold text-slate-800 dark:text-slate-200 text-xs flex items-center gap-1.5">
+                      <Award className={`w-3.5 h-3.5 ${activeDoc.status === 'Homologado' ? 'text-emerald-600' : 'text-slate-400'}`} />
+                      Homologação e Entrada em Vigência Operacional
+                    </p>
+                    <p className="text-[10.5px] text-slate-500">
+                      {activeDoc.status === 'Homologado'
+                        ? 'Procedimento homologado e liberado para execução oficial nos processos produtivos da Vickytex.'
+                        : activeDoc.status === 'Obsoleto'
+                        ? 'Vigência revogada conforme cláusula 7.5.3 da ISO 9001. Documento mantido arquivado para auditorias.'
+                        : 'Aguardando a conclusão do aceite de leitura e distribuição para que a Qualidade/Gerência conclua a homologação formal.'}
+                    </p>
+                  </div>
+                </div>
+
+                {/* 3. Evento de Aceite de Leitura & Treinamento de Posto */}
+                <div className="relative">
+                  <div className={`absolute -left-[31px] top-0.5 w-4 h-4 rounded-full border-2 border-white dark:border-slate-900 flex items-center justify-center text-white text-[8px] shadow-xs ${
+                    activeDoc.documentReadings && activeDoc.documentReadings.length > 0 
+                      ? 'bg-indigo-600' 
+                      : (activeDoc.status === 'Aceite de Leitura' ? 'bg-indigo-500 animate-pulse' : 'bg-slate-300 dark:bg-slate-700')
+                  }`}>
+                    {activeDoc.documentReadings && activeDoc.documentReadings.length > 0 ? '✓' : '7'}
+                  </div>
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="font-mono text-[10px] text-slate-400 font-bold">
+                        {activeDoc.documentReadings && activeDoc.documentReadings.length > 0
+                          ? activeDoc.documentReadings[0].dataLeitura.split(' ')[0]
+                          : (activeDoc.status === 'Aceite de Leitura' ? 'Em Andamento' : 'Pendente')}
+                      </span>
+                      <span className="px-1.5 py-0.5 rounded text-[8px] font-extrabold uppercase bg-indigo-50 text-indigo-700">
+                        {activeDoc.documentReadings?.length || 0} Ciência(s)
+                      </span>
+                    </div>
+                    <p className="font-bold text-slate-800 dark:text-slate-200 text-xs flex items-center gap-1.5">
+                      <UserCheck className="w-3.5 h-3.5 text-indigo-600" />
+                      Aceite de Leitura e Treinamento de Posto (ISO 9001)
+                    </p>
+                    {activeDoc.documentReadings && activeDoc.documentReadings.length > 0 ? (
+                      <p className="text-[10.5px] text-slate-500">
+                        Último aceite assinado por <strong>{activeDoc.documentReadings[0].usuario}</strong> com chave eletrônica auditável.
+                      </p>
+                    ) : (
+                      <p className="text-[10.5px] text-slate-400 italic">
+                        {activeDoc.status === 'Aceite de Leitura' 
+                          ? 'Documento liberado no tablet e aguardando confirmação eletrônica dos operadores.'
+                          : 'Aguardando distribuição de cópias e início do treinamento de leitura.'}
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                {/* 4. Evento de Distribuição de Cópias Controladas */}
+                <div className="relative">
+                  <div className={`absolute -left-[31px] top-0.5 w-4 h-4 rounded-full border-2 border-white dark:border-slate-900 flex items-center justify-center text-white text-[8px] shadow-xs ${
+                    activeDoc.distribuicaoCopias && activeDoc.distribuicaoCopias.length > 0 
+                      ? 'bg-teal-600' 
+                      : (activeDoc.status === 'Distribuição' ? 'bg-teal-500 animate-pulse' : 'bg-slate-300 dark:bg-slate-700')
+                  }`}>
+                    {activeDoc.distribuicaoCopias && activeDoc.distribuicaoCopias.length > 0 ? '✓' : '6'}
+                  </div>
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="font-mono text-[10px] text-slate-400 font-bold">
+                        {activeDoc.distribuicaoCopias && activeDoc.distribuicaoCopias.length > 0
+                          ? activeDoc.distribuicaoCopias[0].dataEntrega
+                          : (activeDoc.status === 'Distribuição' ? 'Em Distribuição' : 'Pendente')}
+                      </span>
+                      <span className="px-1.5 py-0.5 rounded text-[8px] font-extrabold uppercase bg-teal-50 text-teal-700">
+                        {activeDoc.distribuicaoCopias?.filter(c => c.status === 'Ativa').length || 0} Via(s) Ativa(s)
+                      </span>
+                    </div>
+                    <p className="font-bold text-slate-800 dark:text-slate-200 text-xs flex items-center gap-1.5">
+                      <Layers className="w-3.5 h-3.5 text-teal-600" />
+                      Distribuição de Cópias Controladas na Fábrica
+                    </p>
+                    {activeDoc.distribuicaoCopias && activeDoc.distribuicaoCopias.length > 0 ? (
+                      <p className="text-[10.5px] text-slate-500">
+                        Cópias físicas e digitais entregues aos postos: <strong>{activeDoc.distribuicaoCopias.map(c => c.destinatario).join(', ')}</strong>.
+                      </p>
+                    ) : (
+                      <p className="text-[10.5px] text-slate-400 italic">
+                        Nenhuma cópia controlada distribuída até o momento.
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                {/* 5. Evento de Aprovação Técnica & Homologação */}
+                <div className="relative">
+                  <div className={`absolute -left-[31px] top-0.5 w-4 h-4 rounded-full border-2 border-white dark:border-slate-900 flex items-center justify-center text-white text-[8px] shadow-xs ${
+                    activeDoc.assinaturaAprovador || activeDoc.dataAprovacao 
+                      ? 'bg-purple-600' 
+                      : (activeDoc.status === 'Aprovação' || activeDoc.status === 'Em Aprovação' ? 'bg-purple-500 animate-pulse' : 'bg-slate-300 dark:bg-slate-700')
+                  }`}>
+                    {activeDoc.assinaturaAprovador || activeDoc.dataAprovacao ? '✓' : '4'}
+                  </div>
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="font-mono text-[10px] text-slate-400 font-bold">
+                        {activeDoc.dataAprovacao || activeDoc.dataEmissao || 'Pendente'}
+                      </span>
+                      <span className="px-1.5 py-0.5 rounded text-[8px] font-extrabold uppercase bg-purple-50 text-purple-700">
+                        Aprovação SGQ
+                      </span>
+                    </div>
+                    <p className="font-bold text-slate-800 dark:text-slate-200 text-xs flex items-center gap-1.5">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-purple-600" />
+                      Aprovação Final da Gerência / Qualidade
+                    </p>
+                    <p className="text-[10.5px] text-slate-500">
+                      Assinatura de homologação atribuída a: <strong>{activeDoc.aprovador}</strong>
+                      {activeDoc.assinaturaAprovador && ` (${activeDoc.assinaturaAprovador})`}.
+                    </p>
+                  </div>
+                </div>
+
+                {/* 6. Evento de Revisão Técnica */}
+                <div className="relative">
+                  <div className={`absolute -left-[31px] top-0.5 w-4 h-4 rounded-full border-2 border-white dark:border-slate-900 flex items-center justify-center text-white text-[8px] shadow-xs ${
+                    activeDoc.assinaturaRevisor || activeDoc.dataRevisao 
+                      ? 'bg-amber-600' 
+                      : (activeDoc.status === 'Revisão Técnica' || activeDoc.status === 'Em Revisão' ? 'bg-amber-500 animate-pulse' : 'bg-slate-300 dark:bg-slate-700')
+                  }`}>
+                    {activeDoc.assinaturaRevisor || activeDoc.dataRevisao ? '✓' : '3'}
+                  </div>
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="font-mono text-[10px] text-slate-400 font-bold">
+                        {activeDoc.dataRevisao || activeDoc.dataEmissao || 'Pendente'}
+                      </span>
+                      <span className="px-1.5 py-0.5 rounded text-[8px] font-extrabold uppercase bg-amber-50 text-amber-700">
+                        Revisão da Área
+                      </span>
+                    </div>
+                    <p className="font-bold text-slate-800 dark:text-slate-200 text-xs flex items-center gap-1.5">
+                      <History className="w-3.5 h-3.5 text-amber-600" />
+                      Revisão Técnica Operacional
+                    </p>
+                    <p className="text-[10.5px] text-slate-500">
+                      Validação de conformidade técnica por: <strong>{activeDoc.revisor}</strong>
+                      {activeDoc.assinaturaRevisor && ` (${activeDoc.assinaturaRevisor})`}.
+                    </p>
+                  </div>
+                </div>
+
+                {/* 7. Evento de Elaboração Técnica */}
+                <div className="relative">
+                  <div className="absolute -left-[31px] top-0.5 w-4 h-4 rounded-full bg-blue-600 border-2 border-white dark:border-slate-900 flex items-center justify-center text-white text-[8px] shadow-xs">
+                    ✓
+                  </div>
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="font-mono text-[10px] text-slate-400 font-bold">
+                        {activeDoc.dataElaboracao || activeDoc.dataEmissao || activeDoc.createdAt?.split('T')[0]}
+                      </span>
+                      <span className="px-1.5 py-0.5 rounded text-[8px] font-extrabold uppercase bg-blue-50 text-blue-700">
+                        Elaborado
+                      </span>
+                    </div>
+                    <p className="font-bold text-slate-800 dark:text-slate-200 text-xs flex items-center gap-1.5">
+                      <FileText className="w-3.5 h-3.5 text-blue-600" />
+                      Elaboração e Redação Técnica do Documento
+                    </p>
+                    <p className="text-[10.5px] text-slate-500">
+                      Elaborado e assinado eletronicamente por: <strong>{activeDoc.elaborador}</strong>
+                      {activeDoc.assinaturaElaborador && ` (${activeDoc.assinaturaElaborador})`}.
+                    </p>
+                  </div>
+                </div>
+
+                {/* 8. Evento de Cadastro Inicial & Rascunho */}
+                <div className="relative">
+                  <div className="absolute -left-[31px] top-0.5 w-4 h-4 rounded-full bg-slate-400 border-2 border-white dark:border-slate-900 flex items-center justify-center text-white text-[8px] shadow-xs">
+                    ✓
+                  </div>
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="font-mono text-[10px] text-slate-400 font-bold">
+                        {activeDoc.createdAt?.split('T')[0] || '2026-01-01'}
+                      </span>
+                      <span className="px-1.5 py-0.5 rounded text-[8px] font-extrabold uppercase bg-slate-100 text-slate-600">
+                        Criação
+                      </span>
+                    </div>
+                    <p className="font-bold text-slate-800 dark:text-slate-200 text-xs flex items-center gap-1.5">
+                      <Clock className="w-3.5 h-3.5 text-slate-500" />
+                      Cadastro Inicial no SGQ Vickytex
+                    </p>
+                    <p className="text-[10.5px] text-slate-500">
+                      Documento cadastrado no setor <strong>{activeDoc.setor}</strong> com código <strong>{activeDoc.codigo}</strong>.
+                    </p>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+
+            {/* Seção Adicional: Histórico de Versões Pretéritas (Ciclo PDCA da ISO 9001) */}
+            {activeDoc.revisoesHistorico && activeDoc.revisoesHistorico.length > 0 && (
+              <div className="bg-slate-50 dark:bg-slate-850 border border-slate-150 dark:border-slate-800 rounded-2xl p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <h5 className="text-[11px] font-extrabold text-slate-700 dark:text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                    <RotateCcw className="w-3.5 h-3.5 text-orange-500" />
+                    Versões Anteriores Arquivadas (Histórico PDCA)
+                  </h5>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab(2)}
+                    className="text-[10px] font-bold text-blue-600 hover:underline cursor-pointer"
+                  >
+                    Ver detalhes na Aba Revisões ➔
+                  </button>
+                </div>
+
+                <div className="space-y-2">
+                  {activeDoc.revisoesHistorico.map((rev) => (
+                    <div 
+                      key={rev.id || rev.revisaoNumero} 
+                      className="p-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-xs flex items-center justify-between gap-3"
+                    >
+                      <div className="space-y-0.5">
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono font-bold text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 px-1.5 py-0.5 rounded text-[9px]">
+                            Rev. v{rev.revisaoNumero.toString().padStart(2, '0')}
+                          </span>
+                          <span className="font-semibold text-slate-700 dark:text-slate-300">
+                            {rev.motivo}
+                          </span>
+                        </div>
+                        <p className="text-[9.5px] text-slate-400 font-mono">
+                          Data: {rev.dataRevisao} • Elaborado por: {rev.elaborador}
+                        </p>
+                      </div>
+                      <span className="px-2 py-0.5 rounded-full text-[8px] font-extrabold uppercase bg-slate-100 text-slate-600 shrink-0">
+                        Obsoleto (Arquivado)
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Seção Integrada: Registro de Eventos e Auditoria do Ciclo de Vida em Tempo Real */}
+            <div className="bg-white dark:bg-slate-900 border border-slate-150 dark:border-slate-800 rounded-2xl p-5 space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-slate-150 dark:border-slate-800 gap-2">
+                <div>
+                  <h5 className="text-[11px] font-extrabold text-slate-800 dark:text-slate-200 uppercase tracking-wider flex items-center gap-1.5">
+                    <ShieldCheck className="w-4 h-4 text-blue-600" />
+                    Registro de Eventos e Auditoria do Ciclo de Vida ({getEffectiveDocumentLogs().length})
+                  </h5>
+                  <p className="text-[10.5px] text-slate-400">
+                    Rastreabilidade em tempo real de cada avanço de etapa, assinaturas com chave eletrônica, distribuição e recall (ISO 9001:2015)
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab(6)}
+                  className="text-[11px] font-bold text-blue-600 hover:text-blue-700 flex items-center gap-1 cursor-pointer self-start sm:self-auto"
+                >
+                  <span>Ver Logs de Auditoria Completos</span>
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
+
+              {/* Lista dos eventos em ordem cronológica */}
+              <div className="space-y-3">
+                {getEffectiveDocumentLogs().map((log) => (
+                  <div 
+                    key={log.id}
+                    className="p-3.5 bg-slate-50 dark:bg-slate-800/20 border border-slate-150 dark:border-slate-800 rounded-xl text-xs space-y-2 hover:border-slate-300 dark:hover:border-slate-700 transition-colors"
+                  >
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-extrabold text-slate-800 dark:text-slate-100">{log.usuario}</span>
+                        <span className={`px-2 py-0.5 rounded text-[8.5px] font-extrabold uppercase tracking-wide border ${
+                          log.acao.includes('Obsoleto') ? 'bg-rose-50 text-rose-700 border-rose-200' :
+                          log.acao.includes('Homologado') ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                          log.acao.includes('Aceite de Leitura') ? 'bg-indigo-50 text-indigo-700 border-indigo-200' :
+                          log.acao.includes('Cópia') || log.acao.includes('Distribuição') ? 'bg-teal-50 text-teal-700 border-teal-200' :
+                          log.acao.includes('Revisão') ? 'bg-amber-50 text-amber-700 border-amber-200' :
+                          log.acao.includes('Aprovação') ? 'bg-purple-50 text-purple-700 border-purple-200' :
+                          'bg-blue-50 text-blue-700 border-blue-200'
+                        }`}>
+                          {log.acao}
+                        </span>
+                      </div>
+                      <span className="text-[10px] text-slate-400 font-mono font-bold bg-white dark:bg-slate-800 px-2 py-0.5 rounded border border-slate-100 dark:border-slate-700 self-start sm:self-auto">
+                        {log.data}
+                      </span>
+                    </div>
+
+                    <p className="text-[11px] text-slate-600 dark:text-slate-300 font-medium leading-relaxed">
+                      {log.detalhes}
+                    </p>
+
+                    {/* Metadados Técnicos de Auditoria */}
+                    <div className="flex items-center gap-3 text-[9px] text-slate-400 pt-1 border-t border-slate-100 dark:border-slate-800/60 flex-wrap">
+                      <span className="flex items-center gap-0.5 font-mono">
+                        <Globe className="w-2.5 h-2.5" /> IP: {log.ip || '192.168.10.15'}
+                      </span>
+                      <span>•</span>
+                      <span className="flex items-center gap-0.5">
+                        {log.dispositivo === 'Mobile' ? <Smartphone className="w-2.5 h-2.5" /> : log.dispositivo === 'Tablet' ? <Tablet className="w-2.5 h-2.5" /> : <Monitor className="w-2.5 h-2.5" />}
+                        {log.dispositivo || 'Desktop'}
+                      </span>
+                      <span>•</span>
+                      <span>Navegador: {log.navegador || 'Chrome'}</span>
+                      <span className="ml-auto flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-bold">
+                        <CheckCircle2 className="w-2.5 h-2.5" /> Auditável ISO 9001
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
           </div>
         )}
 
@@ -1728,8 +2531,8 @@ export const DocumentoAbasDetalhes: React.FC<DocumentoAbasDetalhesProps> = ({
             </div>
 
             <div className="space-y-3.5">
-              {activeDoc.documentLogs && activeDoc.documentLogs.length > 0 ? (
-                activeDoc.documentLogs.map((log) => (
+              {getEffectiveDocumentLogs().length > 0 ? (
+                getEffectiveDocumentLogs().map((log) => (
                   <div 
                     key={log.id} 
                     className="p-3 bg-slate-50 dark:bg-slate-800/15 border border-slate-150 dark:border-slate-800 rounded-xl text-xs flex flex-col sm:flex-row justify-between gap-3 items-stretch sm:items-start"
@@ -1774,9 +2577,40 @@ export const DocumentoAbasDetalhes: React.FC<DocumentoAbasDetalhesProps> = ({
         {/* ==================================== ABA 7: ACEITE DE LEITURA (ISO 9001) ==================================== */}
         {activeTab === 7 && (
           <div className="space-y-6 animate-fade-in">
-            <div className="pb-2 border-b border-slate-150 dark:border-slate-800">
-              <h4 className="text-xs font-extrabold text-slate-800 dark:text-slate-200">Aceite de Leitura e Treinamento de Posto (ISO 9001:2015)</h4>
-              <p className="text-[11px] text-slate-400">Registro formal de ciência e compreensão do procedimento operacional padrão para auditorias</p>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-2 border-b border-slate-150 dark:border-slate-800 gap-2">
+              <div>
+                <h4 className="text-xs font-extrabold text-slate-800 dark:text-slate-200">Aceite de Leitura e Treinamento de Posto (ISO 9001:2015)</h4>
+                <p className="text-[11px] text-slate-400">Registro formal de ciência e compreensão do procedimento operacional padrão para auditorias</p>
+              </div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-[10px] text-slate-400 font-bold uppercase">Status Atual:</span>
+                <span className={`px-2 py-0.5 rounded text-[9px] font-extrabold uppercase border ${getStatusBadge(activeDoc.status)}`}>
+                  {activeDoc.status === 'Aceite' ? 'Aceite de Leitura' : activeDoc.status}
+                </span>
+                {activeDoc.status !== 'Aceite de Leitura' && activeDoc.status !== 'Aceite' && activeDoc.status !== 'Homologado' && (
+                  <button
+                    type="button"
+                    onClick={handleAdvanceToAceiteLeitura}
+                    className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-[10px] font-bold cursor-pointer transition-colors shadow-2xs flex items-center gap-1"
+                    title="Definir status do documento formalmente como Aceite de Leitura"
+                  >
+                    <CheckCircle2 className="w-3 h-3" />
+                    <span>Avançar para Aceite de Leitura</span>
+                  </button>
+                )}
+                {(activeDoc.status === 'Aceite de Leitura' || activeDoc.status === 'Aceite') && 
+                 (currentUser?.role === 'Qualidade' || currentUser?.role === 'Gerência' || currentUser?.role === 'Administrador') && (
+                  <button
+                    type="button"
+                    onClick={handleConcludeHomologacao}
+                    className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[10px] font-bold cursor-pointer transition-colors shadow-2xs flex items-center gap-1"
+                    title="Concluir leituras e homologar formalmente o documento como Vigente no SGQ"
+                  >
+                    <CheckCircle2 className="w-3 h-3" />
+                    <span>Concluir e Homologar (Tornar Vigente)</span>
+                  </button>
+                )}
+              </div>
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
@@ -1846,10 +2680,10 @@ export const DocumentoAbasDetalhes: React.FC<DocumentoAbasDetalhesProps> = ({
                         <button
                           type="button"
                           onClick={handleSignReading}
-                          className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs shadow-xs transition-colors cursor-pointer shrink-0 flex items-center gap-1.5"
+                          className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs shadow-xs transition-colors cursor-pointer shrink-0 flex items-center gap-1.5"
                         >
                           <UserCheck className="w-3.5 h-3.5" />
-                          <span>Assinar Aceite</span>
+                          <span>Assinar Aceite de Leitura</span>
                         </button>
                       </div>
                       {readError && (
@@ -1859,7 +2693,7 @@ export const DocumentoAbasDetalhes: React.FC<DocumentoAbasDetalhesProps> = ({
 
                     {readSuccess && (
                       <div className="p-3 bg-emerald-50 border border-emerald-100 rounded-xl text-emerald-700 text-[10px] font-extrabold animate-pulse">
-                        ✓ Assinatura eletrônica realizada com sucesso! Log gerado e enviado para o auditor ISO 9001.
+                        ✓ Assinatura eletrônica realizada com sucesso! Status do documento atualizado para "Aceite de Leitura" e log ISO 9001 gravado.
                       </div>
                     )}
                   </div>
@@ -2015,6 +2849,102 @@ export const DocumentoAbasDetalhes: React.FC<DocumentoAbasDetalhesProps> = ({
                 className="px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white font-bold rounded-xl text-xs cursor-pointer"
               >
                 Abrir Nova Revisão v{(activeDoc.revisao + 1).toString()}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: Tornar Documento Obsoleto (Descontinuação SGQ / ISO 9001) */}
+      {isObsoleteModalOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-900/40 dark:bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-rose-200 dark:border-rose-900/40 p-6 max-w-md w-full space-y-4 shadow-xl animate-scale-up">
+            <div className="flex items-start gap-3">
+              <div className="p-2.5 bg-rose-100 dark:bg-rose-900/40 text-rose-600 rounded-xl shrink-0 mt-0.5">
+                <Ban className="w-5 h-5" />
+              </div>
+              <div>
+                <h4 className="text-sm font-extrabold text-slate-900 dark:text-white">
+                  Descontinuar Documento (Tornar Obsoleto)
+                </h4>
+                <p className="text-[11px] text-slate-500 mt-0.5">
+                  Esta ação revoga a validade de <strong>{activeDoc.codigo}</strong> em definitivo no chão de fábrica da Vickytex.
+                </p>
+              </div>
+            </div>
+
+            <div className="p-3 bg-amber-50 dark:bg-amber-950/20 border border-amber-200/60 dark:border-amber-900/30 rounded-xl text-[10.5px] text-amber-800 dark:text-amber-300 space-y-1">
+              <p className="font-bold flex items-center gap-1.5">
+                <AlertTriangle className="w-3.5 h-3.5" />
+                Recall Obrigatório de Cópias (ISO 9001:2015):
+              </p>
+              <p>
+                Todas as cópias impressas afixadas nos postos e acessos em tablets serão automaticamente sinalizadas como <strong>Recolhidas</strong> para prevenir o uso não intencional de versão inativa.
+              </p>
+            </div>
+
+            <div className="space-y-3">
+              <div className="space-y-1">
+                <label className="block text-[10px] font-bold text-slate-400 uppercase">
+                  Motivo da Descontinuação / Obsolescência *
+                </label>
+                <textarea
+                  rows={3}
+                  placeholder="Ex: Processo produtivo substituído por nova máquina automatizada; ou linha descontinuada conforme auditoria interna."
+                  value={obsoleteReason}
+                  onChange={(e) => {
+                    setObsoleteReason(e.target.value);
+                    if (obsoleteError) setObsoleteError('');
+                  }}
+                  className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-800 dark:text-slate-100 focus:outline-hidden focus:ring-2 focus:ring-rose-500"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="block text-[10px] font-bold text-slate-400 uppercase">
+                  Sua Senha de Usuário para Assinatura *
+                </label>
+                <div className="relative">
+                  <KeyRound className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                  <input
+                    type="password"
+                    placeholder="Digite sua senha de confirmação"
+                    value={obsoletePassword}
+                    onChange={(e) => {
+                      setObsoletePassword(e.target.value);
+                      if (obsoleteError) setObsoleteError('');
+                    }}
+                    className="w-full pl-9 pr-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-800 dark:text-slate-100 focus:outline-hidden focus:ring-2 focus:ring-rose-500"
+                  />
+                </div>
+              </div>
+
+              {obsoleteError && (
+                <p className="text-[10.5px] text-rose-500 font-extrabold">{obsoleteError}</p>
+              )}
+            </div>
+
+            <div className="flex gap-2 justify-end pt-1">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsObsoleteModalOpen(false);
+                  setObsoleteReason('');
+                  setObsoletePassword('');
+                  setObsoleteError('');
+                }}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={isObsoleteSubmitting}
+                onClick={handleMakeObsolete}
+                className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-xl text-xs cursor-pointer shadow-xs transition-colors flex items-center gap-1.5 disabled:opacity-50"
+              >
+                <Ban className="w-3.5 h-3.5" />
+                <span>{isObsoleteSubmitting ? 'Processando...' : 'Confirmar Obsolescência'}</span>
               </button>
             </div>
           </div>

@@ -84,7 +84,9 @@ export const DocumentoListaMestra: React.FC<DocumentoListaMestraProps> = ({
 
       const matchType = filterType === 'TODOS' || doc.tipo === filterType;
       const matchSector = filterSector === 'TODOS' || doc.setor === filterSector;
-      const matchStatus = filterStatus === 'TODOS' || doc.status === filterStatus;
+      const matchStatus = filterStatus === 'TODOS' || 
+        doc.status === filterStatus || 
+        (filterStatus === 'Aceite de Leitura' && doc.status === 'Aceite');
       
       const matchResponsavel = filterResponsavel === 'TODOS' || 
         doc.elaborador === filterResponsavel ||
@@ -205,6 +207,7 @@ export const DocumentoListaMestra: React.FC<DocumentoListaMestraProps> = ({
       case 'Publicação':
       case 'Distribuição':
       case 'Aceite':
+      case 'Aceite de Leitura':
       case 'Homologado': return 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/20 dark:text-emerald-400';
       case 'Nova Revisão': return 'bg-indigo-50 text-indigo-700 border-indigo-200 dark:bg-indigo-950/20 dark:text-indigo-400';
       default: return 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/20 dark:text-rose-400';
@@ -310,7 +313,7 @@ export const DocumentoListaMestra: React.FC<DocumentoListaMestraProps> = ({
               <option value="Aprovação">Aprovação</option>
               <option value="Publicação">Publicação</option>
               <option value="Distribuição">Distribuição</option>
-              <option value="Aceite">Aceite</option>
+              <option value="Aceite de Leitura">Aceite de Leitura</option>
               <option value="Nova Revisão">Nova Revisão</option>
               <option value="Obsoleto">Obsoleto</option>
             </select>
@@ -418,7 +421,7 @@ export const DocumentoListaMestra: React.FC<DocumentoListaMestraProps> = ({
                     </td>
                     <td className="py-3 px-4">
                       <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold border ${getStatusColor(doc.status)}`}>
-                        {doc.status}
+                        {doc.status === 'Aceite' ? 'Aceite de Leitura' : doc.status}
                       </span>
                     </td>
                     <td className="py-3 px-4 text-center font-mono text-slate-500">

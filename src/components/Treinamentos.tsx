@@ -26,7 +26,7 @@ import {
 } from 'lucide-react';
 import { Documento, Treinamento, ColaboradorCompetencia, SectorType } from '../types';
 import { useSectors } from '../hooks/useSectors';
-import { SECTORS, getSectors, PersonalizacaoGeral } from '../utils/mockData';
+import { SECTORS, getSectors, PersonalizacaoGeral, INITIAL_DOCUMENTS } from '../utils/mockData';
 import { TrainingRepository } from '../services/database/repositories/training.repository';
 import { CollaboratorRepository } from '../services/database/repositories/collaborator.repository';
 import { useAuth } from '../contexts/AuthContext';
@@ -140,6 +140,42 @@ export const Treinamentos: React.FC<TreinamentosProps> = ({
 
   const saveTreinamentos = (newTreins: Treinamento[]) => {
     setTreinamentos(newTreins);
+  };
+
+  // Helper para obter código e título do documento a partir do ID ou código
+  const getDocumentInfo = (docId: string): { codigo: string; titulo: string } => {
+    if (!docId) return { codigo: '', titulo: '' };
+
+    // 1. Procurar na lista de documents recebida via props
+    let doc = documents.find(d => d.id === docId || d.codigo === docId);
+
+    // 2. Se não encontrar, tentar recuperar do cache local do repositório
+    if (!doc) {
+      try {
+        const localDocsStr = localStorage.getItem('sgq_vickytex_documents');
+        if (localDocsStr) {
+          const localDocs: Documento[] = JSON.parse(localDocsStr);
+          doc = localDocs.find(d => d.id === docId || d.codigo === docId);
+        }
+      } catch {}
+    }
+
+    // 3. Se ainda não encontrar, verificar no INITIAL_DOCUMENTS
+    if (!doc) {
+      doc = INITIAL_DOCUMENTS.find(d => d.id === docId || d.codigo === docId);
+    }
+
+    if (doc) {
+      return {
+        codigo: doc.codigo || doc.id,
+        titulo: doc.titulo || ''
+      };
+    }
+
+    return {
+      codigo: docId,
+      titulo: ''
+    };
   };
 
   const handleDeleteColaborador = (id: string) => {
@@ -476,7 +512,10 @@ export const Treinamentos: React.FC<TreinamentosProps> = ({
             </div>
             <div>
               <p class="grid-item-label">Procedimento / POP Alvo</p>
-              <p class="grid-item-val mono">${selectedTrainingDoc.documentoId}</p>
+              <p class="grid-item-val mono">${(() => {
+                const docInfo = getDocumentInfo(selectedTrainingDoc.documentoId);
+                return `${docInfo.codigo}${docInfo.titulo ? ` — ${docInfo.titulo}` : ''}`;
+              })()}</p>
             </div>
           </div>
           <div style="margin-top: 12px;">
@@ -879,18 +918,35 @@ export const Treinamentos: React.FC<TreinamentosProps> = ({
                           {col.cargo}
                         </td>
                         <td className="py-3.5 px-4">
-                          <div className="flex flex-wrap gap-1">
+                          <div className="flex flex-wrap gap-1.5">
                             {col.documentosAssinados.length === 0 ? (
                               <span className="text-rose-500 italic font-medium flex items-center">
                                 <AlertCircle className="w-3 h-3 mr-1" /> Nenhuma leitura ativa
                               </span>
                             ) : (
-                              col.documentosAssinados.map(docId => (
-                                <span key={docId} className="px-2 py-0.5 bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 rounded-sm font-mono text-[10px] border border-blue-100 dark:border-blue-900/40 font-bold flex items-center space-x-1">
-                                  <FileText className="w-2.5 h-2.5" />
-                                  <span>{docId}</span>
-                                </span>
-                              ))
+                              col.documentosAssinados.map(docId => {
+                                const info = getDocumentInfo(docId);
+                                return (
+                                  <div 
+                                    key={docId} 
+                                    className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-blue-50/90 dark:bg-blue-950/50 text-blue-800 dark:text-blue-200 rounded-md text-[10.5px] border border-blue-200/80 dark:border-blue-900/50 shadow-2xs group max-w-xs sm:max-w-md"
+                                    title={info.titulo ? `${info.codigo} — ${info.titulo}` : info.codigo}
+                                  >
+                                    <FileText className="w-3 h-3 text-blue-600 dark:text-blue-400 shrink-0" />
+                                    <span className="font-mono font-bold text-blue-700 dark:text-blue-300 shrink-0">
+                                      {info.codigo}
+                                    </span>
+                                    {info.titulo && (
+                                      <>
+                                        <span className="text-slate-300 dark:text-slate-600 shrink-0">•</span>
+                                        <span className="truncate text-slate-700 dark:text-slate-200 font-medium max-w-[190px] sm:max-w-[280px]" title={info.titulo}>
+                                          {info.titulo}
+                                        </span>
+                                      </>
+                                    )}
+                                  </div>
+                                );
+                              })
                             )}
                           </div>
                         </td>
@@ -1003,9 +1059,23 @@ export const Treinamentos: React.FC<TreinamentosProps> = ({
                               {tre.codigo}
                             </span>
                             <span className="w-1.5 h-1.5 rounded-full bg-slate-300" />
-                            <span className="text-[10px] font-extrabold font-mono bg-blue-50 dark:bg-blue-950/30 text-blue-700 dark:text-blue-300 px-1.5 py-0.5 rounded-sm">
-                              {tre.documentoId}
-                            </span>
+                            {(() => {
+                              const docInfo = getDocumentInfo(tre.documentoId);
+                              return (
+                                <span 
+                                  className="text-[10px] font-extrabold font-mono bg-blue-50 dark:bg-blue-950/30 text-blue-700 dark:text-blue-300 px-2 py-0.5 rounded-sm flex items-center gap-1 max-w-xs sm:max-w-md truncate"
+                                  title={docInfo.titulo ? `${docInfo.codigo} — ${docInfo.titulo}` : docInfo.codigo}
+                                >
+                                  <FileText className="w-2.5 h-2.5 shrink-0" />
+                                  <span>{docInfo.codigo}</span>
+                                  {docInfo.titulo && (
+                                    <span className="font-sans font-medium text-slate-600 dark:text-slate-300 truncate max-w-[160px] sm:max-w-[240px]">
+                                      • {docInfo.titulo}
+                                    </span>
+                                  )}
+                                </span>
+                              );
+                            })()}
                           </div>
                           <h4 className="text-xs font-bold text-slate-800 dark:text-slate-100">
                             {tre.titulo}
@@ -1356,7 +1426,7 @@ export const Treinamentos: React.FC<TreinamentosProps> = ({
                 <label className="text-[11px] font-bold text-slate-500">Procedimentos Assinados / Treinados</label>
                 <div className="max-h-28 overflow-y-auto p-2 border border-slate-200 dark:border-slate-700 rounded-lg space-y-1 bg-slate-50 dark:bg-slate-800/50 font-mono text-[10px]">
                   {documents.map(doc => {
-                    const checked = colaboradorForm.documentosAssinados.includes(doc.id);
+                    const checked = colaboradorForm.documentosAssinados.includes(doc.id) || colaboradorForm.documentosAssinados.includes(doc.codigo);
                     return (
                       <label key={doc.id} className="flex items-center space-x-2 text-[11px] text-slate-700 dark:text-slate-300 font-semibold cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 p-1 rounded">
                         <input
@@ -1364,7 +1434,7 @@ export const Treinamentos: React.FC<TreinamentosProps> = ({
                           checked={checked}
                           onChange={() => {
                             const updatedDocs = checked
-                              ? colaboradorForm.documentosAssinados.filter(id => id !== doc.id)
+                              ? colaboradorForm.documentosAssinados.filter(id => id !== doc.id && id !== doc.codigo)
                               : [...colaboradorForm.documentosAssinados, doc.id];
                             setColaboradorForm({ ...colaboradorForm, documentosAssinados: updatedDocs });
                           }}
@@ -1522,7 +1592,15 @@ export const Treinamentos: React.FC<TreinamentosProps> = ({
                   </div>
                   <div>
                     <p className="text-[9px] text-slate-400">PROCEDIMENTO / POP ALVO</p>
-                    <p className="font-bold text-slate-800 dark:text-slate-100 font-mono">{selectedTrainingDoc.documentoId}</p>
+                    {(() => {
+                      const docInfo = getDocumentInfo(selectedTrainingDoc.documentoId);
+                      return (
+                        <p className="font-bold text-slate-800 dark:text-slate-100 flex items-center gap-1.5 flex-wrap">
+                          <span className="font-mono text-blue-600 dark:text-blue-400">{docInfo.codigo}</span>
+                          {docInfo.titulo && <span className="text-slate-600 dark:text-slate-300 font-medium text-xs">• {docInfo.titulo}</span>}
+                        </p>
+                      );
+                    })()}
                   </div>
                 </div>
 
