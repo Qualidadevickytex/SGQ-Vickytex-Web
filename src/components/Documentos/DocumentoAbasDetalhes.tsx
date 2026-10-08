@@ -3,7 +3,8 @@ import {
   FileText, Calendar, Clock, Award, CheckCircle2, RotateCcw, 
   Send, History, Shield, Trash2, ExternalLink, AlertTriangle, 
   UserCheck, Download, Layers, Eye, Smartphone, Monitor, Tablet, Globe,
-  KeyRound, XCircle, Check, Pencil, Save, Ban, ChevronRight, ShieldCheck
+  KeyRound, XCircle, Check, Pencil, Save, Ban, ChevronRight, ShieldCheck,
+  Copy, Link as LinkIcon, X
 } from 'lucide-react';
 import { Documento, DocumentRevision, CopiaDistribuida, DocumentStatus, DocumentLog, DocumentReading, ApprovalFlowStep } from '../../types';
 import { getSavedFlows } from './FluxosParametrizados';
@@ -67,11 +68,48 @@ export const DocumentoAbasDetalhes: React.FC<DocumentoAbasDetalhesProps> = ({
   const [editProximaRevisao, setEditProximaRevisao] = useState(activeDoc.proximaRevisao || '');
   const [editPeriodicidade, setEditPeriodicidade] = useState(activeDoc.periodicidade || 12);
 
+  // Edição do Link do Arquivo Oficial (Google Drive Preview)
+  const [isEditingFileLink, setIsEditingFileLink] = useState(false);
+  const [editFileLink, setEditFileLink] = useState(activeDoc.googleDriveLink || '');
+
   useEffect(() => {
     setEditDataEmissao(activeDoc.dataEmissao || '');
     setEditProximaRevisao(activeDoc.proximaRevisao || '');
     setEditPeriodicidade(activeDoc.periodicidade || 12);
+    setEditFileLink(activeDoc.googleDriveLink || '');
   }, [activeDoc]);
+
+  const extractDriveId = (link: string): string | null => {
+    if (!link) return null;
+    const clean = link.trim();
+    const match1 = clean.match(/\/d\/([a-zA-Z0-9_-]+)/);
+    if (match1 && match1[1]) return match1[1];
+    const match2 = clean.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+    if (match2 && match2[1]) return match2[1];
+    return null;
+  };
+
+  const handleSaveFileLink = () => {
+    const cleanLink = editFileLink.trim();
+    const extractedId = extractDriveId(cleanLink);
+
+    const updatedDoc: Documento = {
+      ...activeDoc,
+      googleDriveLink: cleanLink,
+      googleDriveId: extractedId ? `drive-${extractedId}` : (cleanLink ? (activeDoc.googleDriveId || `drive-${Date.now()}`) : ''),
+      updatedAt: new Date().toISOString()
+    };
+
+    onUpdateDocument(updatedDoc);
+    onAddLog(
+      'Link do Arquivo Alterado',
+      `Link do arquivo oficial do documento ${activeDoc.codigo} alterado para: ${cleanLink || '(removido)'}.`,
+      activeDoc.id
+    );
+    setIsEditingFileLink(false);
+    setActionSuccessMsg('Link do arquivo oficial atualizado com sucesso!');
+    setTimeout(() => setActionSuccessMsg(''), 4000);
+  };
 
   const handleRecalculateProximaRevisao = (newEmissao: string, months: number) => {
     try {
@@ -108,14 +146,9 @@ export const DocumentoAbasDetalhes: React.FC<DocumentoAbasDetalhesProps> = ({
   const [readError, setReadError] = useState('');
   const [readSuccess, setReadSuccess] = useState(false);
 
-  // Upload de nova revisão para o Google Drive
-  const [revUploading, setRevUploading] = useState(false);
-  const [revUploadProgress, setRevUploadProgress] = useState(0);
-  const [revUploadedFileName, setRevUploadedFileName] = useState('');
-  const [revUploadError, setRevUploadError] = useState('');
+  // Link do Arquivo Oficial para nova revisão (Google Drive Preview)
   const [revFileId, setRevFileId] = useState('');
   const [revFileLink, setRevFileLink] = useState('');
-  const [revDragActive, setRevDragActive] = useState(false);
 
   // Helper para validar a senha do usuário logado contra o repositório
   const verifyUserPassword = async (inputPassword: string): Promise<boolean> => {
@@ -185,6 +218,24 @@ export const DocumentoAbasDetalhes: React.FC<DocumentoAbasDetalhesProps> = ({
       const match = url.match(/drive\.google\.com\/file\/d\/([a-zA-Z0-9_-]+)/);
       if (match && match[1]) {
         return `https://drive.google.com/file/d/${match[1]}/preview`;
+      }
+    }
+    if (url.includes('drive.google.com/open') || url.includes('drive.google.com/uc')) {
+      const match = url.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+      if (match && match[1]) {
+        return `https://drive.google.com/file/d/${match[1]}/preview`;
+      }
+    }
+    if (url.includes('docs.google.com/document/d/')) {
+      const match = url.match(/docs\.google\.com\/document\/d\/([a-zA-Z0-9_-]+)/);
+      if (match && match[1]) {
+        return `https://docs.google.com/document/d/${match[1]}/preview`;
+      }
+    }
+    if (url.includes('docs.google.com/spreadsheets/d/')) {
+      const match = url.match(/docs\.google\.com\/spreadsheets\/d\/([a-zA-Z0-9_-]+)/);
+      if (match && match[1]) {
+        return `https://docs.google.com/spreadsheets/d/${match[1]}/preview`;
       }
     }
     return url;
@@ -902,7 +953,6 @@ export const DocumentoAbasDetalhes: React.FC<DocumentoAbasDetalhesProps> = ({
     setRevisionReason('');
     setRevFileId('');
     setRevFileLink('');
-    setRevUploadedFileName('');
     setActiveTab(1);
   };
 
@@ -978,77 +1028,6 @@ export const DocumentoAbasDetalhes: React.FC<DocumentoAbasDetalhesProps> = ({
     }, 4000);
   };
 
-  const handleRevFileUpload = async (file: File) => {
-    const validDriveToken = (googleOAuthToken && googleDriveService.isGoogleAccessToken(googleOAuthToken))
-      ? googleOAuthToken
-      : (googleDriveService.isGoogleAccessToken(accessToken) ? accessToken : null);
-
-    if (!validDriveToken) {
-      setRevUploadError('Conecte sua conta do Google Workspace com acesso ao Google Drive para realizar uploads corporativos.');
-      return;
-    }
-
-    if (file.type !== 'application/pdf') {
-      setRevUploadError('Apenas arquivos PDF são permitidos de acordo com os requisitos da ISO 9001.');
-      return;
-    }
-
-    setRevUploading(true);
-    setRevUploadError('');
-    setRevUploadProgress(15);
-
-    try {
-      setRevUploadProgress(40);
-      const folderId = await googleDriveService.findOrCreateFolder(
-        'Vickytex - Gestão Documental',
-        null,
-        validDriveToken
-      );
-
-      setRevUploadProgress(70);
-      const driveFileId = await googleDriveService.upload(
-        file,
-        `${activeDoc.codigo}_Rev${activeDoc.revisao + 1}_${Date.now()}.pdf`,
-        'application/pdf',
-        folderId,
-        validDriveToken
-      );
-
-      setRevUploadProgress(95);
-      const links = googleDriveService.gerarLinks(driveFileId);
-      
-      setRevFileId(driveFileId);
-      setRevFileLink(links.viewUrl);
-      setRevUploadedFileName(file.name);
-      setRevUploadProgress(100);
-
-      onAddLog('Upload de Nova Revisão', `Carregado arquivo ${file.name} para a nova revisão do documento ${activeDoc.codigo}.`);
-    } catch (err: any) {
-      console.error(err);
-      setRevUploadError(err.message || 'Erro ao realizar upload do arquivo para o Google Drive.');
-    } finally {
-      setRevUploading(false);
-    }
-  };
-
-  const handleRevDrag = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (e.type === "dragenter" || e.type === "dragover") {
-      setRevDragActive(true);
-    } else if (e.type === "dragleave") {
-      setRevDragActive(false);
-    }
-  };
-
-  const handleRevDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setRevDragActive(false);
-    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-      handleRevFileUpload(e.dataTransfer.files[0]);
-    }
-  };
 
   const getStatusBadge = (status: DocumentStatus) => {
     switch (status) {
@@ -1129,6 +1108,24 @@ export const DocumentoAbasDetalhes: React.FC<DocumentoAbasDetalhesProps> = ({
           </button>
         ))}
       </div>
+
+      {/* Mensagem de Feedback de Ação (Toast / Banner) */}
+      {actionSuccessMsg && (
+        <div className="mx-5 mt-4 p-3 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-xl text-emerald-800 dark:text-emerald-200 text-xs font-bold flex items-center justify-between shadow-xs animate-fade-in shrink-0">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+            <span>{actionSuccessMsg}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setActionSuccessMsg('')}
+            className="text-emerald-600 dark:text-emerald-400 hover:text-emerald-800 dark:hover:text-emerald-200 cursor-pointer p-0.5"
+            title="Fechar"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
 
       {/* Conteúdo dinâmico das Abas */}
       <div className="p-5 overflow-y-auto flex-1 space-y-6">
@@ -1356,6 +1353,57 @@ export const DocumentoAbasDetalhes: React.FC<DocumentoAbasDetalhesProps> = ({
               )}
             </div>
 
+            {/* Arquivo Oficial do Documento (Google Drive) */}
+            <div className="bg-slate-50 dark:bg-slate-800/10 p-3.5 rounded-xl border border-slate-100 dark:border-slate-800 text-xs space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                  <FileText className="w-3.5 h-3.5 text-blue-500" />
+                  Arquivo Oficial do Documento (Google Drive)
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveTab(5);
+                    setIsEditingFileLink(true);
+                  }}
+                  className="inline-flex items-center gap-1 text-[11px] font-bold text-blue-600 hover:text-blue-700 bg-blue-50 dark:bg-blue-900/30 hover:bg-blue-100 dark:hover:bg-blue-900/50 px-2 py-0.5 rounded-md transition-colors cursor-pointer"
+                  title="Editar link do arquivo oficial"
+                >
+                  <Pencil className="w-3 h-3" />
+                  <span>Editar Link</span>
+                </button>
+              </div>
+
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-2.5 bg-white dark:bg-slate-900/60 rounded-lg border border-slate-150 dark:border-slate-800">
+                <div className="min-w-0 flex-1">
+                  <span className="text-[9px] font-bold text-slate-400 uppercase block">Link Configurado</span>
+                  <p className="text-xs font-mono text-slate-700 dark:text-slate-300 truncate" title={activeDoc.googleDriveLink || 'Nenhum'}>
+                    {activeDoc.googleDriveLink || 'Nenhum link oficial configurado'}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab(5)}
+                    className="px-2.5 py-1 text-slate-600 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 text-[11px] font-bold hover:underline cursor-pointer"
+                  >
+                    Visualizar na Aba Arquivo ➔
+                  </button>
+                  {activeDoc.googleDriveLink && (
+                    <a
+                      href={activeDoc.googleDriveLink}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 px-2.5 py-1 bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-400 rounded-md text-[11px] font-bold hover:bg-blue-100 cursor-pointer"
+                    >
+                      <ExternalLink className="w-3 h-3" />
+                      <span>Abrir</span>
+                    </a>
+                  )}
+                </div>
+              </div>
+            </div>
+
             {/* Ciclo de Assinaturas Digitais Ativas (Traceabilidade) */}
             <div className="bg-slate-50 dark:bg-slate-800/20 p-4 rounded-xl border border-slate-150 dark:border-slate-800 space-y-4">
               <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center">
@@ -1523,7 +1571,12 @@ export const DocumentoAbasDetalhes: React.FC<DocumentoAbasDetalhesProps> = ({
                         {(activeDoc.status === 'Publicação' || activeDoc.status === 'Distribuição' || activeDoc.status === 'Aceite' || activeDoc.status === 'Aceite de Leitura' || activeDoc.status === 'Homologado') && 
                          (currentUser?.role === 'Qualidade' || currentUser?.role === 'Gerência' || currentUser?.role === 'Administrador') && (
                           <button
-                            onClick={() => setIsRevisionModalOpen(true)}
+                            onClick={() => {
+                              setRevisionReason('');
+                              setRevFileLink(activeDoc.googleDriveLink || '');
+                              setRevFileId(activeDoc.googleDriveId || '');
+                              setIsRevisionModalOpen(true);
+                            }}
                             className="w-full py-2.5 bg-orange-500 hover:bg-orange-600 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 cursor-pointer shadow-xs transition-colors"
                           >
                             <RotateCcw className="w-4 h-4" />
@@ -2467,35 +2520,167 @@ export const DocumentoAbasDetalhes: React.FC<DocumentoAbasDetalhesProps> = ({
         {/* ==================================== ABA 5: ARQUIVO (VISUALIZADOR DRIVE) ==================================== */}
         {activeTab === 5 && (
           <div className="space-y-6 animate-fade-in">
-            <div className="flex justify-between items-center pb-2 border-b border-slate-150 dark:border-slate-800">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-3 border-b border-slate-150 dark:border-slate-800">
               <div>
-                <h4 className="text-xs font-extrabold text-slate-800 dark:text-slate-200">Visualizador do Documento Integrado</h4>
-                <p className="text-[11px] text-slate-400">Camada de Arquivos de Armazenamento Seguro da ISO 9001 (Google Drive)</p>
+                <h4 className="text-xs font-extrabold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                  <FileText className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                  <span>Visualizador do Documento Integrado</span>
+                </h4>
+                <p className="text-[11px] text-slate-400">
+                  Camada de Arquivos de Armazenamento Seguro da ISO 9001 (Google Drive Preview)
+                </p>
               </div>
-              <a
-                href={activeDoc.googleDriveLink}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="px-3 py-1.5 bg-blue-50 text-blue-600 rounded-xl hover:bg-blue-100 text-xs font-bold flex items-center gap-1 cursor-pointer"
-              >
-                <ExternalLink className="w-3.5 h-3.5" />
-                <span>Abrir no Drive</span>
-              </a>
+              <div className="flex items-center gap-2 flex-wrap">
+                <button
+                  type="button"
+                  onClick={() => setIsEditingFileLink(prev => !prev)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer border ${
+                    isEditingFileLink
+                      ? 'bg-blue-600 text-white border-blue-600 hover:bg-blue-700 shadow-xs'
+                      : 'bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700'
+                  }`}
+                  title="Editar link do arquivo do Google Drive"
+                >
+                  <Pencil className="w-3.5 h-3.5 text-blue-500" />
+                  <span>{isEditingFileLink ? 'Cancelar Edição' : 'Editar Link do Arquivo'}</span>
+                </button>
+                {activeDoc.googleDriveLink && (
+                  <a
+                    href={activeDoc.googleDriveLink}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-3 py-1.5 bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-400 rounded-xl hover:bg-blue-100 dark:hover:bg-blue-900/40 text-xs font-bold flex items-center gap-1 cursor-pointer border border-blue-200 dark:border-blue-800/60 transition-colors"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                    <span>Abrir no Drive</span>
+                  </a>
+                )}
+              </div>
             </div>
 
+            {/* Painel de Edição do Link do Arquivo */}
+            {isEditingFileLink && (
+              <div className="p-4 bg-blue-50/70 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900/50 rounded-2xl space-y-3 animate-fade-in shadow-xs">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="p-1.5 bg-blue-100 dark:bg-blue-900/50 text-blue-600 dark:text-blue-300 rounded-lg">
+                      <LinkIcon className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h5 className="text-xs font-extrabold text-blue-900 dark:text-blue-200">
+                        Editar Link do Arquivo Oficial
+                      </h5>
+                      <p className="text-[10px] text-blue-700/80 dark:text-blue-300/80">
+                        Informe o link de visualização ou compartilhamento do Google Drive para este documento.
+                      </p>
+                    </div>
+                  </div>
+                  <span className="text-[10px] font-mono text-slate-500 bg-white dark:bg-slate-900 px-2 py-0.5 rounded border border-slate-200 dark:border-slate-800">
+                    {activeDoc.codigo} • Rev {activeDoc.revisao.toString().padStart(2, '0')}
+                  </span>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wide">
+                    Link do Arquivo Oficial (Google Drive Preview) *
+                  </label>
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <input
+                      type="url"
+                      placeholder="Ex: https://drive.google.com/file/d/.../view"
+                      value={editFileLink}
+                      onChange={(e) => setEditFileLink(e.target.value)}
+                      className="flex-1 p-2.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-mono text-slate-800 dark:text-slate-100 focus:outline-hidden focus:ring-2 focus:ring-blue-500 shadow-inner"
+                      autoFocus
+                    />
+                    <div className="flex gap-2 shrink-0">
+                      <button
+                        type="button"
+                        onClick={handleSaveFileLink}
+                        className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer"
+                      >
+                        <Save className="w-3.5 h-3.5" />
+                        <span>Salvar Link</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditFileLink(activeDoc.googleDriveLink || '');
+                          setIsEditingFileLink(false);
+                        }}
+                        className="px-3 py-2 bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 font-bold rounded-xl text-xs flex items-center gap-1 transition-colors cursor-pointer"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                        <span>Cancelar</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 text-[10px] text-slate-500 dark:text-slate-400 pt-2 border-t border-blue-150 dark:border-blue-900/40">
+                  <span>
+                    💡 Ao salvar, o visualizador embutido e os QR Codes das estações fabris serão atualizados automaticamente.
+                  </span>
+                  {editFileLink.trim() && (
+                    <a
+                      href={editFileLink.trim()}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-blue-600 dark:text-blue-400 font-bold hover:underline flex items-center gap-1 shrink-0"
+                    >
+                      <ExternalLink className="w-3 h-3" />
+                      <span>Testar link no navegador</span>
+                    </a>
+                  )}
+                </div>
+              </div>
+            )}
+
             {/* Metadados da Camada de Arquivo */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-[10px] bg-slate-50 dark:bg-slate-800/20 p-3.5 rounded-xl border border-slate-150 text-slate-500">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-3 text-[10px] bg-slate-50 dark:bg-slate-800/20 p-3.5 rounded-xl border border-slate-150 dark:border-slate-800 text-slate-500">
+              <div className="min-w-0 md:col-span-2">
+                <div className="flex items-center justify-between">
+                  <span className="block font-bold text-slate-400 uppercase tracking-wide">Link Oficial Vinculado</span>
+                  {!isEditingFileLink && (
+                    <button
+                      type="button"
+                      onClick={() => setIsEditingFileLink(true)}
+                      className="text-blue-600 hover:text-blue-800 dark:text-blue-400 font-bold inline-flex items-center gap-0.5 cursor-pointer text-[10px]"
+                    >
+                      <Pencil className="w-2.5 h-2.5" />
+                      <span>Editar</span>
+                    </button>
+                  )}
+                </div>
+                <div className="mt-0.5 flex items-center gap-1.5">
+                  <span className="font-mono text-slate-700 dark:text-slate-300 truncate block text-[11px]" title={activeDoc.googleDriveLink || 'Nenhum link vinculado'}>
+                    {activeDoc.googleDriveLink || 'Nenhum link cadastrado'}
+                  </span>
+                  {activeDoc.googleDriveLink && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard?.writeText(activeDoc.googleDriveLink || '');
+                        setActionSuccessMsg('Link copiado para a área de transferência!');
+                        setTimeout(() => setActionSuccessMsg(''), 3000);
+                      }}
+                      className="text-slate-400 hover:text-blue-600 p-0.5 rounded cursor-pointer shrink-0"
+                      title="Copiar Link"
+                    >
+                      <Copy className="w-3 h-3" />
+                    </button>
+                  )}
+                </div>
+              </div>
               <div className="min-w-0">
                 <span className="block font-bold text-slate-400 uppercase tracking-wide">ID de Armazenamento</span>
-                <span className="font-mono truncate block" title={activeDoc.googleDriveId || 'Não vinculado'}>{activeDoc.googleDriveId || 'gdrive_file_id_integrated'}</span>
+                <span className="font-mono truncate block text-slate-700 dark:text-slate-300" title={activeDoc.googleDriveId || 'Não vinculado'}>
+                  {activeDoc.googleDriveId || 'gdrive_file_id_integrated'}
+                </span>
               </div>
               <div>
-                <span className="block font-bold text-slate-400 uppercase tracking-wide">Integridade Hash SHA-256</span>
-                <span className="font-mono block truncate" title="9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08">9f86d081884c7d659a2feaa0c55ad015a3bf4...</span>
-              </div>
-              <div>
-                <span className="block font-bold text-slate-400 uppercase tracking-wide">Tamanho & Formato</span>
-                <span>PDF Document / ~1.4 MB</span>
+                <span className="block font-bold text-slate-400 uppercase tracking-wide">Integridade / Formato</span>
+                <span className="text-slate-700 dark:text-slate-300">Google Drive Preview / PDF</span>
               </div>
             </div>
 
@@ -2512,10 +2697,22 @@ export const DocumentoAbasDetalhes: React.FC<DocumentoAbasDetalhesProps> = ({
                   sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
                 />
               ) : (
-                <div className="p-4 text-center max-w-xs space-y-1.5">
-                  <AlertTriangle className="w-6 h-6 text-amber-500 mx-auto" />
-                  <h5 className="text-xs font-bold text-slate-700 dark:text-slate-300">Sem link de visualização</h5>
-                  <p className="text-[11px] text-slate-400">Vincule um link do Google Drive para poder pré-visualizar o procedimento operacional nesta tela.</p>
+                <div className="p-6 text-center max-w-sm space-y-3">
+                  <AlertTriangle className="w-8 h-8 text-amber-500 mx-auto" />
+                  <div>
+                    <h5 className="text-xs font-bold text-slate-700 dark:text-slate-300">Sem link de visualização vinculado</h5>
+                    <p className="text-[11px] text-slate-400 mt-1">
+                      Vincule um link oficial do Google Drive para que os operadores possam pré-visualizar o procedimento operacional nesta tela e nas estações fabris.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsEditingFileLink(true)}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-colors cursor-pointer shadow-xs"
+                  >
+                    <Pencil className="w-3.5 h-3.5" />
+                    <span>Adicionar Link do Arquivo</span>
+                  </button>
                 </div>
               )}
             </div>
@@ -2785,55 +2982,17 @@ export const DocumentoAbasDetalhes: React.FC<DocumentoAbasDetalhesProps> = ({
               </div>
 
               <div className="space-y-1.5 pt-1">
-                <label className="block text-[10px] font-bold text-slate-400 uppercase">Novo Arquivo PDF (Google Drive Upload)</label>
-                {accessToken ? (
-                  <div 
-                    onDragEnter={handleRevDrag}
-                    onDragOver={handleRevDrag}
-                    onDragLeave={handleRevDrag}
-                    onDrop={handleRevDrop}
-                    className={`border-2 border-dashed rounded-xl p-4 text-center transition-all relative ${
-                      revDragActive 
-                        ? 'border-blue-500 bg-blue-50/50 dark:bg-blue-950/20' 
-                        : 'border-slate-200 hover:border-slate-300 bg-slate-50/50 dark:border-slate-800 dark:bg-slate-900/40'
-                    }`}
-                  >
-                    <input 
-                      type="file" 
-                      accept="application/pdf"
-                      onChange={(e) => {
-                        if (e.target.files && e.target.files[0]) {
-                          handleRevFileUpload(e.target.files[0]);
-                        }
-                      }}
-                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
-                    />
-                    <div className="space-y-1 text-center">
-                      <p className="text-[11px] font-bold text-slate-700 dark:text-slate-300">
-                        {revUploading 
-                          ? `Enviando... ${revUploadProgress}%` 
-                          : revUploadedFileName 
-                            ? `✓ ${revUploadedFileName}` 
-                            : 'Arraste o novo PDF aqui ou clique para selecionar'}
-                      </p>
-                      {revUploading && (
-                        <div className="w-full bg-slate-200 dark:bg-slate-700 h-1 rounded-full overflow-hidden mt-1">
-                          <div className="bg-blue-600 h-full transition-all duration-300" style={{ width: `${revUploadProgress}%` }}></div>
-                        </div>
-                      )}
-                      {!revUploading && !revUploadedFileName && (
-                        <p className="text-[9px] text-slate-400">PDF para nova revisão</p>
-                      )}
-                    </div>
-                  </div>
-                ) : (
-                  <p className="text-[9.5px] text-amber-600 font-semibold bg-amber-50 dark:bg-amber-950/20 p-2.5 rounded-xl border border-amber-200/50 leading-relaxed">
-                    Apenas digitação manual em modo offline. Conecte com o Google Workspace na tela inicial para habilitar o upload direto no Google Drive.
-                  </p>
-                )}
-                {revUploadError && (
-                  <p className="text-[9.5px] text-rose-500 font-bold">{revUploadError}</p>
-                )}
+                <label className="block text-[10px] font-bold text-slate-400 uppercase">Link do Arquivo Oficial (Google Drive Preview)</label>
+                <input
+                  type="url"
+                  placeholder="Ex: https://drive.google.com/file/d/.../view"
+                  className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-800 dark:text-slate-100 font-mono focus:outline-hidden focus:ring-1 focus:ring-blue-500"
+                  value={revFileLink}
+                  onChange={(e) => setRevFileLink(e.target.value)}
+                />
+                <p className="text-[9.5px] text-slate-400">
+                  Insira o link oficial do Google Drive Preview com acesso aos colaboradores da fábrica.
+                </p>
               </div>
             </div>
 

@@ -26,11 +26,12 @@ export const DocumentoDashboard: React.FC<DocumentoDashboardProps> = ({ document
     doc.status === 'Em Revisão'
   );
 
+  const hojeStr = new Date().toISOString().split('T')[0];
+
   // 3. Documentos Vencidos (Próxima revisão no passado e não obsoleto)
   const vencidas = documents.filter(doc => {
     if (!doc.proximaRevisao || doc.status === 'Obsoleto') return false;
-    const prox = new Date(doc.proximaRevisao);
-    return prox < hoje;
+    return doc.proximaRevisao < hojeStr;
   });
 
   // 4. Documentos Pendentes (Elaboração, Aprovação, Rascunho)
@@ -110,7 +111,17 @@ export const DocumentoDashboard: React.FC<DocumentoDashboardProps> = ({ document
         </div>
 
         {/* Card 3: Vencidas */}
-        <div className="p-4 bg-rose-50 dark:bg-rose-950/20 border border-rose-100 dark:border-rose-900/30 rounded-2xl flex flex-col justify-between">
+        <div 
+          onClick={() => {
+            if (vencidas.length > 0) {
+              onSelectDocument(vencidas[0].id);
+            }
+          }}
+          className={`p-4 bg-rose-50 dark:bg-rose-950/20 border border-rose-100 dark:border-rose-900/30 rounded-2xl flex flex-col justify-between transition-all ${
+            vencidas.length > 0 ? 'cursor-pointer hover:shadow-md hover:border-rose-300 dark:hover:border-rose-800' : ''
+          }`}
+          title={vencidas.length > 0 ? `Clique para abrir o documento vencido (${vencidas[0].codigo})` : undefined}
+        >
           <div className="flex items-center justify-between">
             <span className="text-[10px] font-extrabold text-rose-600 dark:text-rose-400 uppercase tracking-wider">Vencidas</span>
             <div className="p-1.5 bg-rose-500/10 rounded-lg text-rose-600 dark:text-rose-400">
@@ -119,7 +130,9 @@ export const DocumentoDashboard: React.FC<DocumentoDashboardProps> = ({ document
           </div>
           <div className="mt-4">
             <h4 className="text-2xl font-extrabold text-slate-800 dark:text-white font-mono">{vencidas.length}</h4>
-            <p className="text-[10px] text-slate-400 mt-0.5">Revisão periódica atrasada</p>
+            <p className="text-[10px] text-slate-400 mt-0.5">
+              {vencidas.length > 0 ? `${vencidas[0].codigo} aguarda revisão` : 'Revisão periódica em dia'}
+            </p>
           </div>
         </div>
 

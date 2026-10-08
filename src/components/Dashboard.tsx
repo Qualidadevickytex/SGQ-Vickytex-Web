@@ -130,9 +130,14 @@ export const Dashboard: React.FC<DashboardProps> = ({
   const totalDocs = documents.length;
   const docsEmRevisao = documents.filter(d => d.status === 'Em Revisão' || d.status === 'Em Aprovação').length;
   
-  // Um documento está vencido se a data de próxima revisão for menor que a data de hoje (2026-07-09)
-  const hoje = '2026-07-09';
-  const docsVencidos = documents.filter(d => d.proximaRevisao < hoje && d.status !== 'Obsoleto').length;
+  // Data atual dinâmica do sistema para aferição de revisões periódicas (ISO 9001)
+  const hoje = new Date().toISOString().split('T')[0];
+  const in30DaysDate = new Date();
+  in30DaysDate.setDate(in30DaysDate.getDate() + 30);
+  const in30Days = in30DaysDate.toISOString().split('T')[0];
+
+  // Um documento está vencido se a data de próxima revisão for menor que hoje e não estiver obsoleto
+  const docsVencidos = documents.filter(d => d.proximaRevisao && d.proximaRevisao < hoje && d.status !== 'Obsoleto').length;
   
   const totalAuditorias = audits.length;
   const ncsAbertas = ncs.filter(n => n.status === 'Aberta' || n.status === 'Em Execução').length;
@@ -343,10 +348,15 @@ export const Dashboard: React.FC<DashboardProps> = ({
         </div>
 
         {/* Documentos Vencidos */}
-        <div id="stat-docs-vencidos" className="bg-white dark:bg-slate-900 rounded-xl p-5 shadow-xs border border-slate-200 dark:border-slate-800 flex flex-col justify-between hover:shadow-md transition-shadow">
+        <div 
+          id="stat-docs-vencidos" 
+          onClick={onNavigateToDocs}
+          className="bg-white dark:bg-slate-900 rounded-xl p-5 shadow-xs border border-slate-200 dark:border-slate-800 flex flex-col justify-between hover:shadow-md transition-shadow cursor-pointer group"
+          title="Clique para visualizar documentos na Lista Mestra"
+        >
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">Revisões Vencidas</span>
-            <div className="w-8 h-8 rounded-lg bg-rose-50 dark:bg-rose-950/40 flex items-center justify-center text-rose-600">
+            <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 group-hover:text-rose-600 dark:group-hover:text-rose-400 transition-colors">Revisões Vencidas</span>
+            <div className="w-8 h-8 rounded-lg bg-rose-50 dark:bg-rose-950/40 flex items-center justify-center text-rose-600 group-hover:scale-110 transition-transform">
               <AlertTriangle className="w-4 h-4" />
             </div>
           </div>
@@ -354,8 +364,8 @@ export const Dashboard: React.FC<DashboardProps> = ({
             <h3 className="text-3xl font-extrabold text-slate-900 dark:text-slate-100 font-mono">
               {docsVencidos.toString().padStart(2, '0')}
             </h3>
-            <p className="text-[10px] text-rose-500 mt-1">
-              Ação imediata requerida
+            <p className="text-[10px] text-rose-500 mt-1 font-medium">
+              {docsVencidos > 0 ? 'Ação imediata requerida' : 'Nenhuma revisão em atraso'}
             </p>
           </div>
         </div>
@@ -928,25 +938,67 @@ export const Dashboard: React.FC<DashboardProps> = ({
               Processos vencidos ou que expiram nos próximos 30 dias:
             </p>
 
-            <div className="space-y-3">
-              {documents.filter(d => d.proximaRevisao < hoje && d.status !== 'Obsoleto').map((doc) => (
-                <div 
-                  key={doc.id} 
-                  id={`priority-item-${doc.id}`}
-                  onClick={() => onSelectDocument(doc.id)}
-                  className="p-2.5 rounded-lg border border-rose-100 dark:border-rose-950/40 bg-rose-50/30 dark:bg-rose-950/10 cursor-pointer hover:bg-rose-50/50 dark:hover:bg-rose-950/20 transition-all flex justify-between items-center group"
-                >
-                  <div className="min-w-0">
-                    <p className="text-xs font-bold text-rose-700 dark:text-rose-400 font-mono group-hover:underline">
-                      {doc.codigo}
-                    </p>
-                    <p className="text-xs font-semibold text-slate-700 dark:text-slate-300 truncate mt-0.5">
-                      {doc.titulo}
-                    </p>
-                  </div>
-                  <ArrowUpRight className="w-4 h-4 text-rose-400 shrink-0 ml-2" />
-                </div>
-              ))}
+            <div className="space-y-2.5">
+              {(() => {
+                const priorityDocs = documents.filter(d => 
+                  d.proximaRevisao && 
+                  d.proximaRevisao <= in30Days && 
+                  d.status !== 'Obsoleto'
+                ).sort((a, b) => (a.proximaRevisao || '').localeCompare(b.proximaRevisao || ''));
+
+                if (priorityDocs.length === 0) {
+                  return (
+                    <div className="p-4 rounded-xl border border-emerald-150 dark:border-emerald-950/40 bg-emerald-50/40 dark:bg-emerald-950/20 text-center">
+                      <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400 mx-auto mb-1" />
+                      <p className="text-xs font-bold text-emerald-800 dark:text-emerald-300">Tudo em dia!</p>
+                      <p className="text-[10.5px] text-emerald-600 dark:text-emerald-400 mt-0.5">Nenhum processo com revisão pendente ou próxima.</p>
+                    </div>
+                  );
+                }
+
+                return priorityDocs.map((doc) => {
+                  const isOverdue = doc.proximaRevisao < hoje;
+                  return (
+                    <div 
+                      key={doc.id} 
+                      id={`priority-item-${doc.id}`}
+                      onClick={() => onSelectDocument(doc.id)}
+                      className={`p-2.5 rounded-lg border cursor-pointer transition-all flex justify-between items-center group ${
+                        isOverdue 
+                          ? 'border-rose-200 dark:border-rose-950/50 bg-rose-50/40 dark:bg-rose-950/20 hover:bg-rose-50/80 dark:hover:bg-rose-950/30' 
+                          : 'border-amber-200 dark:border-amber-950/50 bg-amber-50/40 dark:bg-amber-950/20 hover:bg-amber-50/80 dark:hover:bg-amber-950/30'
+                      }`}
+                      title={isOverdue ? 'Revisão Vencida - Clique para abrir' : 'Revisão Próxima do Vencimento - Clique para abrir'}
+                    >
+                      <div className="min-w-0 pr-2">
+                        <div className="flex items-center gap-1.5">
+                          <span className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-sm ${
+                            isOverdue 
+                              ? 'bg-rose-100 text-rose-800 dark:bg-rose-900/60 dark:text-rose-200' 
+                              : 'bg-amber-100 text-amber-800 dark:bg-amber-900/60 dark:text-amber-200'
+                          }`}>
+                            {isOverdue ? 'VENCIDA' : 'EXPIRA EM BREVE'}
+                          </span>
+                          <p className={`text-xs font-bold font-mono group-hover:underline ${
+                            isOverdue ? 'text-rose-700 dark:text-rose-400' : 'text-amber-700 dark:text-amber-400'
+                          }`}>
+                            {doc.codigo}
+                          </p>
+                        </div>
+                        <p className="text-xs font-semibold text-slate-700 dark:text-slate-300 truncate mt-1">
+                          {doc.titulo}
+                        </p>
+                        <p className="text-[10px] text-slate-400 mt-0.5 font-mono">
+                          Prazo: {doc.proximaRevisao.split('-').reverse().join('/')}
+                        </p>
+                      </div>
+                      <ArrowUpRight className={`w-4 h-4 shrink-0 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5 ${
+                        isOverdue ? 'text-rose-500' : 'text-amber-500'
+                      }`} />
+                    </div>
+                  );
+                });
+              })()}
             </div>
           </div>
 

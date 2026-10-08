@@ -22,7 +22,11 @@ import {
   ChevronRight,
   ClipboardList,
   Trash2,
-  Pencil
+  Pencil,
+  Check,
+  X,
+  Filter,
+  Layers
 } from 'lucide-react';
 import { Documento, Treinamento, ColaboradorCompetencia, SectorType } from '../types';
 import { useSectors } from '../hooks/useSectors';
@@ -42,7 +46,7 @@ interface TreinamentosProps {
 
 // Dados iniciais de competência e colaboradores (salvo localmente ou inicializado)
 export const INITIAL_COLABORADORES: ColaboradorCompetencia[] = [
-  { id: 'col-1', nome: 'Ana Souza', cargo: 'Costureira Especialista', setor: 'Costura', documentosAssinados: ['POP-COS-002'], status: 'Apto' },
+  { id: 'col-1', nome: 'Ana Souza', cargo: 'Costureira Especialista', setor: 'Costura', documentosAssinados: ['POP-COS-002', 'IT-ACA-002'], status: 'Apto' },
   { id: 'col-2', nome: 'Roberto Costa', cargo: 'Operador de Enfesto', setor: 'Corte', documentosAssinados: ['POP-COR-001'], status: 'Apto' },
   { id: 'col-3', nome: 'Jorge Dias', cargo: 'Impressor Serigráfico', setor: 'Estamparia', documentosAssinados: [], status: 'Pendente' },
   { id: 'col-4', nome: 'Maria Santos', cargo: 'Passadora Industrial', setor: 'Acabamento', documentosAssinados: ['IT-ACA-002'], status: 'Apto' },
@@ -210,6 +214,72 @@ export const Treinamentos: React.FC<TreinamentosProps> = ({
     status: 'Realizado' as 'Planejado' | 'Realizado'
   });
 
+  // Participantes vinculados diretamente à Matriz de Competências & Assinaturas
+  const [selectedParticipants, setSelectedParticipants] = useState<string[]>([]);
+  const [participantSearch, setParticipantSearch] = useState('');
+  const [participantSectorFilter, setParticipantSectorFilter] = useState<string>('Todos');
+  const [manualParticipantName, setManualParticipantName] = useState('');
+  const [showManualParticipantInput, setShowManualParticipantInput] = useState(false);
+
+  const toggleParticipant = (colNome: string) => {
+    setSelectedParticipants(prev => {
+      const exists = prev.includes(colNome);
+      const updated = exists ? prev.filter(n => n !== colNome) : [...prev, colNome];
+      setNewTraining(curr => ({ ...curr, participantesStr: updated.join(', ') }));
+      return updated;
+    });
+  };
+
+  const removeParticipant = (colNome: string) => {
+    setSelectedParticipants(prev => {
+      const updated = prev.filter(n => n !== colNome);
+      setNewTraining(curr => ({ ...curr, participantesStr: updated.join(', ') }));
+      return updated;
+    });
+  };
+
+  const selectAllSectorParticipants = (setorName: string) => {
+    const sectorColabs = colaboradores
+      .filter(c => c.setor === setorName)
+      .map(c => c.nome);
+    setSelectedParticipants(prev => {
+      const merged = Array.from(new Set([...prev, ...sectorColabs]));
+      setNewTraining(curr => ({ ...curr, participantesStr: merged.join(', ') }));
+      return merged;
+    });
+  };
+
+  const selectAllFilteredParticipants = (list: ColaboradorCompetencia[]) => {
+    const listNames = list.map(c => c.nome);
+    setSelectedParticipants(prev => {
+      const merged = Array.from(new Set([...prev, ...listNames]));
+      setNewTraining(curr => ({ ...curr, participantesStr: merged.join(', ') }));
+      return merged;
+    });
+  };
+
+  const clearAllParticipants = () => {
+    setSelectedParticipants([]);
+    setNewTraining(curr => ({ ...curr, participantesStr: '' }));
+  };
+
+  const handleAddManualParticipant = () => {
+    const trimmed = manualParticipantName.trim();
+    if (!trimmed) return;
+    if (!selectedParticipants.includes(trimmed)) {
+      const updated = [...selectedParticipants, trimmed];
+      setSelectedParticipants(updated);
+      setNewTraining(curr => ({ ...curr, participantesStr: updated.join(', ') }));
+    }
+    setManualParticipantName('');
+  };
+
+  // Agrupamento de Múltiplas Capacitações Ativas por Colaborador
+  const [expandedColabs, setExpandedColabs] = useState<Record<string, boolean>>({});
+  const toggleExpandColab = (colId: string) => {
+    setExpandedColabs(prev => ({ ...prev, [colId]: !prev[colId] }));
+  };
+
   // Modal de Colaborador (Criar/Editar)
   const [isColaboradorModalOpen, setIsColaboradorModalOpen] = useState(false);
   const [editingColaborador, setEditingColaborador] = useState<ColaboradorCompetencia | null>(null);
@@ -294,6 +364,11 @@ export const Treinamentos: React.FC<TreinamentosProps> = ({
 
   const handleOpenNewTraining = () => {
     setEditingTreinamento(null);
+    setSelectedParticipants([]);
+    setParticipantSearch('');
+    setParticipantSectorFilter('Todos');
+    setManualParticipantName('');
+    setShowManualParticipantInput(false);
     setNewTraining({
       documentoId: '',
       titulo: '',
@@ -309,6 +384,12 @@ export const Treinamentos: React.FC<TreinamentosProps> = ({
 
   const handleOpenEditTraining = (tre: Treinamento) => {
     setEditingTreinamento(tre);
+    const existingParts = tre.participantes || [];
+    setSelectedParticipants(existingParts);
+    setParticipantSearch('');
+    setParticipantSectorFilter(tre.setor || 'Todos');
+    setManualParticipantName('');
+    setShowManualParticipantInput(false);
     setNewTraining({
       documentoId: tre.documentoId,
       titulo: tre.titulo,
@@ -316,7 +397,7 @@ export const Treinamentos: React.FC<TreinamentosProps> = ({
       instrutor: tre.instrutor,
       setor: tre.setor,
       duracaoHoras: tre.duracaoHoras,
-      participantesStr: tre.participantes.join(', '),
+      participantesStr: existingParts.join(', '),
       status: tre.status as 'Planejado' | 'Realizado'
     });
     setIsModalOpen(true);
@@ -527,17 +608,20 @@ export const Treinamentos: React.FC<TreinamentosProps> = ({
         <div class="card">
           <h3 class="card-title">Lista de Assinaturas e Declaração de Entendimento</h3>
           <div>
-            ${selectedTrainingDoc.participantes.map(part => `
+            ${selectedTrainingDoc.participantes.map(part => {
+              const colab = colaboradores.find(c => c.nome.toLowerCase() === part.toLowerCase());
+              return `
               <div class="list-row">
                 <div>
-                  <p class="part-name">${part}</p>
-                  <p class="part-role">Apto para Operação Industrial</p>
+                  <p class="part-name">${part} ${colab ? `<span style="font-weight: 500; font-size: 10px; color: #2563eb;">(${colab.setor} — ${colab.cargo})</span>` : ''}</p>
+                  <p class="part-role">${colab ? `Matriz de Competências: ${colab.status.toUpperCase()} • ` : ''}Apto para Operação Industrial (Cláusula 7.2 ISO 9001)</p>
                 </div>
                 <div class="part-sign">
-                  Assinado digitalmente via Google SSO (Vickytex.com.br)
+                  Assinado digitalmente
                 </div>
               </div>
-            `).join('')}
+            `;
+            }).join('')}
           </div>
         </div>
         
@@ -580,10 +664,18 @@ export const Treinamentos: React.FC<TreinamentosProps> = ({
     }
 
     const doc = documents.find(d => d.id === newTraining.documentoId);
-    const partArray = newTraining.participantesStr
-      .split(',')
-      .map(p => p.trim())
-      .filter(p => p.length > 0);
+    let partArray = [...selectedParticipants];
+    if (partArray.length === 0 && newTraining.participantesStr.trim()) {
+      partArray = newTraining.participantesStr
+        .split(',')
+        .map(p => p.trim())
+        .filter(p => p.length > 0);
+    }
+
+    if (partArray.length === 0) {
+      alert('Por favor, selecione ao menos um colaborador da Matriz de Competências para este treinamento.');
+      return;
+    }
 
     if (editingTreinamento) {
       const updatedItem = {
@@ -604,12 +696,36 @@ export const Treinamentos: React.FC<TreinamentosProps> = ({
         return t;
       });
       saveTreinamentos(updated);
-      onAddLog('Editou Treinamento', `Atualizou o registro de treinamento ${editingTreinamento.codigo}.`);
+      onAddLog('Editou Treinamento', `Atualizou o registro de treinamento ${editingTreinamento.codigo} com ${partArray.length} participantes da Matriz.`);
       
       try {
         TrainingRepository.update(editingTreinamento.id, updatedItem);
       } catch (err) {
         console.error('Falha ao atualizar treinamento remoto:', err);
+      }
+
+      // Sincroniza aptidão na Matriz de Competências caso esteja realizado
+      if (newTraining.status === 'Realizado' && partArray.length > 0) {
+        const updatedColabs = colaboradores.map(col => {
+          if (partArray.includes(col.nome)) {
+            const docs = [...col.documentosAssinados];
+            if (!docs.includes(newTraining.documentoId)) {
+              docs.push(newTraining.documentoId);
+            }
+            return {
+              ...col,
+              documentosAssinados: docs,
+              status: 'Apto' as const
+            };
+          }
+          return col;
+        });
+        saveColaboradores(updatedColabs);
+        updatedColabs.forEach(col => {
+          if (partArray.includes(col.nome)) {
+            CollaboratorRepository.update(col.id, col).catch(err => console.error(err));
+          }
+        });
       }
     } else {
       const codPrefix = `TRE-2026-${(treinamentos.length + 1).toString().padStart(3, '0')}`;
@@ -661,13 +777,18 @@ export const Treinamentos: React.FC<TreinamentosProps> = ({
 
       onAddLog(
         'Registro de Treinamento',
-        `Criado registro de treinamento ${codPrefix} para o documento ${newTraining.documentoId} com ${partArray.length} participantes.`,
+        `Criado registro de treinamento ${codPrefix} para o documento ${newTraining.documentoId} com ${partArray.length} participantes da Matriz de Competências.`,
         newTraining.documentoId
       );
     }
 
     setIsModalOpen(false);
     setEditingTreinamento(null);
+    setSelectedParticipants([]);
+    setParticipantSearch('');
+    setParticipantSectorFilter('Todos');
+    setManualParticipantName('');
+    setShowManualParticipantInput(false);
     setNewTraining({
       documentoId: '',
       titulo: '',
@@ -918,37 +1039,80 @@ export const Treinamentos: React.FC<TreinamentosProps> = ({
                           {col.cargo}
                         </td>
                         <td className="py-3.5 px-4">
-                          <div className="flex flex-wrap gap-1.5">
-                            {col.documentosAssinados.length === 0 ? (
-                              <span className="text-rose-500 italic font-medium flex items-center">
-                                <AlertCircle className="w-3 h-3 mr-1" /> Nenhuma leitura ativa
-                              </span>
-                            ) : (
-                              col.documentosAssinados.map(docId => {
-                                const info = getDocumentInfo(docId);
-                                return (
-                                  <div 
-                                    key={docId} 
-                                    className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-blue-50/90 dark:bg-blue-950/50 text-blue-800 dark:text-blue-200 rounded-md text-[10.5px] border border-blue-200/80 dark:border-blue-900/50 shadow-2xs group max-w-xs sm:max-w-md"
-                                    title={info.titulo ? `${info.codigo} — ${info.titulo}` : info.codigo}
+                          {col.documentosAssinados.length === 0 ? (
+                            <span className="text-rose-500 italic font-medium flex items-center text-xs">
+                              <AlertCircle className="w-3.5 h-3.5 mr-1 shrink-0" /> Nenhuma leitura ativa
+                            </span>
+                          ) : col.documentosAssinados.length === 1 ? (
+                            (() => {
+                              const docId = col.documentosAssinados[0];
+                              const info = getDocumentInfo(docId);
+                              return (
+                                <div 
+                                  key={docId} 
+                                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-blue-50/90 dark:bg-blue-950/50 text-blue-800 dark:text-blue-200 rounded-lg text-[10.5px] border border-blue-200/80 dark:border-blue-900/50 shadow-2xs group max-w-xs sm:max-w-md"
+                                  title={info.titulo ? `${info.codigo} — ${info.titulo}` : info.codigo}
+                                >
+                                  <FileText className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400 shrink-0" />
+                                  <span className="font-mono font-bold text-blue-700 dark:text-blue-300 shrink-0">
+                                    {info.codigo}
+                                  </span>
+                                  {info.titulo && (
+                                    <>
+                                      <span className="text-slate-300 dark:text-slate-600 shrink-0">•</span>
+                                      <span className="truncate text-slate-700 dark:text-slate-200 font-medium max-w-[190px] sm:max-w-[280px]" title={info.titulo}>
+                                        {info.titulo}
+                                      </span>
+                                    </>
+                                  )}
+                                </div>
+                              );
+                            })()
+                          ) : (
+                            /* Agrupado quando o colaborador possui mais de uma capacitação ativa */
+                            <div className="space-y-1.5 py-0.5">
+                              <div className="flex items-center gap-2">
+                                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 dark:bg-blue-950/70 text-blue-800 dark:text-blue-200 border border-blue-200 dark:border-blue-800/80 shadow-2xs font-mono">
+                                  <Layers className="w-3 h-3 text-blue-600 dark:text-blue-400 shrink-0" />
+                                  <span>Agrupado ({col.documentosAssinados.length} capacitações ativas)</span>
+                                </span>
+                                {col.documentosAssinados.length > 2 && (
+                                  <button
+                                    type="button"
+                                    onClick={() => toggleExpandColab(col.id)}
+                                    className="text-[10px] font-bold text-blue-600 hover:text-blue-800 dark:text-blue-400 hover:underline cursor-pointer"
                                   >
-                                    <FileText className="w-3 h-3 text-blue-600 dark:text-blue-400 shrink-0" />
-                                    <span className="font-mono font-bold text-blue-700 dark:text-blue-300 shrink-0">
-                                      {info.codigo}
-                                    </span>
-                                    {info.titulo && (
-                                      <>
-                                        <span className="text-slate-300 dark:text-slate-600 shrink-0">•</span>
-                                        <span className="truncate text-slate-700 dark:text-slate-200 font-medium max-w-[190px] sm:max-w-[280px]" title={info.titulo}>
-                                          {info.titulo}
-                                        </span>
-                                      </>
-                                    )}
-                                  </div>
-                                );
-                              })
-                            )}
-                          </div>
+                                    {expandedColabs[col.id] ? 'Recolher' : `+${col.documentosAssinados.length - 2} mais`}
+                                  </button>
+                                )}
+                              </div>
+                              <div className="flex flex-col gap-1">
+                                {(expandedColabs[col.id] ? col.documentosAssinados : col.documentosAssinados.slice(0, 2)).map(docId => {
+                                  const info = getDocumentInfo(docId);
+                                  return (
+                                    <div 
+                                      key={docId} 
+                                      className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-blue-50/70 dark:bg-blue-950/40 text-blue-900 dark:text-blue-200 rounded-md text-[10.5px] border border-blue-200/70 dark:border-blue-900/50 shadow-2xs group max-w-xs sm:max-w-md"
+                                      title={info.titulo ? `${info.codigo} — ${info.titulo}` : info.codigo}
+                                    >
+                                      <FileText className="w-3 h-3 text-blue-600 dark:text-blue-400 shrink-0" />
+                                      <span className="font-mono font-bold text-blue-700 dark:text-blue-300 shrink-0">
+                                        {info.codigo}
+                                      </span>
+                                      {info.titulo && (
+                                        <>
+                                          <span className="text-slate-300 dark:text-slate-600 shrink-0">•</span>
+                                          <span className="truncate text-slate-700 dark:text-slate-200 font-medium max-w-[190px] sm:max-w-[280px]" title={info.titulo}>
+                                            {info.titulo}
+                                          </span>
+                                        </>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
                         </td>
                         <td className="py-3.5 px-4 text-center">
                           <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold ${
@@ -1211,147 +1375,416 @@ export const Treinamentos: React.FC<TreinamentosProps> = ({
       )}
 
       {/* modal de Criação de Treinamento Coletivo */}
-      {isModalOpen && (
-        <div id="new-training-modal" className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-xs" onClick={() => setIsModalOpen(false)} />
-          <div className="relative bg-white dark:bg-slate-900 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-800 w-full max-w-lg overflow-hidden animate-scale-up">
-            
-            <div className="px-5 py-4 border-b border-slate-100 dark:border-slate-800 bg-[#0B3A63] text-white flex items-center justify-between">
-              <h3 className="text-sm font-extrabold flex items-center">
-                <GraduationCap className="w-4.5 h-4.5 mr-2" />
-                {editingTreinamento ? `Editar Treinamento: ${editingTreinamento.codigo}` : 'Registrar Treinamento Têxtil (ISO 7.2)'}
-              </h3>
-              <button onClick={() => setIsModalOpen(false)} className="text-white/60 hover:text-white font-mono">&times;</button>
-            </div>
+      {isModalOpen && (() => {
+        const currentDoc = documents.find(d => d.id === newTraining.documentoId);
+        const filteredParticipantsColabs = colaboradores.filter(c => {
+          const matchesSearch = participantSearch.trim() === '' || 
+            c.nome.toLowerCase().includes(participantSearch.toLowerCase()) || 
+            c.cargo.toLowerCase().includes(participantSearch.toLowerCase());
+          const matchesSector = participantSectorFilter === 'Todos' || c.setor === participantSectorFilter;
+          return matchesSearch && matchesSector;
+        });
 
-            <form onSubmit={handleCreateTraining} className="p-5 space-y-4">
+        return (
+          <div id="new-training-modal" className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-xs" onClick={() => setIsModalOpen(false)} />
+            <div className="relative bg-white dark:bg-slate-900 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-800 w-full max-w-xl max-h-[92vh] flex flex-col overflow-hidden animate-scale-up">
               
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <label className="text-[11px] font-bold text-slate-500">Procedimento Vinculado *</label>
-                  <select
-                    value={newTraining.documentoId}
-                    onChange={(e) => {
-                      const selectedDoc = documents.find(d => d.id === e.target.value);
-                      setNewTraining({
-                        ...newTraining,
-                        documentoId: e.target.value,
-                        titulo: selectedDoc ? `Treinamento no ${selectedDoc.codigo}: ${selectedDoc.titulo}` : ''
-                      });
-                    }}
-                    className="w-full bg-slate-50 dark:bg-slate-800 text-xs border border-slate-200 dark:border-slate-700 rounded-lg p-2 text-slate-800 dark:text-slate-100 focus:outline-hidden focus:ring-1 focus:ring-blue-500"
-                    required
-                  >
-                    <option value="">Selecione na Lista Mestra...</option>
-                    {documents.map(d => (
-                      <option key={d.id} value={d.id}>{d.codigo} - {d.titulo}</option>
-                    ))}
-                  </select>
+              <div className="px-5 py-4 border-b border-slate-100 dark:border-slate-800 bg-[#0B3A63] text-white flex items-center justify-between shrink-0">
+                <h3 className="text-sm font-extrabold flex items-center">
+                  <GraduationCap className="w-4.5 h-4.5 mr-2" />
+                  {editingTreinamento ? `Editar Treinamento: ${editingTreinamento.codigo}` : 'Registrar Treinamento Têxtil (ISO 7.2)'}
+                </h3>
+                <button onClick={() => setIsModalOpen(false)} className="text-white/60 hover:text-white font-mono">&times;</button>
+              </div>
+
+              <form onSubmit={handleCreateTraining} className="p-5 space-y-4 overflow-y-auto flex-1">
+                
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="text-[11px] font-bold text-slate-500">Procedimento Vinculado *</label>
+                    <select
+                      value={newTraining.documentoId}
+                      onChange={(e) => {
+                        const selectedDoc = documents.find(d => d.id === e.target.value);
+                        setNewTraining({
+                          ...newTraining,
+                          documentoId: e.target.value,
+                          titulo: selectedDoc ? `Treinamento no ${selectedDoc.codigo}: ${selectedDoc.titulo}` : ''
+                        });
+                        if (selectedDoc && selectedDoc.setor) {
+                          setParticipantSectorFilter(selectedDoc.setor);
+                        }
+                      }}
+                      className="w-full bg-slate-50 dark:bg-slate-800 text-xs border border-slate-200 dark:border-slate-700 rounded-lg p-2 text-slate-800 dark:text-slate-100 focus:outline-hidden focus:ring-1 focus:ring-blue-500"
+                      required
+                    >
+                      <option value="">Selecione na Lista Mestra...</option>
+                      {documents.map(d => (
+                        <option key={d.id} value={d.id}>{d.codigo} - {d.titulo}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-[11px] font-bold text-slate-500">Data de Realização *</label>
+                    <input
+                      type="date"
+                      value={newTraining.dataTreinamento}
+                      onChange={(e) => setNewTraining({...newTraining, dataTreinamento: e.target.value})}
+                      className="w-full bg-slate-50 dark:bg-slate-800 text-xs border border-slate-200 dark:border-slate-700 rounded-lg p-2 text-slate-800 dark:text-slate-100 focus:outline-hidden focus:ring-1 focus:ring-blue-500"
+                      required
+                    />
+                  </div>
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-[11px] font-bold text-slate-500">Data de Realização *</label>
-                  <input
-                    type="date"
-                    value={newTraining.dataTreinamento}
-                    onChange={(e) => setNewTraining({...newTraining, dataTreinamento: e.target.value})}
-                    className="w-full bg-slate-50 dark:bg-slate-800 text-xs border border-slate-200 dark:border-slate-700 rounded-lg p-2 text-slate-800 dark:text-slate-100 focus:outline-hidden focus:ring-1 focus:ring-blue-500"
-                    required
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-[11px] font-bold text-slate-500">Título / Escopo do Treinamento *</label>
-                <input
-                  type="text"
-                  value={newTraining.titulo}
-                  onChange={(e) => setNewTraining({...newTraining, titulo: e.target.value})}
-                  className="w-full bg-slate-50 dark:bg-slate-800 text-xs border border-slate-200 dark:border-slate-700 rounded-lg p-2 text-slate-800 dark:text-slate-100 focus:outline-hidden focus:ring-1 focus:ring-blue-500"
-                  required
-                />
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <label className="text-[11px] font-bold text-slate-500">Instrutor / Supervisor *</label>
+                  <label className="text-[11px] font-bold text-slate-500">Título / Escopo do Treinamento *</label>
                   <input
                     type="text"
-                    value={newTraining.instrutor}
-                    onChange={(e) => setNewTraining({...newTraining, instrutor: e.target.value})}
-                    placeholder="Ex: Roberto Costa (Supervisor)"
+                    value={newTraining.titulo}
+                    onChange={(e) => setNewTraining({...newTraining, titulo: e.target.value})}
                     className="w-full bg-slate-50 dark:bg-slate-800 text-xs border border-slate-200 dark:border-slate-700 rounded-lg p-2 text-slate-800 dark:text-slate-100 focus:outline-hidden focus:ring-1 focus:ring-blue-500"
                     required
                   />
                 </div>
 
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="text-[11px] font-bold text-slate-500">Instrutor / Supervisor *</label>
+                    <input
+                      type="text"
+                      value={newTraining.instrutor}
+                      onChange={(e) => setNewTraining({...newTraining, instrutor: e.target.value})}
+                      placeholder="Ex: Roberto Costa (Supervisor)"
+                      className="w-full bg-slate-50 dark:bg-slate-800 text-xs border border-slate-200 dark:border-slate-700 rounded-lg p-2 text-slate-800 dark:text-slate-100 focus:outline-hidden focus:ring-1 focus:ring-blue-500"
+                      required
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-[11px] font-bold text-slate-500">Carga Horária (Horas)</label>
+                    <input
+                      type="number"
+                      step="0.5"
+                      value={newTraining.duracaoHoras}
+                      onChange={(e) => setNewTraining({...newTraining, duracaoHoras: Number(e.target.value)})}
+                      className="w-full bg-slate-50 dark:bg-slate-800 text-xs border border-slate-200 dark:border-slate-700 rounded-lg p-2 text-slate-800 dark:text-slate-100 focus:outline-hidden focus:ring-1 focus:ring-blue-500"
+                    />
+                  </div>
+                </div>
+
+                {/* Seção Inteligente: Participantes Atrelados à Matriz de Competências & Assinaturas */}
+                <div className="space-y-2.5 pt-2 border-t border-slate-100 dark:border-slate-800">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <label className="text-[11.5px] font-bold text-slate-800 dark:text-slate-100 flex items-center gap-1.5">
+                        <Users className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                        Participantes (Atrelados à Matriz de Competências & Assinaturas) *
+                      </label>
+                      <p className="text-[10px] text-slate-500 dark:text-slate-400">
+                        Selecione diretamente os colaboradores registrados na Matriz para vincular as assinaturas e assegurar conformidade com a ISO 9001 (7.2).
+                      </p>
+                    </div>
+                    <span className={`text-[10.5px] font-mono px-2.5 py-0.5 rounded-full font-bold border ${
+                      selectedParticipants.length > 0
+                        ? 'bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-900/60'
+                        : 'bg-rose-50 dark:bg-rose-950/30 text-rose-600 dark:text-rose-400 border-rose-200 dark:border-rose-900/60'
+                    }`}>
+                      {selectedParticipants.length} selecionado(s)
+                    </span>
+                  </div>
+
+                  {/* Barra de Filtros e Ações Rápidas */}
+                  <div className="bg-slate-50 dark:bg-slate-800/40 p-2.5 rounded-lg border border-slate-200/80 dark:border-slate-800 space-y-2">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        {currentDoc && (
+                          <button
+                            type="button"
+                            onClick={() => selectAllSectorParticipants(currentDoc.setor)}
+                            className="px-2.5 py-1 text-[10px] font-bold bg-blue-600 hover:bg-blue-700 text-white rounded-md shadow-2xs transition-colors flex items-center gap-1 cursor-pointer"
+                            title={`Selecionar todos os operadores do setor ${currentDoc.setor}`}
+                          >
+                            <Check className="w-3 h-3" />
+                            Todos de {currentDoc.setor} ({colaboradores.filter(c => c.setor === currentDoc.setor).length})
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => selectAllFilteredParticipants(filteredParticipantsColabs)}
+                          className="px-2.5 py-1 text-[10px] font-semibold bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-600 rounded-md transition-colors cursor-pointer"
+                        >
+                          Selecionar Listados ({filteredParticipantsColabs.length})
+                        </button>
+                        {selectedParticipants.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={clearAllParticipants}
+                            className="px-2 py-1 text-[10px] font-semibold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-md transition-colors cursor-pointer"
+                          >
+                            Desmarcar Todos
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Filtro por Setor */}
+                      <div className="flex items-center gap-1.5 text-[10px]">
+                        <span className="text-slate-400 font-semibold">Setor:</span>
+                        <select
+                          value={participantSectorFilter}
+                          onChange={(e) => setParticipantSectorFilter(e.target.value)}
+                          className="bg-white dark:bg-slate-800 text-[10.5px] border border-slate-200 dark:border-slate-700 rounded-md px-2 py-1 text-slate-700 dark:text-slate-200 focus:outline-hidden focus:ring-1 focus:ring-blue-500 font-medium"
+                        >
+                          <option value="Todos">Todos os Setores</option>
+                          {sectorsList.map(s => (
+                            <option key={s} value={s}>{s}</option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+
+                    {/* Busca por Nome/Função */}
+                    <div className="relative">
+                      <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                      <input
+                        type="text"
+                        value={participantSearch}
+                        onChange={(e) => setParticipantSearch(e.target.value)}
+                        placeholder="Buscar colaborador por nome ou função na matriz..."
+                        className="w-full pl-8 pr-6 py-1.5 bg-white dark:bg-slate-800 text-xs border border-slate-200 dark:border-slate-700 rounded-md text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-hidden focus:ring-1 focus:ring-blue-500"
+                      />
+                      {participantSearch && (
+                        <button
+                          type="button"
+                          onClick={() => setParticipantSearch('')}
+                          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs font-bold"
+                        >
+                          ×
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Tags dos Participantes Confirmados */}
+                  {selectedParticipants.length > 0 && (
+                    <div className="p-2.5 bg-blue-50/50 dark:bg-blue-950/20 rounded-lg border border-blue-100 dark:border-blue-900/40 space-y-1.5">
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-blue-700 dark:text-blue-300">
+                        Participantes Confirmados ({selectedParticipants.length}):
+                      </p>
+                      <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto">
+                        {selectedParticipants.map(name => {
+                          const col = colaboradores.find(c => c.nome.toLowerCase() === name.toLowerCase());
+                          return (
+                            <span
+                              key={name}
+                              className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 border border-blue-200 dark:border-blue-900/70 shadow-2xs"
+                            >
+                              <span className="w-4 h-4 rounded-full bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 text-[9px] flex items-center justify-center font-bold">
+                                {name.charAt(0)}
+                              </span>
+                              <span>{name}</span>
+                              {col && (
+                                <span className="text-[9.5px] text-slate-400 font-normal">
+                                  ({col.setor})
+                                </span>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => removeParticipant(name)}
+                                className="text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 font-bold ml-0.5 text-xs cursor-pointer"
+                                title={`Remover ${name}`}
+                              >
+                                ×
+                              </button>
+                            </span>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Lista com Checkboxes dos Colaboradores da Matriz */}
+                  <div className="max-h-48 overflow-y-auto border border-slate-200 dark:border-slate-700 rounded-lg divide-y divide-slate-100 dark:divide-slate-800/80 bg-white dark:bg-slate-900">
+                    {filteredParticipantsColabs.map(col => {
+                      const isSelected = selectedParticipants.includes(col.nome);
+                      const alreadyHasDoc = newTraining.documentoId && (
+                        col.documentosAssinados.includes(newTraining.documentoId) ||
+                        col.documentosAssinados.some(docId => {
+                          const d = documents.find(doc => doc.id === docId);
+                          return d?.id === newTraining.documentoId || d?.codigo === newTraining.documentoId;
+                        })
+                      );
+
+                      return (
+                        <div
+                          key={col.id}
+                          onClick={() => toggleParticipant(col.nome)}
+                          className={`p-2.5 flex items-center justify-between cursor-pointer transition-colors ${
+                            isSelected
+                              ? 'bg-blue-50/70 dark:bg-blue-950/40 hover:bg-blue-50 dark:hover:bg-blue-950/50'
+                              : 'hover:bg-slate-50/80 dark:hover:bg-slate-800/40'
+                          }`}
+                        >
+                          <div className="flex items-center space-x-2.5 min-w-0">
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() => {}}
+                              className="rounded border-slate-300 dark:border-slate-600 text-blue-600 focus:ring-blue-500 pointer-events-none"
+                            />
+                            <div className="w-6 h-6 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-[10px] flex items-center justify-center font-bold font-mono shrink-0">
+                              {col.nome.charAt(0)}
+                            </div>
+                            <div className="min-w-0">
+                              <p className="text-xs font-bold text-slate-800 dark:text-slate-100 truncate">
+                                {col.nome}
+                              </p>
+                              <p className="text-[10px] text-slate-500 dark:text-slate-400 truncate">
+                                {col.cargo} • <span className="font-semibold">{col.setor}</span>
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center space-x-2 shrink-0 ml-2">
+                            {newTraining.documentoId && (
+                              alreadyHasDoc ? (
+                                <span className="text-[9.5px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/30 px-1.5 py-0.5 rounded-sm border border-emerald-200 dark:border-emerald-900/40 flex items-center gap-1">
+                                  <CheckCircle2 className="w-2.5 h-2.5" /> Já Apto
+                                </span>
+                              ) : (
+                                <span className="text-[9.5px] font-semibold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/30 px-1.5 py-0.5 rounded-sm">
+                                  Pendente
+                                </span>
+                              )
+                            )}
+                            <span className={`px-1.5 py-0.5 rounded-full text-[9px] font-extrabold ${
+                              col.status === 'Apto'
+                                ? 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400'
+                                : col.status === 'Em Treinamento'
+                                ? 'bg-amber-50 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400'
+                                : 'bg-rose-50 dark:bg-rose-950/30 text-rose-600 dark:text-rose-400'
+                            }`}>
+                              {col.status.toUpperCase()}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
+
+                    {filteredParticipantsColabs.length === 0 && (
+                      <div className="p-4 text-center text-xs text-slate-400 italic">
+                        Nenhum colaborador encontrado na Matriz para os filtros ativos.
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Inserir Participante Avulso / Não cadastrado */}
+                  <div className="pt-1">
+                    {!showManualParticipantInput ? (
+                      <button
+                        type="button"
+                        onClick={() => setShowManualParticipantInput(true)}
+                        className="text-[11px] font-bold text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1 cursor-pointer"
+                      >
+                        <Plus className="w-3 h-3" />
+                        Inserir participante avulso (não listado na Matriz)
+                      </button>
+                    ) : (
+                      <div className="p-2.5 bg-slate-50 dark:bg-slate-800/60 rounded-lg border border-slate-200 dark:border-slate-700 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <label className="text-[10.5px] font-bold text-slate-600 dark:text-slate-300">
+                            Nome do Participante Avulso / Convidado:
+                          </label>
+                          <button
+                            type="button"
+                            onClick={() => setShowManualParticipantInput(false)}
+                            className="text-[10px] text-slate-400 hover:text-slate-600 font-semibold cursor-pointer"
+                          >
+                            Fechar
+                          </button>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="text"
+                            value={manualParticipantName}
+                            onChange={(e) => setManualParticipantName(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                handleAddManualParticipant();
+                              }
+                            }}
+                            placeholder="Ex: Carlos Eduardo (Auditor Trainee)"
+                            className="flex-1 bg-white dark:bg-slate-800 text-xs border border-slate-200 dark:border-slate-700 rounded-md p-1.5 text-slate-800 dark:text-slate-100 focus:outline-hidden focus:ring-1 focus:ring-blue-500"
+                          />
+                          <button
+                            type="button"
+                            onClick={handleAddManualParticipant}
+                            className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-xs font-bold transition-colors cursor-pointer"
+                          >
+                            Adicionar
+                          </button>
+                        </div>
+                        <p className="text-[9px] text-amber-600 dark:text-amber-400">
+                          * Nota de Auditoria: Para colaboradores regulares, cadastre-os na aba "Matriz de Competências & Assinaturas" para assegurar rastreabilidade integral.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+
+                  {selectedParticipants.length === 0 && (
+                    <div className="p-2 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/60 rounded-lg text-[10.5px] text-amber-800 dark:text-amber-300 flex items-center gap-2">
+                      <AlertCircle className="w-3.5 h-3.5 shrink-0 text-amber-600" />
+                      <span>Selecione ao menos um colaborador da matriz acima para compor a lista de presença oficial.</span>
+                    </div>
+                  )}
+                </div>
+
                 <div className="space-y-1.5">
-                  <label className="text-[11px] font-bold text-slate-500">Carga Horária (Horas)</label>
-                  <input
-                    type="number"
-                    step="0.5"
-                    value={newTraining.duracaoHoras}
-                    onChange={(e) => setNewTraining({...newTraining, duracaoHoras: Number(e.target.value)})}
-                    className="w-full bg-slate-50 dark:bg-slate-800 text-xs border border-slate-200 dark:border-slate-700 rounded-lg p-2 text-slate-800 dark:text-slate-100 focus:outline-hidden focus:ring-1 focus:ring-blue-500"
-                  />
+                  <label className="text-[11px] font-bold text-slate-500">Status</label>
+                  <div className="flex space-x-4">
+                    <label className="flex items-center space-x-2 text-xs">
+                      <input
+                        type="radio"
+                        name="status"
+                        checked={newTraining.status === 'Realizado'}
+                        onChange={() => setNewTraining({...newTraining, status: 'Realizado'})}
+                      />
+                      <span className="font-semibold text-slate-700 dark:text-slate-300">Já Realizado (Aprova Aptidão)</span>
+                    </label>
+                    <label className="flex items-center space-x-2 text-xs">
+                      <input
+                        type="radio"
+                        name="status"
+                        checked={newTraining.status === 'Planejado'}
+                        onChange={() => setNewTraining({...newTraining, status: 'Planejado'})}
+                      />
+                      <span className="font-semibold text-slate-700 dark:text-slate-300">Planejado (Agendado no Cronograma)</span>
+                    </label>
+                  </div>
                 </div>
-              </div>
 
-              <div className="space-y-1.5">
-                <label className="text-[11px] font-bold text-slate-500">Nomes dos Participantes (Separados por vírgula) *</label>
-                <textarea
-                  value={newTraining.participantesStr}
-                  onChange={(e) => setNewTraining({...newTraining, participantesStr: e.target.value})}
-                  placeholder="Roberto Costa, Clara Mendes, Ana Souza"
-                  className="w-full bg-slate-50 dark:bg-slate-800 text-xs border border-slate-200 dark:border-slate-700 rounded-lg p-2 text-slate-800 dark:text-slate-100 focus:outline-hidden focus:ring-1 focus:ring-blue-500 h-16 font-semibold"
-                  required
-                />
-                <p className="text-[9px] text-slate-400">Escreva os nomes dos colaboradores que participaram e assinaram fisicamente.</p>
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-[11px] font-bold text-slate-500">Status</label>
-                <div className="flex space-x-4">
-                  <label className="flex items-center space-x-2 text-xs">
-                    <input
-                      type="radio"
-                      name="status"
-                      checked={newTraining.status === 'Realizado'}
-                      onChange={() => setNewTraining({...newTraining, status: 'Realizado'})}
-                    />
-                    <span className="font-semibold text-slate-700 dark:text-slate-300">Já Realizado (Aprova Aptidão)</span>
-                  </label>
-                  <label className="flex items-center space-x-2 text-xs">
-                    <input
-                      type="radio"
-                      name="status"
-                      checked={newTraining.status === 'Planejado'}
-                      onChange={() => setNewTraining({...newTraining, status: 'Planejado'})}
-                    />
-                    <span className="font-semibold text-slate-700 dark:text-slate-300">Planejado (Agendado no Cronograma)</span>
-                  </label>
+                <div className="flex justify-end space-x-2 pt-4 border-t border-slate-100 dark:border-slate-800">
+                  <button
+                    type="button"
+                    onClick={() => setIsModalOpen(false)}
+                    className="px-4 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-300 rounded-lg text-xs font-bold transition-colors cursor-pointer"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold shadow-xs transition-colors cursor-pointer"
+                  >
+                    {editingTreinamento ? 'Salvar Alterações' : 'Confirmar Registro'}
+                  </button>
                 </div>
-              </div>
-
-              <div className="flex justify-end space-x-2 pt-4 border-t border-slate-100 dark:border-slate-800">
-                <button
-                  type="button"
-                  onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-300 rounded-lg text-xs font-bold transition-colors"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold shadow-xs transition-colors"
-                >
-                  {editingTreinamento ? 'Salvar Alterações' : 'Confirmar Registro'}
-                </button>
-              </div>
-            </form>
+              </form>
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Modal de Cadastrar/Editar Colaborador */}
       {isColaboradorModalOpen && (
@@ -1617,19 +2050,37 @@ export const Treinamentos: React.FC<TreinamentosProps> = ({
                 </h3>
                 
                 <div className="space-y-2.5">
-                  {selectedTrainingDoc.participantes.map((part, idx) => (
-                    <div key={idx} className="flex justify-between items-center text-xs py-2 border-b border-slate-100 dark:border-slate-800/50">
-                      <div>
-                        <p className="font-bold text-slate-800 dark:text-slate-100">{part}</p>
-                        <p className="text-[9px] text-slate-400">Apto para Operação Industrial</p>
+                  {selectedTrainingDoc.participantes.map((part, idx) => {
+                    const colab = colaboradores.find(c => c.nome.toLowerCase() === part.toLowerCase());
+                    return (
+                      <div key={idx} className="flex justify-between items-center text-xs py-2 border-b border-slate-100 dark:border-slate-800/50">
+                        <div className="space-y-0.5">
+                          <p className="font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+                            <span>{part}</span>
+                            {colab && (
+                              <span className="text-[10px] font-normal px-2 py-0.5 bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 rounded border border-blue-200/60 dark:border-blue-900/40">
+                                {colab.setor} • {colab.cargo}
+                              </span>
+                            )}
+                          </p>
+                          <p className="text-[9.5px] text-slate-400">
+                            {colab ? (
+                              <span>
+                                Matriz de Competências: <strong className="text-slate-600 dark:text-slate-300">{colab.status.toUpperCase()}</strong> • Evidência de Aptidão ISO 9001 (7.2)
+                              </span>
+                            ) : (
+                              'Apto para Operação Industrial'
+                            )}
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <span className="text-[10px] font-mono text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/30 px-2 py-0.5 rounded border border-emerald-200 dark:border-emerald-900/40 font-semibold">
+                            ✓ Assinatura Validada
+                          </span>
+                        </div>
                       </div>
-                      <div className="text-right">
-                        <span className="text-[10px] font-mono text-slate-400 italic">
-                          Assinado digitalmente via Google SSO (Vickytex.com.br)
-                        </span>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
 
