@@ -21,10 +21,11 @@ interface SearchGlobalProps {
 }
 
 export const SearchGlobal: React.FC<SearchGlobalProps> = ({ isOpen, onClose, onSelectDocument }) => {
+  const isDemoMode = import.meta.env.VITE_DEMO_MODE === 'true';
   const [query, setQuery] = useState('');
-  const [liveDocs, setLiveDocs] = useState<Documento[]>(INITIAL_DOCUMENTS);
-  const [liveAudits, setLiveAudits] = useState<Auditoria[]>(INITIAL_AUDITORIAS);
-  const [liveNCs, setLiveNCs] = useState<NaoConformidade[]>(INITIAL_NAO_CONFORMIDADES);
+  const [liveDocs, setLiveDocs] = useState<Documento[]>(() => isDemoMode ? INITIAL_DOCUMENTS : []);
+  const [liveAudits, setLiveAudits] = useState<Auditoria[]>(() => isDemoMode ? INITIAL_AUDITORIAS : []);
+  const [liveNCs, setLiveNCs] = useState<NaoConformidade[]>(() => isDemoMode ? INITIAL_NAO_CONFORMIDADES : []);
   const [liveEquips, setLiveEquips] = useState<Equipamento[]>([]);
   const [liveTrainings, setLiveTrainings] = useState<Treinamento[]>([]);
 
@@ -46,13 +47,13 @@ export const SearchGlobal: React.FC<SearchGlobalProps> = ({ isOpen, onClose, onS
   // Assinaturas em tempo real via Firestore
   useEffect(() => {
     const unsubDocs = DocumentRepository.subscribe((items) => {
-      if (Array.isArray(items) && items.length > 0) setLiveDocs(items);
+      if (Array.isArray(items)) setLiveDocs(items);
     });
     const unsubAudits = AuditRepository.subscribe((items) => {
-      if (Array.isArray(items) && items.length > 0) setLiveAudits(items);
+      if (Array.isArray(items)) setLiveAudits(items);
     });
     const unsubNCs = NCRepository.subscribe((items) => {
-      if (Array.isArray(items) && items.length > 0) setLiveNCs(items);
+      if (Array.isArray(items)) setLiveNCs(items);
     });
     const unsubEquips = EquipmentRepository.subscribe((items) => {
       if (Array.isArray(items)) setLiveEquips(items);

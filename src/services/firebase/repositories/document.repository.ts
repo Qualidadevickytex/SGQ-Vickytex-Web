@@ -15,7 +15,8 @@ class DocumentRepositoryClass extends BaseRepository<Documento> {
       const saved = localStorage.getItem('sgq_vickytex_documents');
       if (saved) return JSON.parse(saved);
     } catch {}
-    return INITIAL_DOCUMENTS;
+    const isDemoMode = import.meta.env.VITE_DEMO_MODE === 'true';
+    return isDemoMode ? INITIAL_DOCUMENTS : [];
   }
 
   protected saveLocalData(data: Documento[]): void {

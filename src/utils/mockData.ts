@@ -1026,37 +1026,149 @@ export const INITIAL_FORNECEDORES: Fornecedor[] = [
     cnpj: '12.345.678/0001-90',
     razaoSocial: 'Fiação e Tecelagem Fios do Brasil S.A.',
     nomeFantasia: 'Fios do Brasil',
+    inscricaoEstadual: '112.334.556.778',
+    enderecoCompleto: 'Av. das Indústrias Têxteis, 1500 - Distrito Industrial',
+    cidade: 'Americana',
+    uf: 'SP',
+    cep: '13470-000',
     contatoNome: 'Guilherme Mendes',
     contatoEmail: 'vendas@fiosdobrasil.com.br',
     contatoTelefone: '(11) 3221-8899',
+    contatosAdicionais: [
+      { id: 'c-1', tipo: 'Qualidade', nome: 'Eng. Paula Souza', email: 'qualidade@fiosdobrasil.com.br', telefone: '(11) 98765-4321', cargo: 'Gerente da Garantia da Qualidade' },
+      { id: 'c-2', tipo: 'Comercial', nome: 'Guilherme Mendes', email: 'vendas@fiosdobrasil.com.br', telefone: '(11) 3221-8899', cargo: 'Key Account Têxtil' }
+    ],
     categoria: 'Fios e Fibras',
+    subcategoria: 'Fios de Algodão Penteado e Fibras Sintéticas',
+    produtosServicosFornecidos: ['Fio Algodão 30/1 Penteado', 'Fio Poliéster Texturizado 150/48', 'Fio Elastano 40 Denier'],
     criticidade: 'Alta',
     statusQualificacao: 'Qualificado',
     dataQualificacao: '2026-01-15',
     notaAvaliacao: 94,
-    observacoes: 'Fornecedor homologado de fios de algodão e elastano. Excelente regularidade de lote.',
+    documentos: [
+      { id: 'doc-1', tipo: 'Certificado OEKO-TEX', titulo: 'OEKO-TEX Standard 100 - Fios Livres de Substâncias Nocivas', numeroDocumento: 'OEKO-BR-99218', dataEmissao: '2025-06-01', dataValidade: '2026-12-31', anexoUrl: 'https://drive.google.com/file/d/oeko-tex-fios', status: 'Vigente' },
+      { id: 'doc-2', tipo: 'Licença Ambiental', titulo: 'Licença de Operação CETESB', numeroDocumento: 'CETESB-LO-2024-88', dataEmissao: '2024-03-10', dataValidade: '2027-03-10', status: 'Vigente' },
+      { id: 'doc-3', tipo: 'Certificado ISO 9001', titulo: 'Certificação ISO 9001:2015 DNV', numeroDocumento: 'BR-QMS-44120', dataEmissao: '2024-05-15', dataValidade: '2027-05-15', status: 'Vigente' }
+    ],
+    qualificacaoInicial: {
+      dataInicio: '2025-11-10',
+      dataConclusao: '2026-01-15',
+      criterios: [
+        { id: 'cr-1', descricao: 'Apresentação de Laudo de Torção e Regularidade Uster', obrigatorio: true, status: 'Conforme' },
+        { id: 'cr-2', descricao: 'Homologação de Lote Piloto de Fiação em Tear Circular', obrigatorio: true, status: 'Conforme' },
+        { id: 'cr-3', descricao: 'Certificação OEKO-TEX Standard 100 vigente', obrigatorio: true, status: 'Conforme' }
+      ],
+      analiseTecnica: 'Fios com índice de neps e imperfeições dentro das especificações de tecelagem Vickytex. Sem quebras excessivas.',
+      lotePilotoStatus: 'Aprovado',
+      auditoriaInicialStatus: 'Conforme',
+      parecerFinal: 'Fornecedor homologado com excelência operacional para fornecimento de matéria-prima crítica.',
+      responsavel: 'qualidade@vickytex.com.br',
+      statusFinal: 'Aprovado'
+    },
+    fluxoAprovacao: [
+      { id: 'fa-1', etapa: 'Qualidade', responsavelNome: 'Vicky (Qualidade)', data: '2026-01-14', status: 'Aprovado', justificativa: 'Laudos Uster excelentes e sem contaminações de polipropileno.' },
+      { id: 'fa-2', etapa: 'Compras', responsavelNome: 'Suprimentos Vickytex', data: '2026-01-15', status: 'Aprovado', justificativa: 'Condições comerciais e prazos alinhados com o PCP.' },
+      { id: 'fa-3', etapa: 'Diretoria', responsavelNome: 'Diretoria Industrial', data: '2026-01-15', status: 'Aprovado', justificativa: 'Homologação plena autorizada.' }
+    ],
+    historicoInspecoes: [
+      {
+        id: 'insp-1',
+        numeroLote: 'LT-FI-2026-088',
+        notaFiscal: 'NF-10492',
+        dataRecebimento: '2026-05-02',
+        quantidadeRecebida: 3500,
+        unidade: 'kg',
+        resultado: 'Aprovado',
+        taxaDefeitoPercentual: 0.2,
+        gerouRetrabalho: false,
+        entregaNoPrazo: true,
+        inspecionadoPor: 'Carlos (Qualidade Vickytex)',
+        observacoes: 'Lote de fio 30/1 penteado em bobinas perfeitas, umidade padrão (7.8%).',
+        parametrosTexteis: {
+          especificacaoTecnicaConforme: true,
+          resistenciaMaterial: 'Conforme'
+        }
+      },
+      {
+        id: 'insp-2',
+        numeroLote: 'LT-FI-2026-140',
+        notaFiscal: 'NF-11205',
+        dataRecebimento: '2026-06-08',
+        quantidadeRecebida: 4200,
+        unidade: 'kg',
+        resultado: 'Aprovado',
+        taxaDefeitoPercentual: 0.1,
+        gerouRetrabalho: false,
+        entregaNoPrazo: true,
+        inspecionadoPor: 'Vicky (Qualidade)',
+        observacoes: 'Regularidade excelente no urdimento e malharia circular.',
+        parametrosTexteis: {
+          especificacaoTecnicaConforme: true,
+          resistenciaMaterial: 'Conforme'
+        }
+      }
+    ],
+    gestaoRisco: {
+      monossuprimento: false,
+      impactoQualidade: 'Crítico (Direto no Produto)',
+      riscoAbastecimento: 'Médio',
+      planoContingencia: 'Em caso de escassez de algodão penteado, acionar fornecedor reserva homologado (Fiação Catarinense).',
+      fornecedorSubstitutoNome: 'Fiação Catarinense Ltda'
+    },
+    reavaliacao: {
+      periodicidadeMeses: 6,
+      dataUltimaReavaliacao: '2026-06-10',
+      dataProximaReavaliacao: '2026-12-10',
+      status: 'Em Dia'
+    },
+    auditorias: [
+      {
+        id: 'aud-1',
+        codigo: 'AUD-FORN-2026-01',
+        dataPlanejada: '2026-02-15',
+        dataRealizada: '2026-02-15',
+        auditor: 'Auditor Externo / Vickytex',
+        tipoAuditoria: 'Presencial (Fábrica)',
+        escopo: 'Boas Práticas de Fabricação, Climatização de Fiação, Detecção de Fibras Estranhas e Rastreabilidade do Fardo.',
+        notaChecklist: 96,
+        resultado: 'Aprovado',
+        qtdNaoConformidades: 0,
+        observacoes: 'Instalações de alto padrão tecnológico com modernos purgadores ópticos.'
+      }
+    ],
+    observacoes: 'Fornecedor homologado com Grau A de confiabilidade. Excelente regularidade de lote.',
     historicoAvaliacoes: [
       {
         id: 'av-1-1',
         dataAvaliacao: '2026-01-15',
+        periodoReferencia: '2º Semestre / 2025',
         avaliador: 'Vicky (Qualidade)',
         criterioQualidade: 95,
         criterioPrazo: 90,
         criterioAtendimento: 98,
+        criterioEspecificacoes: 96,
+        criterioAcoesCorretivas: 100,
         notaGeral: 94.3,
+        classificacaoFaixa: 'A - Excelente',
         resultado: 'Aprovado',
-        parecerTecnico: 'Laudos de ensaio de tração apresentaram excelentes resultados. Documentação em conformidade.'
+        alimentadoPorDadosReais: true,
+        parecerTecnico: 'Laudos de ensaio de tração apresentaram excelentes resultados. Documentação em conformidade integral.'
       },
       {
         id: 'av-1-2',
         dataAvaliacao: '2026-06-10',
+        periodoReferencia: '1º Semestre / 2026',
         avaliador: 'Carlos (Qualidade)',
         criterioQualidade: 93,
         criterioPrazo: 95,
         criterioAtendimento: 95,
-        notaGeral: 94.3,
+        criterioEspecificacoes: 94,
+        criterioAcoesCorretivas: 100,
+        notaGeral: 94.2,
+        classificacaoFaixa: 'A - Excelente',
         resultado: 'Aprovado',
-        parecerTecnico: 'Entrega pontual e mercadoria livre de impurezas.'
+        alimentadoPorDadosReais: true,
+        parecerTecnico: 'Entrega pontual e mercadoria livre de impurezas. Índice Uster dentro da meta AQL.'
       }
     ]
   },
@@ -1065,69 +1177,520 @@ export const INITIAL_FORNECEDORES: Fornecedor[] = [
     cnpj: '98.765.432/0001-10',
     razaoSocial: 'Tinturaria e Estamparia Textiluz Ltda',
     nomeFantasia: 'Tinturaria Textiluz',
+    inscricaoEstadual: '254.789.012.333',
+    enderecoCompleto: 'Rua dos Tintureiros, 450 - Vale do Itajaí',
+    cidade: 'Brusque',
+    uf: 'SC',
+    cep: '88350-000',
     contatoNome: 'Marcela Silva',
     contatoEmail: 'contato@textiluz.com.br',
     contatoTelefone: '(47) 3355-1212',
-    categoria: 'Serviços de Tinturaria',
+    contatosAdicionais: [
+      { id: 'c-3', tipo: 'Técnico', nome: 'Químico Responsável Jonas', email: 'laboratorio@textiluz.com.br', telefone: '(47) 99122-3344', cargo: 'Químico Chefe de Tingimento' },
+      { id: 'c-4', tipo: 'Comercial', nome: 'Marcela Silva', email: 'contato@textiluz.com.br', telefone: '(47) 3355-1212', cargo: 'Supervisora Comercial' }
+    ],
+    categoria: 'Malharias e Tinturarias',
+    subcategoria: 'Tingimento e Acabamento de Malhas',
+    produtosServicosFornecidos: ['Tingimento Reativo em Malha 100% Algodão', 'Acabamento Termofixado', 'Amaciamento Especial com Silicone'],
     criticidade: 'Alta',
     statusQualificacao: 'Qualificado com Restrições',
     dataQualificacao: '2026-03-20',
     notaAvaliacao: 72,
-    observacoes: 'Prestador de serviços terceirizados de beneficiamento têxtil. Necessita acompanhamento de solidez de cor.',
+    documentos: [
+      { id: 'doc-4', tipo: 'Licença Ambiental', titulo: 'Licença Ambiental de Operação IMA/SC (Tratamento de Efluentes)', numeroDocumento: 'IMA-LAO-3391', dataEmissao: '2024-01-10', dataValidade: '2026-11-20', status: 'Vencendo em 30 dias', observacoes: 'Processo de renovação protocolado junto ao órgão ambiental.' },
+      { id: 'doc-5', tipo: 'FISPQ / FDS', titulo: 'Fichas de Segurança e Corantes Ecológicos Sem Metais Pesados', numeroDocumento: 'FISPQ-SET-2025', dataEmissao: '2025-02-15', status: 'Vigente' }
+    ],
+    qualificacaoInicial: {
+      dataInicio: '2026-01-10',
+      dataConclusao: '2026-03-20',
+      criterios: [
+        { id: 'cr-4', descricao: 'Apresentação de Cartela de Cores e Delta E padrão espectrofotômetro', obrigatorio: true, status: 'Conforme' },
+        { id: 'cr-5', descricao: 'Ensaio de Solidez à Lavagem (ABNT NBR ISO 105-C06)', obrigatorio: true, status: 'Conforme' },
+        { id: 'cr-6', descricao: 'Estabilidade dimensional (encolhimento máximo 4%)', obrigatorio: true, status: 'Conforme' }
+      ],
+      analiseTecnica: 'Tinturaria capacitada, mas requer rígido monitoramento de partidas escuras (Preto e Marinho) devido a dispersão de corante.',
+      lotePilotoStatus: 'Aprovado',
+      auditoriaInicialStatus: 'Conforme',
+      parecerFinal: 'Aprovado condicionalmente com monitoramento espectrofotométrico lote a lote.',
+      responsavel: 'qualidade@vickytex.com.br',
+      statusFinal: 'Aprovado com Restrições'
+    },
+    fluxoAprovacao: [
+      { id: 'fa-4', etapa: 'Qualidade', responsavelNome: 'Vicky (Qualidade)', data: '2026-03-18', status: 'Aprovado Condicional', justificativa: 'Exigido controle de Delta E e envio de retalho de contra-amostra por partida.' },
+      { id: 'fa-5', etapa: 'Compras', responsavelNome: 'Suprimentos', data: '2026-03-20', status: 'Aprovado', justificativa: 'Preço competitivo e capacidade produtiva de 40 ton/mês.' }
+    ],
+    historicoInspecoes: [
+      {
+        id: 'insp-3',
+        numeroLote: 'LT-TINT-8812',
+        notaFiscal: 'NF-08819',
+        dataRecebimento: '2026-03-15',
+        quantidadeRecebida: 1800,
+        unidade: 'kg',
+        resultado: 'Aprovado com Restrição',
+        taxaDefeitoPercentual: 4.8,
+        gerouRetrabalho: true,
+        custoRetrabalho: 1250,
+        entregaNoPrazo: false,
+        diasAtraso: 3,
+        inspecionadoPor: 'Vicky (Qualidade)',
+        observacoes: 'Desvio de tonalidade na partida Azul Royal (Delta E medido = 1.35 vs tolerância máx de 0.80). Lote liberado condicional com triagem no corte.',
+        parametrosTexteis: {
+          deltaE: 1.35,
+          gramaturaReal: 178,
+          gramaturaEspecificada: 180,
+          larguraUtilCm: 182,
+          composicaoConforme: true,
+          solidezLavagem: 3.5,
+          solidezFriccao: 4.0,
+          encolhimentoComprimento: -4.5,
+          encolhimentoLargura: -2.0
+        }
+      },
+      {
+        id: 'insp-4',
+        numeroLote: 'LT-TINT-9014',
+        notaFiscal: 'NF-09140',
+        dataRecebimento: '2026-05-18',
+        quantidadeRecebida: 2400,
+        unidade: 'kg',
+        resultado: 'Aprovado',
+        taxaDefeitoPercentual: 0.8,
+        gerouRetrabalho: false,
+        entregaNoPrazo: true,
+        inspecionadoPor: 'Carlos (Qualidade)',
+        observacoes: 'Partida Vermelho Rubi excelente, Delta E dentro do padrão da cartela física.',
+        parametrosTexteis: {
+          deltaE: 0.55,
+          gramaturaReal: 181,
+          gramaturaEspecificada: 180,
+          larguraUtilCm: 185,
+          composicaoConforme: true,
+          solidezLavagem: 4.5,
+          solidezFriccao: 4.5,
+          encolhimentoComprimento: -2.8,
+          encolhimentoLargura: -1.5
+        }
+      }
+    ],
+    ocorrenciasRNC: [
+      {
+        id: 'rnc-forn-1',
+        codigoRNC: 'RNC-2026-042',
+        dataOcorrencia: '2026-03-16',
+        titulo: 'Variação de Tonalidade (Delta E 1.35) e Encolhimento na partida Azul Royal',
+        descricao: 'Durante inspeção de recebimento na malharia Vickytex, constatou-se que a partida de malha meia malha penteada veio com tom visivelmente mais escuro que a cartela padrão e encolhimento de comprimento em 4.5%.',
+        gravidade: 'Grave',
+        loteEnvolvido: 'LT-TINT-8812',
+        notaFiscal: 'NF-08819',
+        quantidadeAfetada: '1.800 kg',
+        status: 'Aguardando Plano de Ação',
+        custoPrejuizo: 1250,
+        reincidente: false,
+        exigePlanoAcao: true
+      }
+    ],
+    planosAcao: [
+      {
+        id: 'pa-forn-1',
+        codigo: 'CAPA-FORN-002',
+        titulo: 'Padronização de Curva de Tingimento e Termofixação de Ramo',
+        causaRaiz: 'Variação térmica no ramo durante a etapa de secagem e dispersão irregular de corante reativo.',
+        acaoCorretiva: 'Instalação de sensor infravermelho de temperatura na saída do ramo e recalibração das dosagens automáticas do laboratório de cores.',
+        responsavelFornecedor: 'Químico Jonas (Textiluz)',
+        responsavelVickytex: 'Vicky (Qualidade)',
+        prazo: '2026-08-30',
+        status: 'Em Andamento'
+      }
+    ],
+    gestaoRisco: {
+      monossuprimento: false,
+      impactoQualidade: 'Crítico (Direto no Produto)',
+      riscoAbastecimento: 'Alto',
+      planoContingencia: 'Em caso de reincidência de desvio de cor, redirecionar 50% dos pedidos para Tinturaria Estrela.',
+      fornecedorSubstitutoNome: 'Tinturaria Estrela de Blumenau'
+    },
+    reavaliacao: {
+      periodicidadeMeses: 3,
+      dataUltimaReavaliacao: '2026-03-20',
+      dataProximaReavaliacao: '2026-06-20',
+      status: 'Vencida'
+    },
+    observacoes: 'Prestador de serviços terceirizados de beneficiamento têxtil. Necessita acompanhamento de solidez de cor e estabilidade dimensional.',
     historicoAvaliacoes: [
       {
         id: 'av-2-1',
         dataAvaliacao: '2026-03-20',
+        periodoReferencia: '1º Trimestre / 2026',
         avaliador: 'Vicky (Qualidade)',
         criterioQualidade: 65,
         criterioPrazo: 80,
         criterioAtendimento: 75,
+        criterioEspecificacoes: 68,
+        criterioAcoesCorretivas: 70,
         notaGeral: 72.3,
+        classificacaoFaixa: 'C - Regular',
         resultado: 'Aprovado com Restrições',
-        parecerTecnico: 'Ocorreram desvios de tonalidade no lote #A44. Exigido plano de ação de padronização de receitas químicas.'
+        alimentadoPorDadosReais: true,
+        parecerTecnico: 'Ocorreram desvios de tonalidade no lote #LT-TINT-8812. Exigido plano de ação de padronização de receitas químicas e monitoramento contínuo.'
       }
     ]
   },
   {
     id: 'forn-3',
-    cnpj: '44.555.666/0001-22',
-    razaoSocial: 'Química Norte-Sertão S.A.',
-    nomeFantasia: 'Química Norte-Sertão',
-    contatoNome: 'Eng. Roberto Rezende',
-    contatoEmail: 'roberto@quimicans.com.br',
-    contatoTelefone: '(81) 3456-7890',
-    categoria: 'Produtos Químicos',
-    criticidade: 'Média',
-    statusQualificacao: 'Em Avaliação',
-    notaAvaliacao: undefined,
-    observacoes: 'Fornecedor de corantes e auxiliares químicos de processo. Enviando amostras para ensaio laboratorial.',
-    historicoAvaliacoes: []
+    cnpj: '33.444.555/0001-66',
+    razaoSocial: 'Facção e Costura Estilo Fino Vickytex Ltda',
+    nomeFantasia: 'Facção Estilo Fino',
+    inscricaoEstadual: '331.442.553.001',
+    enderecoCompleto: 'Rua das Costureiras, 120 - Polo de Confecção',
+    cidade: 'Jaraguá do Sul',
+    uf: 'SC',
+    cep: '89251-000',
+    contatoNome: 'Dona Neusa Santos',
+    contatoEmail: 'neusa@faccaoestilofino.com.br',
+    contatoTelefone: '(47) 3275-9988',
+    contatosAdicionais: [
+      { id: 'c-5', tipo: 'Qualidade', nome: 'Supervisora Sandra', email: 'sandra@faccaoestilofino.com.br', telefone: '(47) 98833-2211', cargo: 'Encarregada de Revisão de Peças' }
+    ],
+    categoria: 'Facções e Oficinas de Costura',
+    subcategoria: 'Costura e Montagem de Camisetas e Polos',
+    produtosServicosFornecidos: ['Costura Overloque 4 fios', 'Galoneira pespontada', 'Pesponto de Gola e Vira de Barra', 'Colocação de Etiquetas'],
+    criticidade: 'Alta',
+    statusQualificacao: 'Qualificado',
+    dataQualificacao: '2026-02-10',
+    notaAvaliacao: 91,
+    documentos: [
+      { id: 'doc-6', tipo: 'Contrato Social', titulo: 'Contrato de Prestação de Serviços de Facção com Cláusula de Compliance Trabalhista', numeroDocumento: 'CT-FAC-2025-012', dataEmissao: '2025-01-10', dataValidade: '2027-01-10', status: 'Vigente' },
+      { id: 'doc-7', tipo: 'Termo de Confidencialidade', titulo: 'Termo de Sigilo de Modelagem e Gabaritos Vickytex', numeroDocumento: 'NDA-VTX-088', dataEmissao: '2025-01-10', status: 'Vigente' }
+    ],
+    qualificacaoInicial: {
+      dataInicio: '2026-01-05',
+      dataConclusao: '2026-02-10',
+      criterios: [
+        { id: 'cr-7', descricao: 'Conformidade com tabela de medidas ABNT NBR 15800', obrigatorio: true, status: 'Conforme' },
+        { id: 'cr-8', descricao: 'Amostra piloto de 50 peças sem defeitos de costura', obrigatorio: true, status: 'Conforme' },
+        { id: 'cr-9', descricao: 'Auditoria de conformidade trabalhista (sem trabalho análogo a escravo)', obrigatorio: true, status: 'Conforme' }
+      ],
+      analiseTecnica: 'Maquinário moderno com corte de linha automático e boa tensão de pontos.',
+      lotePilotoStatus: 'Aprovado',
+      auditoriaInicialStatus: 'Conforme',
+      parecerFinal: 'Oficina homologada para linha de camisetas básicas e gola polo.',
+      responsavel: 'qualidade@vickytex.com.br',
+      statusFinal: 'Aprovado'
+    },
+    fluxoAprovacao: [
+      { id: 'fa-6', etapa: 'Qualidade', responsavelNome: 'Vicky (Qualidade)', data: '2026-02-08', status: 'Aprovado' },
+      { id: 'fa-7', etapa: 'Compras', responsavelNome: 'Suprimentos', data: '2026-02-10', status: 'Aprovado' }
+    ],
+    historicoInspecoes: [
+      {
+        id: 'insp-5',
+        numeroLote: 'OP-2026-440',
+        notaFiscal: 'NF-0321',
+        dataRecebimento: '2026-04-12',
+        quantidadeRecebida: 3200,
+        unidade: 'peças',
+        resultado: 'Aprovado',
+        taxaDefeitoPercentual: 1.1,
+        gerouRetrabalho: false,
+        entregaNoPrazo: true,
+        inspecionadoPor: 'Carlos (Qualidade)',
+        observacoes: 'Lote de 3.200 camisetas inspecionado por amostragem AQL 1.5. Costuras limpas, medidas perfeitas.',
+        parametrosTexteis: {
+          pontosPorPolegada: 12,
+          conformidadeTabelaMedidas: 'Conforme',
+          qualidadeAcabamentoCostura: 'Excelente',
+          pecasRetrabalhadas: 12
+        }
+      },
+      {
+        id: 'insp-6',
+        numeroLote: 'OP-2026-512',
+        notaFiscal: 'NF-0348',
+        dataRecebimento: '2026-05-25',
+        quantidadeRecebida: 2800,
+        unidade: 'peças',
+        resultado: 'Aprovado',
+        taxaDefeitoPercentual: 1.5,
+        gerouRetrabalho: false,
+        entregaNoPrazo: true,
+        inspecionadoPor: 'Vicky (Qualidade)',
+        observacoes: 'Golas retilíneas perfeitamente assentadas.',
+        parametrosTexteis: {
+          pontosPorPolegada: 12,
+          conformidadeTabelaMedidas: 'Conforme',
+          qualidadeAcabamentoCostura: 'Excelente',
+          pecasRetrabalhadas: 18
+        }
+      }
+    ],
+    gestaoRisco: {
+      monossuprimento: false,
+      impactoQualidade: 'Crítico (Direto no Produto)',
+      riscoAbastecimento: 'Médio',
+      planoContingencia: 'Manter banco de 3 facções homologadas ativas com capacidade balanceada de costura.',
+      fornecedorSubstitutoNome: 'Oficina de Costura Vale Sul'
+    },
+    reavaliacao: {
+      periodicidadeMeses: 6,
+      dataUltimaReavaliacao: '2026-02-10',
+      dataProximaReavaliacao: '2026-08-10',
+      status: 'A Vencer (30d)'
+    },
+    observacoes: 'Oficina de costura parceira com alto capricho em acabamento e pontualidade exemplar.',
+    historicoAvaliacoes: [
+      {
+        id: 'av-3-1',
+        dataAvaliacao: '2026-02-10',
+        periodoReferencia: 'Homologação Inicial 2026',
+        avaliador: 'Vicky (Qualidade)',
+        criterioQualidade: 92,
+        criterioPrazo: 95,
+        criterioAtendimento: 90,
+        criterioEspecificacoes: 92,
+        criterioAcoesCorretivas: 88,
+        notaGeral: 91.4,
+        classificacaoFaixa: 'A - Excelente',
+        resultado: 'Aprovado',
+        alimentadoPorDadosReais: true,
+        parecerTecnico: 'Qualidade de costuras e respeito às tabelas de medidas dentro do padrão de excelência Vickytex.'
+      }
+    ]
   },
   {
     id: 'forn-4',
+    cnpj: '77.888.999/0001-44',
+    razaoSocial: 'Estamparia Silk & Arte Têxtil Ltda',
+    nomeFantasia: 'Silk & Arte Estamparia',
+    inscricaoEstadual: '110.229.338.441',
+    enderecoCompleto: 'Rua das Cores, 89 - Bairro Industrial',
+    cidade: 'Joinville',
+    uf: 'SC',
+    cep: '89200-100',
+    contatoNome: 'Fabiano Rocha',
+    contatoEmail: 'fabiano@silkarte.com.br',
+    contatoTelefone: '(47) 3433-7711',
+    categoria: 'Estamparias e Bordados',
+    subcategoria: 'Estamparia Localizada (Silkscreen e DTF)',
+    produtosServicosFornecidos: ['Estampa Silk à base de água', 'Plastisol com toque macio', 'Impressão DTF têxtil de alta definição', 'Bordados computadorizados'],
+    criticidade: 'Alta',
+    statusQualificacao: 'Qualificado',
+    dataQualificacao: '2026-04-05',
+    notaAvaliacao: 88,
+    documentos: [
+      { id: 'doc-8', tipo: 'FISPQ / FDS', titulo: 'Laudo de Tintas Isentas de Ftalatos e Metais Pesados (CPSIA Compliant)', numeroDocumento: 'FISPQ-SILK-2026', dataEmissao: '2026-01-20', dataValidade: '2027-01-20', status: 'Vigente' }
+    ],
+    qualificacaoInicial: {
+      dataInicio: '2026-03-01',
+      dataConclusao: '2026-04-05',
+      criterios: [
+        { id: 'cr-10', descricao: 'Aprovação de Strike-off (amostra de estampa física)', obrigatorio: true, status: 'Conforme' },
+        { id: 'cr-11', descricao: 'Teste de lavagem 5 ciclos sem craquelar ou soltar', obrigatorio: true, status: 'Conforme' }
+      ],
+      analiseTecnica: 'Ótima precisão de encaixe de matrizes de 4 a 6 cores.',
+      lotePilotoStatus: 'Aprovado',
+      auditoriaInicialStatus: 'Conforme',
+      parecerFinal: 'Fornecedor qualificado com alta fidelidade de arte gráfica.',
+      responsavel: 'qualidade@vickytex.com.br',
+      statusFinal: 'Aprovado'
+    },
+    historicoInspecoes: [
+      {
+        id: 'insp-7',
+        numeroLote: 'OP-EST-881',
+        notaFiscal: 'NF-0199',
+        dataRecebimento: '2026-05-10',
+        quantidadeRecebida: 1500,
+        unidade: 'peças',
+        resultado: 'Aprovado',
+        taxaDefeitoPercentual: 1.2,
+        gerouRetrabalho: false,
+        entregaNoPrazo: true,
+        inspecionadoPor: 'Carlos (Qualidade)',
+        observacoes: 'Posicionamento centralizado perfeito e toque zero em estampa à base de água.',
+        parametrosTexteis: {
+          posicionamentoEncaixe: 'Perfeito',
+          aderenciaResistenciaLavagem: 'Excelente',
+          conformidadeAmostraPadrao: 'Idêntico'
+        }
+      }
+    ],
+    gestaoRisco: {
+      monossuprimento: false,
+      impactoQualidade: 'Crítico (Direto no Produto)',
+      riscoAbastecimento: 'Médio',
+      planoContingencia: 'Dispor de telas gravadas reserva internamente na Vickytex.',
+      fornecedorSubstitutoNome: 'Estamparia Vanguarda'
+    },
+    reavaliacao: {
+      periodicidadeMeses: 6,
+      dataUltimaReavaliacao: '2026-04-05',
+      dataProximaReavaliacao: '2026-10-05',
+      status: 'Em Dia'
+    },
+    observacoes: 'Especialista em estampas degradê e serigrafia técnica sobre malhas claras e escuras.',
+    historicoAvaliacoes: [
+      {
+        id: 'av-4-1',
+        dataAvaliacao: '2026-04-05',
+        periodoReferencia: '1º Semestre / 2026',
+        avaliador: 'Vicky (Qualidade)',
+        criterioQualidade: 90,
+        criterioPrazo: 88,
+        criterioAtendimento: 86,
+        criterioEspecificacoes: 92,
+        criterioAcoesCorretivas: 85,
+        notaGeral: 88.2,
+        classificacaoFaixa: 'B - Bom',
+        resultado: 'Aprovado',
+        alimentadoPorDadosReais: true,
+        parecerTecnico: 'Encaixe de cores impecável e resistência à lavagem aprovada em teste acelerado.'
+      }
+    ]
+  },
+  {
+    id: 'forn-5',
+    cnpj: '44.555.666/0001-22',
+    razaoSocial: 'Linhas & Aviamentos Brasil S.A.',
+    nomeFantasia: 'Aviamentos Brasil',
+    inscricaoEstadual: '882.113.445.667',
+    enderecoCompleto: 'Rodovia Têxtil, Km 14',
+    cidade: 'Blumenau',
+    uf: 'SC',
+    cep: '89000-000',
+    contatoNome: 'Renata Castro',
+    contatoEmail: 'contato@aviamentosbrasil.com.br',
+    contatoTelefone: '(47) 3322-1100',
+    categoria: 'Insumos e Aviamentos',
+    subcategoria: 'Linhas, Fios de Overloque, Botões e Zíperes',
+    produtosServicosFornecidos: ['Linha 120 100% Poliéster Fiado', 'Fio de Poliéster Texturizado para Overloque', 'Etiquetas de Composição ABNT', 'Elásticos e Vieses'],
+    criticidade: 'Média',
+    statusQualificacao: 'Qualificado',
+    dataQualificacao: '2026-02-28',
+    notaAvaliacao: 96,
+    documentos: [
+      { id: 'doc-9', tipo: 'Certificado OEKO-TEX', titulo: 'Certificado OEKO-TEX Linhas e Aviamentos de Alta Tenacidade', numeroDocumento: 'OEKO-AV-8812', dataEmissao: '2025-08-01', dataValidade: '2026-08-01', status: 'Vigente' }
+    ],
+    qualificacaoInicial: {
+      dataInicio: '2026-01-15',
+      dataConclusao: '2026-02-28',
+      criterios: [
+        { id: 'cr-12', descricao: 'Laudo de Tenacidade e Alongamento à Ruptura', obrigatorio: true, status: 'Conforme' },
+        { id: 'cr-13', descricao: 'Conformidade com a Portaria INMETRO para Etiquetas de Composição', obrigatorio: true, status: 'Conforme' }
+      ],
+      analiseTecnica: 'Linhas com lubrificação uniforme de silicone, sem superaquecimento em agulhas de alta velocidade.',
+      lotePilotoStatus: 'Aprovado',
+      auditoriaInicialStatus: 'Conforme',
+      parecerFinal: 'Fornecedor aprovado com pontuação excelente.',
+      responsavel: 'qualidade@vickytex.com.br',
+      statusFinal: 'Aprovado'
+    },
+    historicoInspecoes: [
+      {
+        id: 'insp-8',
+        numeroLote: 'AV-2026-102',
+        notaFiscal: 'NF-7788',
+        dataRecebimento: '2026-04-20',
+        quantidadeRecebida: 1200,
+        unidade: 'un',
+        resultado: 'Aprovado',
+        taxaDefeitoPercentual: 0.0,
+        gerouRetrabalho: false,
+        entregaNoPrazo: true,
+        inspecionadoPor: 'Carlos (Qualidade)',
+        observacoes: 'Cones de linha intactos, cores calibradas pela cartela Pantone Têxtil.',
+        parametrosTexteis: {
+          especificacaoTecnicaConforme: true,
+          resistenciaMaterial: 'Conforme'
+        }
+      }
+    ],
+    gestaoRisco: {
+      monossuprimento: false,
+      impactoQualidade: 'Moderado (Processo)',
+      riscoAbastecimento: 'Baixo',
+      planoContingencia: 'Estoque mínimo de segurança para 45 dias de produção.',
+      fornecedorSubstitutoNome: 'Linhas Coats Corrente'
+    },
+    reavaliacao: {
+      periodicidadeMeses: 12,
+      dataUltimaReavaliacao: '2026-02-28',
+      dataProximaReavaliacao: '2027-02-28',
+      status: 'Em Dia'
+    },
+    observacoes: 'Fornecedor de insumos de alta tenacidade e aviamentos certificados para a indústria de confecção.',
+    historicoAvaliacoes: [
+      {
+        id: 'av-5-1',
+        dataAvaliacao: '2026-02-28',
+        periodoReferencia: 'Anual 2026',
+        avaliador: 'Vicky (Qualidade)',
+        criterioQualidade: 98,
+        criterioPrazo: 96,
+        criterioAtendimento: 95,
+        criterioEspecificacoes: 98,
+        criterioAcoesCorretivas: 95,
+        notaGeral: 96.4,
+        classificacaoFaixa: 'A - Excelente',
+        resultado: 'Aprovado',
+        alimentadoPorDadosReais: true,
+        parecerTecnico: 'Insumos com certificação e desempenho exemplar nas máquinas de costura.'
+      }
+    ]
+  },
+  {
+    id: 'forn-6',
     cnpj: '55.123.456/0001-77',
     razaoSocial: 'CalibraTex Metrologia Industrial Ltda',
     nomeFantasia: 'CalibraTex',
+    inscricaoEstadual: '998.441.223.111',
+    enderecoCompleto: 'Rua dos Laboratórios, 50 - Tecnopark',
+    cidade: 'São Paulo',
+    uf: 'SP',
+    cep: '01000-000',
     contatoNome: 'Téc. Anderson Peixoto',
     contatoEmail: 'anderson@calibratex.com.br',
     contatoTelefone: '(11) 4567-1122',
     categoria: 'Calibração',
+    subcategoria: 'Calibração de Equipamentos e Instrumentos de Medição',
+    produtosServicosFornecidos: ['Calibração RBC de Balanças Analíticas', 'Calibração de Dinamômetros', 'Termômetros e Termo-higrômetros de Laboratório Têxtil'],
     criticidade: 'Alta',
     statusQualificacao: 'Qualificado',
     dataQualificacao: '2026-05-02',
     notaAvaliacao: 98,
-    observacoes: 'Laboratório acreditado pela Cgcre (Inmetro) para calibração de balanças, termômetros e dinamômetros.',
+    documentos: [
+      { id: 'doc-10', tipo: 'Certificado de Calibração', titulo: 'Acreditação RBC Cgcre/Inmetro CAL-0442', numeroDocumento: 'CGCRE-RBC-0442', dataEmissao: '2025-04-10', dataValidade: '2027-04-10', status: 'Vigente' }
+    ],
+    gestaoRisco: {
+      monossuprimento: false,
+      impactoQualidade: 'Crítico (Direto no Produto)',
+      riscoAbastecimento: 'Baixo',
+      planoContingencia: 'Laboratório IPT ou Labmetro como alternativa acreditada.',
+      fornecedorSubstitutoNome: 'Labmetro Metrologia'
+    },
+    reavaliacao: {
+      periodicidadeMeses: 12,
+      dataUltimaReavaliacao: '2026-05-02',
+      dataProximaReavaliacao: '2027-05-02',
+      status: 'Em Dia'
+    },
+    observacoes: 'Laboratório acreditado pela Cgcre (Inmetro) para calibração de balanças, termômetros e dinamômetros com rastreabilidade RBC.',
     historicoAvaliacoes: [
       {
-        id: 'av-4-1',
+        id: 'av-6-1',
         dataAvaliacao: '2026-05-02',
+        periodoReferencia: 'Anual 2026',
         avaliador: 'Carlos (Qualidade)',
         criterioQualidade: 100,
         criterioPrazo: 95,
         criterioAtendimento: 100,
-        notaGeral: 98.3,
+        criterioEspecificacoes: 100,
+        criterioAcoesCorretivas: 100,
+        notaGeral: 98.5,
+        classificacaoFaixa: 'A - Excelente',
         resultado: 'Aprovado',
-        parecerTecnico: 'Certificados emitidos perfeitamente com rastreabilidade RBC. Prazo de execução muito ágil.'
+        alimentadoPorDadosReais: true,
+        parecerTecnico: 'Certificados emitidos perfeitamente com rastreabilidade RBC e cálculo de incerteza de medição.'
       }
     ]
   }

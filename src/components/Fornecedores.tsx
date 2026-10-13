@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Truck, 
   Search, 
@@ -28,14 +28,54 @@ import {
   X,
   PlusCircle,
   HelpCircle,
-  RefreshCw
+  RefreshCw,
+  Download,
+  Printer,
+  Bell,
+  Trophy,
+  ClipboardCheck,
+  FileWarning,
+  Sparkles,
+  ChevronRight,
+  ShieldCheck,
+  Layers,
+  Eye
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Fornecedor, AvaliacaoFornecedor } from '../types';
+import { 
+  Fornecedor, 
+  AvaliacaoFornecedor, 
+  InspecaoLoteFornecedor, 
+  OcorrenciaRNCFornecedor, 
+  PlanoAcaoFornecedor, 
+  DocumentoFornecedor, 
+  AuditoriaFornecedor, 
+  BloqueioHistorico 
+} from '../types';
 import { INITIAL_FORNECEDORES } from '../utils/mockData';
 import { SupplierRepository } from '../services/database/repositories/supplier.repository';
 import { SystemSettingsRepository } from '../services/database/repositories/systemSettings.repository';
 import { useModulePermission } from '../utils/permissionManager';
+import { 
+  calcularEstatisticasReaisFornecedor, 
+  criarAvaliacaoAutomaticaPorDadosReais,
+  extrairAlertasFornecedor,
+  exportarFornecedoresCSV,
+  calcularProximaReavaliacao
+} from '../utils/supplierEvaluationEngine';
+
+// Subcomponentes Modulares
+import { FornecedorModalDetalhes } from './Fornecedores/FornecedorModalDetalhes';
+import { FornecedorModalCadastro } from './Fornecedores/FornecedorModalCadastro';
+import { FornecedorModalInspecao } from './Fornecedores/FornecedorModalInspecao';
+import { FornecedorModalAvaliacao } from './Fornecedores/FornecedorModalAvaliacao';
+import { FornecedorModalRNC } from './Fornecedores/FornecedorModalRNC';
+import { FornecedorModalDocumento } from './Fornecedores/FornecedorModalDocumento';
+import { FornecedorModalAuditoria } from './Fornecedores/FornecedorModalAuditoria';
+import { FornecedorModalBloqueio } from './Fornecedores/FornecedorModalBloqueio';
+import { FornecedorFichaImpressao } from './Fornecedores/FornecedorFichaImpressao';
+import { FornecedorRankingDashboard } from './Fornecedores/FornecedorRankingDashboard';
+import { FornecedorAlertasCentral } from './Fornecedores/FornecedorAlertasCentral';
 
 interface FornecedoresProps {
   onAddLog: (action: string, details: string) => void;
@@ -51,6 +91,7 @@ export const Fornecedores: React.FC<FornecedoresProps> = ({ onAddLog, personaliz
     canDeleteItem
   } = useModulePermission('fornecedores');
 
+  // Estado principal de fornecedores
   const [fornecedores, setFornecedores] = useState<Fornecedor[]>(() => {
     return import.meta.env.VITE_DEMO_MODE === 'true' ? INITIAL_FORNECEDORES : [];
   });
@@ -61,17 +102,30 @@ export const Fornecedores: React.FC<FornecedoresProps> = ({ onAddLog, personaliz
     setToastMessage({ type, text });
     setTimeout(() => {
       setToastMessage(null);
-    }, 4000);
+    }, 4500);
   };
 
-  // Carregar os fornecedores reais do Banco de Dados via SupplierRepository na montagem e manter sincronizado
+  // Carregar e sincronizar com SupplierRepository
   useEffect(() => {
     let isSubscribed = true;
+    const deduplicateSuppliers = (list: Fornecedor[]): Fornecedor[] => {
+      const seenIds = new Set<string>();
+      const seenCnpjs = new Set<string>();
+      return list.filter(f => {
+        if (!f || !f.id || seenIds.has(f.id)) return false;
+        const cleanCnpj = f.cnpj?.replace(/\D/g, '');
+        if (cleanCnpj && seenCnpjs.has(cleanCnpj)) return false;
+        seenIds.add(f.id);
+        if (cleanCnpj) seenCnpjs.add(cleanCnpj);
+        return true;
+      });
+    };
+
     const fetchSuppliers = async () => {
       try {
         const res = await SupplierRepository.findAll();
         if (res.success && res.data && isSubscribed) {
-          setFornecedores(res.data);
+          setFornecedores(deduplicateSuppliers(res.data));
         }
       } catch (err) {
         console.error('Erro ao buscar fornecedores do repositório:', err);
@@ -81,11 +135,12 @@ export const Fornecedores: React.FC<FornecedoresProps> = ({ onAddLog, personaliz
 
     const unsub = SupplierRepository.subscribe((items) => {
       if (Array.isArray(items) && isSubscribed) {
-        setFornecedores(items);
+        const deduped = deduplicateSuppliers(items);
+        setFornecedores(deduped);
         setSelectedSupplier((prev) => {
           if (!prev) return null;
-          const found = items.find((it) => it.id === prev.id);
-          return found || prev;
+          const found = deduped.find((it) => it.id === prev.id);
+          return found || null;
         });
       }
     });
@@ -96,16 +151,17 @@ export const Fornecedores: React.FC<FornecedoresProps> = ({ onAddLog, personaliz
     };
   }, []);
 
-  // Estados de busca, filtros e modais
-
+  // Categorias Têxteis configuráveis no SGQ
   const [categorias, setCategorias] = useState<string[]>([
+    "Malharias e Tinturarias",
+    "Facções e Oficinas de Costura",
+    "Estamparias e Bordados",
+    "Insumos e Aviamentos",
     "Fios e Fibras",
-    "Serviços de Tinturaria",
-    "Embalagens",
     "Produtos Químicos",
+    "Embalagens",
     "Manutenção",
     "Calibração",
-    "Serviços de Facção/Costura",
     "Outros"
   ]);
 
@@ -119,1450 +175,897 @@ export const Fornecedores: React.FC<FornecedoresProps> = ({ onAddLog, personaliz
     return () => unsub();
   }, []);
 
-  // Control inline category creation
-  const [showInlineAddCategory, setShowInlineAddCategory] = useState(false);
-  const [newCategoryText, setNewCategoryText] = useState('');
+  // Visão Ativa do Módulo
+  const [visaoAtiva, setVisaoAtiva] = useState<'lista' | 'ranking' | 'alertas'>('lista');
 
-  const handleSaveInlineCategory = () => {
-    if (newCategoryText && newCategoryText.trim()) {
-      const clean = newCategoryText.trim();
-      let updated = [...categorias];
-      if (!updated.includes(clean)) {
-        updated.push(clean);
-        setCategorias(updated);
-        SystemSettingsRepository.create({ id: 'sgq_vickytex_fornecedores_categorias', items: updated }).catch(console.error);
-      }
-      setCategoria(clean);
-      setNewCategoryText('');
-      setShowInlineAddCategory(false);
-    }
-  };
-
+  // Filtros de Busca
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategoria, setSelectedCategoria] = useState<string>('todos');
   const [selectedCriticidade, setSelectedCriticidade] = useState<string>('todos');
   const [selectedStatus, setSelectedStatus] = useState<string>('todos');
-  
+
+  // Modais de Controle
   const [selectedSupplier, setSelectedSupplier] = useState<Fornecedor | null>(null);
+  const [supplierToEdit, setSupplierToEdit] = useState<Fornecedor | null>(null);
   const [isAddingSupplier, setIsAddingSupplier] = useState(false);
-  const [editingSupplier, setEditingSupplier] = useState<Fornecedor | null>(null);
-  const [isEvaluating, setIsEvaluating] = useState<Fornecedor | null>(null);
+  const [supplierForInspecao, setSupplierForInspecao] = useState<Fornecedor | null>(null);
+  const [supplierForAvaliacao, setSupplierForAvaliacao] = useState<Fornecedor | null>(null);
+  const [supplierForRNC, setSupplierForRNC] = useState<Fornecedor | null>(null);
+  const [supplierForDocumento, setSupplierForDocumento] = useState<Fornecedor | null>(null);
+  const [supplierForAuditoria, setSupplierForAuditoria] = useState<Fornecedor | null>(null);
+  const [supplierForBloqueio, setSupplierForBloqueio] = useState<Fornecedor | null>(null);
+  const [supplierForImpressao, setSupplierForImpressao] = useState<Fornecedor | null>(null);
   const [supplierToDelete, setSupplierToDelete] = useState<{ id: string; name: string } | null>(null);
 
-  const [isSubmittingEval, setIsSubmittingEval] = useState(false);
-  const [isSubmittingSupplier, setIsSubmittingSupplier] = useState(false);
-  const [isDeletingSupplier, setIsDeletingSupplier] = useState(false);
-
-  // Form states para Fornecedor
-  const [cnpj, setCnpj] = useState('');
-  const [razaoSocial, setRazaoSocial] = useState('');
-  const [nomeFantasia, setNomeFantasia] = useState('');
-  const [contatoNome, setContatoNome] = useState('');
-  const [contatoEmail, setContatoEmail] = useState('');
-  const [contatoTelefone, setContatoTelefone] = useState('');
-  const [categoria, setCategoria] = useState<any>(() => categorias[0] || 'Fios e Fibras');
-  const [criticidade, setCriticidade] = useState<Fornecedor['criticidade']>('Alta');
-  const [observacoes, setObservacoes] = useState('');
-
-  // Form states para Avaliação
-  const [evaluator, setEvaluator] = useState('');
-  const [criterioQualidade, setCriterioQualidade] = useState<number>(100);
-  const [criterioPrazo, setCriterioPrazo] = useState<number>(100);
-  const [criterioAtendimento, setCriterioAtendimento] = useState<number>(100);
-  const [parecerTecnico, setParecerTecnico] = useState('');
-
-  // Auto-fill evaluator when evaluation modal opens
-  useEffect(() => {
-    if (isEvaluating) {
-      try {
-        const storedUser = localStorage.getItem('currentUser');
-        if (storedUser) {
-          const parsed = JSON.parse(storedUser);
-          if (parsed?.name) {
-            setEvaluator(parsed.name + ' (Qualidade / Vickytex)');
-            return;
-          }
-        }
-      } catch (e) {}
-      setEvaluator('Qualidade (Vickytex)');
-    }
-  }, [isEvaluating]);
-
-  // Sincronizar form ao editar
-  useEffect(() => {
-    if (editingSupplier) {
-      setCnpj(editingSupplier.cnpj || '');
-      setRazaoSocial(editingSupplier.razaoSocial || '');
-      setNomeFantasia(editingSupplier.nomeFantasia || '');
-      setContatoNome(editingSupplier.contatoNome || '');
-      setContatoEmail(editingSupplier.contatoEmail || '');
-      setContatoTelefone(editingSupplier.contatoTelefone || '');
-      setCategoria(editingSupplier.categoria || categorias[0] || 'Fios e Fibras');
-      setCriticidade(editingSupplier.criticidade || 'Alta');
-      setObservacoes(editingSupplier.observacoes || '');
-    } else {
-      resetForm();
-    }
-  }, [editingSupplier]);
-
-  const resetForm = () => {
-    setCnpj('');
-    setRazaoSocial('');
-    setNomeFantasia('');
-    setContatoNome('');
-    setContatoEmail('');
-    setContatoTelefone('');
-    setCategoria(categorias[0] || 'Fios e Fibras');
-    setCriticidade('Alta');
-    setObservacoes('');
-  };
-
-  const resetEvalForm = () => {
-    setEvaluator('');
-    setCriterioQualidade(100);
-    setCriterioPrazo(100);
-    setCriterioAtendimento(100);
-    setParecerTecnico('');
-  };
-
-  // Handlers
-  const handleAddSupplier = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (isSubmittingSupplier) return;
-
-    if (!razaoSocial.trim() || !cnpj.trim()) {
-      showToast('Razão Social e CNPJ são obrigatórios.', 'error');
-      return;
-    }
-
-    setIsSubmittingSupplier(true);
-
-    const newSupplier: Fornecedor = {
-      id: `forn-${Date.now()}`,
-      cnpj: cnpj.trim(),
-      razaoSocial: razaoSocial.trim(),
-      nomeFantasia: (nomeFantasia.trim() || razaoSocial.trim()),
-      contatoNome: contatoNome.trim(),
-      contatoEmail: contatoEmail.trim(),
-      contatoTelefone: contatoTelefone.trim(),
-      categoria,
-      criticidade,
-      statusQualificacao: 'Em Avaliação',
-      historicoAvaliacoes: [],
-      observacoes: observacoes.trim()
-    };
-
-    setFornecedores((prev) => [newSupplier, ...prev.filter(f => f.id !== newSupplier.id)]);
-    setIsAddingSupplier(false);
-    resetForm();
-    onAddLog('Cadastro de Fornecedor', `Cadastrou o fornecedor ${newSupplier.nomeFantasia} (CNPJ: ${newSupplier.cnpj})`);
-    showToast('Fornecedor cadastrado com sucesso!', 'success');
-
-    try {
-      await SupplierRepository.create(newSupplier);
-    } catch (err) {
-      console.error('Falha ao salvar fornecedor remoto:', err);
-    } finally {
-      setIsSubmittingSupplier(false);
-    }
-  };
-
-  const handleUpdateSupplier = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (isSubmittingSupplier || !editingSupplier || !razaoSocial.trim() || !cnpj.trim()) return;
-
-    setIsSubmittingSupplier(true);
-
-    const updatedItem: Fornecedor = {
-      ...editingSupplier,
-      cnpj: cnpj.trim(),
-      razaoSocial: razaoSocial.trim(),
-      nomeFantasia: (nomeFantasia.trim() || razaoSocial.trim()),
-      contatoNome: contatoNome.trim(),
-      contatoEmail: contatoEmail.trim(),
-      contatoTelefone: contatoTelefone.trim(),
-      categoria,
-      criticidade,
-      observacoes: observacoes.trim(),
-      historicoAvaliacoes: Array.isArray(editingSupplier.historicoAvaliacoes) ? editingSupplier.historicoAvaliacoes : []
-    };
-
-    setFornecedores((prev) => prev.map(f => f.id === editingSupplier.id ? updatedItem : f));
-    if (selectedSupplier?.id === editingSupplier.id) {
-      setSelectedSupplier(updatedItem);
-    }
-    setEditingSupplier(null);
-    resetForm();
-    onAddLog('Atualização de Fornecedor', `Atualizou os dados do fornecedor ${updatedItem.nomeFantasia}`);
-    showToast('Dados do fornecedor atualizados com sucesso!', 'success');
-
-    try {
-      await SupplierRepository.update(editingSupplier.id, updatedItem);
-    } catch (err) {
-      console.error('Falha ao atualizar fornecedor remoto:', err);
-    } finally {
-      setIsSubmittingSupplier(false);
-    }
-  };
-
-  const handleDeleteSupplier = (id: string, name: string) => {
-    setSupplierToDelete({ id, name });
-  };
-
-  const confirmDeleteSupplier = async () => {
-    if (!supplierToDelete || isDeletingSupplier) return;
-    const { id, name } = supplierToDelete;
-
-    setIsDeletingSupplier(true);
-    setFornecedores((prev) => prev.filter(f => f.id !== id));
-    if (selectedSupplier?.id === id) {
-      setSelectedSupplier(null);
-    }
-    onAddLog('Exclusão de Fornecedor', `Removeu o fornecedor ${name}`);
-    setSupplierToDelete(null);
-    showToast(`Fornecedor "${name}" removido com sucesso!`, 'success');
-
-    try {
-      await SupplierRepository.delete(id);
-    } catch (err) {
-      console.error('Falha ao deletar fornecedor remoto:', err);
-    } finally {
-      setIsDeletingSupplier(false);
-    }
-  };
-
-  const handlePerformEvaluation = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!isEvaluating || isSubmittingEval) return;
-
-    setIsSubmittingEval(true);
-
-    try {
-      const parsedQualidade = Math.max(0, Math.min(100, Number(criterioQualidade) || 0));
-      const parsedPrazo = Math.max(0, Math.min(100, Number(criterioPrazo) || 0));
-      const parsedAtendimento = Math.max(0, Math.min(100, Number(criterioAtendimento) || 0));
-      const finalGrade = Math.round((parsedQualidade + parsedPrazo + parsedAtendimento) / 3);
-
-      // Critério padrão ISO 9001 Vickytex:
-      // >= 85: Aprovado (Qualificado)
-      // >= 70 e < 85: Aprovado com Restrições (Qualificado com Restrições)
-      // < 70: Reprovado (Não Qualificado)
-      let result: 'Aprovado' | 'Aprovado com Restrições' | 'Reprovado' = 'Aprovado';
-      let status: Fornecedor['statusQualificacao'] = 'Qualificado';
-
-      if (finalGrade < 70) {
-        result = 'Reprovado';
-        status = 'Não Qualificado';
-      } else if (finalGrade < 85) {
-        result = 'Aprovado com Restrições';
-        status = 'Qualificado com Restrições';
-      }
-
-      const newEval: AvaliacaoFornecedor = {
-        id: `eval-${Date.now()}`,
-        dataAvaliacao: new Date().toISOString().split('T')[0],
-        avaliador: evaluator.trim() || 'Qualidade (Vickytex)',
-        criterioQualidade: parsedQualidade,
-        criterioPrazo: parsedPrazo,
-        criterioAtendimento: parsedAtendimento,
-        notaGeral: finalGrade,
-        resultado: result,
-        parecerTecnico: parecerTecnico.trim()
-      };
-
-      const currentHistory = Array.isArray(isEvaluating.historicoAvaliacoes) ? isEvaluating.historicoAvaliacoes : [];
-      const newHistory = [newEval, ...currentHistory];
-      const avgScore = Math.round(newHistory.reduce((sum, ev) => sum + (ev.notaGeral || 0), 0) / newHistory.length);
-
-      const updatedItem: Fornecedor = {
-        ...isEvaluating,
-        statusQualificacao: status,
-        dataQualificacao: newEval.dataAvaliacao,
-        notaAvaliacao: avgScore,
-        historicoAvaliacoes: newHistory
-      };
-
-      // Atualiza estado local imediatamente
-      setFornecedores((prev) => prev.map(f => f.id === isEvaluating.id ? updatedItem : f));
-      
-      // Se o fornecedor estiver em visualização detalhada, atualizar o estado selecionado
-      if (selectedSupplier?.id === isEvaluating.id) {
-        setSelectedSupplier(updatedItem);
-      }
-
-      const supplierName = isEvaluating.nomeFantasia || isEvaluating.razaoSocial;
-      setIsEvaluating(null);
-      resetEvalForm();
-      onAddLog('Avaliação de Fornecedor', `Realizou avaliação ISO 8.4 para ${supplierName}. Nota: ${finalGrade}% - Status: ${status}`);
-      showToast(`Avaliação de "${supplierName}" registrada com sucesso! Nota: ${finalGrade}%`, 'success');
-
-      // Persistir no repositório Firestore
-      await SupplierRepository.update(isEvaluating.id, updatedItem);
-    } catch (err) {
-      console.error('Falha ao atualizar avaliação remota:', err);
-      showToast('Erro ao gravar avaliação remota no banco de dados.', 'error');
-    } finally {
-      setIsSubmittingEval(false);
-    }
-  };
-
   // Filtragem dos fornecedores
-  const filteredFornecedores = fornecedores.filter(f => {
-    const matchesSearch = 
-      f.nomeFantasia.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      f.razaoSocial.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      f.cnpj.includes(searchQuery) ||
-      f.contatoNome.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      f.categoria.toLowerCase().includes(searchQuery.toLowerCase());
+  const filteredFornecedores = useMemo(() => {
+    return fornecedores.filter(f => {
+      const q = searchQuery.toLowerCase();
+      const matchesSearch = 
+        (f.nomeFantasia && f.nomeFantasia.toLowerCase().includes(q)) ||
+        (f.razaoSocial && f.razaoSocial.toLowerCase().includes(q)) ||
+        (f.cnpj && f.cnpj.includes(q)) ||
+        (f.contatoNome && f.contatoNome.toLowerCase().includes(q)) ||
+        (f.categoria && f.categoria.toLowerCase().includes(q)) ||
+        (Array.isArray(f.produtosServicosFornecidos) && f.produtosServicosFornecidos.some(p => p.toLowerCase().includes(q)));
 
-    const matchesCategory = selectedCategoria === 'todos' || f.categoria === selectedCategoria;
-    const matchesCriticidade = selectedCriticidade === 'todos' || f.criticidade === selectedCriticidade;
-    const matchesStatus = selectedStatus === 'todos' || f.statusQualificacao === selectedStatus;
+      const matchesCategory = selectedCategoria === 'todos' || f.categoria === selectedCategoria;
+      const matchesCriticidade = selectedCriticidade === 'todos' || f.criticidade === selectedCriticidade;
+      const matchesStatus = selectedStatus === 'todos' || f.statusQualificacao === selectedStatus;
 
-    return matchesSearch && matchesCategory && matchesCriticidade && matchesStatus;
-  });
+      return matchesSearch && matchesCategory && matchesCriticidade && matchesStatus;
+    });
+  }, [fornecedores, searchQuery, selectedCategoria, selectedCriticidade, selectedStatus]);
 
-  // Estatísticas
+  // Estatísticas e Alertas Globais da Base
   const totalFornecedores = fornecedores.length;
   const qualificadosCount = fornecedores.filter(f => f.statusQualificacao === 'Qualificado').length;
-  const qualificacaoRestricaoCount = fornecedores.filter(f => f.statusQualificacao === 'Qualificado com Restrições').length;
-  const emAvaliacaoCount = fornecedores.filter(f => f.statusQualificacao === 'Em Avaliação').length;
-  const naoQualificadosCount = fornecedores.filter(f => f.statusQualificacao === 'Não Qualificado').length;
-  const criticidadeAltaCount = fornecedores.filter(f => f.criticidade === 'Alta').length;
+  const restricaoCount = fornecedores.filter(f => f.statusQualificacao === 'Qualificado com Restrições').length;
+  const bloqueadosCount = fornecedores.filter(f => f.statusQualificacao === 'Bloqueado').length;
+  
+  // Total de alertas globais
+  const todosAlertas = useMemo(() => {
+    return fornecedores.flatMap(f => extrairAlertasFornecedor(f));
+  }, [fornecedores]);
 
-  const getStatusBadge = (status: Fornecedor['statusQualificacao']) => {
-    switch (status) {
-      case 'Qualificado':
-        return (
-          <span className="inline-flex items-center px-2 py-1 rounded-md text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
-            <CheckCircle2 className="w-3.5 h-3.5 mr-1" />
-            Qualificado
-          </span>
-        );
-      case 'Qualificado com Restrições':
-        return (
-          <span className="inline-flex items-center px-2 py-1 rounded-md text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200">
-            <AlertTriangle className="w-3.5 h-3.5 mr-1" />
-            Com Restrições
-          </span>
-        );
-      case 'Em Avaliação':
-        return (
-          <span className="inline-flex items-center px-2 py-1 rounded-md text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200">
-            <Clock className="w-3.5 h-3.5 mr-1" />
-            Em Avaliação
-          </span>
-        );
-      case 'Não Qualificado':
-        return (
-          <span className="inline-flex items-center px-2 py-1 rounded-md text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200">
-            <XCircle className="w-3.5 h-3.5 mr-1" />
-            Não Qualificado
-          </span>
-        );
+  // Média Geral do IQF
+  const mediaIQFBase = useMemo(() => {
+    if (fornecedores.length === 0) return 0;
+    const soma = fornecedores.reduce((acc, f) => {
+      const stats = calcularEstatisticasReaisFornecedor(f);
+      return acc + stats.iqfGeral;
+    }, 0);
+    return Math.round(soma / fornecedores.length);
+  }, [fornecedores]);
+
+  // --------------------------------------------------------------------------
+  // HANDLERS DE PERSISTÊNCIA & AÇÕES DO CICLO COMPLETO
+  // --------------------------------------------------------------------------
+
+  // 1. Salvar / Atualizar Fornecedor
+  const handleSaveSupplier = async (fornecedorSalvo: Fornecedor) => {
+    try {
+      const cleanTargetCnpj = fornecedorSalvo.cnpj?.replace(/\D/g, '') || '';
+      const isExisting = fornecedores.some(
+        f => f.id === fornecedorSalvo.id || (cleanTargetCnpj && f.cnpj?.replace(/\D/g, '') === cleanTargetCnpj)
+      );
+
+      if (isExisting) {
+        // Obter o ID real existente se a correspondência foi por CNPJ
+        const existingId = fornecedores.find(
+          f => f.id === fornecedorSalvo.id || (cleanTargetCnpj && f.cnpj?.replace(/\D/g, '') === cleanTargetCnpj)
+        )?.id || fornecedorSalvo.id;
+
+        const updatedDoc = { ...fornecedorSalvo, id: existingId };
+        await SupplierRepository.update(existingId, updatedDoc);
+        setFornecedores(prev => prev.map(f => f.id === existingId ? updatedDoc : f));
+        onAddLog('Atualização de Fornecedor', `Atualizou dados de ${fornecedorSalvo.nomeFantasia} (CNPJ: ${fornecedorSalvo.cnpj})`);
+        showToast(`Fornecedor "${fornecedorSalvo.nomeFantasia}" atualizado com sucesso!`, 'success');
+      } else {
+        await SupplierRepository.create(fornecedorSalvo);
+        setFornecedores(prev => {
+          const exists = prev.some(f => f.id === fornecedorSalvo.id || (cleanTargetCnpj && f.cnpj?.replace(/\D/g, '') === cleanTargetCnpj));
+          if (exists) return prev;
+          return [fornecedorSalvo, ...prev];
+        });
+        onAddLog('Cadastro de Fornecedor', `Cadastrou o fornecedor ${fornecedorSalvo.nomeFantasia} (Categoria: ${fornecedorSalvo.categoria})`);
+        showToast(`Fornecedor "${fornecedorSalvo.nomeFantasia}" cadastrado com sucesso!`, 'success');
+      }
+
+      setIsAddingSupplier(false);
+      setSupplierToEdit(null);
+      if (selectedSupplier?.id === fornecedorSalvo.id) {
+        setSelectedSupplier(fornecedorSalvo);
+      }
+    } catch (err) {
+      console.error('Erro ao salvar fornecedor:', err);
+      showToast('Erro ao salvar fornecedor no banco de dados.', 'error');
     }
   };
 
-  const getCriticidadeBadge = (crit: Fornecedor['criticidade']) => {
-    switch (crit) {
-      case 'Alta':
-        return <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800">Alta</span>;
-      case 'Média':
-        return <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-800">Média</span>;
-      case 'Baixa':
-        return <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-slate-100 text-slate-800">Baixa</span>;
+  // 2. Gravar Nova Inspeção de Lote Têxtil (Alimenta nota automaticamente)
+  const handleSaveInspecao = async (inspecao: InspecaoLoteFornecedor) => {
+    if (!supplierForInspecao) return;
+    try {
+      const target = supplierForInspecao;
+      const historyInspecoes = [inspecao, ...(target.historicoInspecoes || [])];
+
+      // Atualiza temporariamente para recalcular
+      const fornecedorComNovoLote: Fornecedor = {
+        ...target,
+        historicoInspecoes: historyInspecoes
+      };
+
+      const stats = calcularEstatisticasReaisFornecedor(fornecedorComNovoLote);
+      
+      // Gera avaliação automática com a nova nota calculada
+      const novaAvaliacaoAuto = criarAvaliacaoAutomaticaPorDadosReais(fornecedorComNovoLote);
+      const historicoEvals = [novaAvaliacaoAuto, ...(target.historicoAvaliacoes || [])];
+
+      // Determina status
+      let novoStatus = target.statusQualificacao;
+      if (target.statusQualificacao !== 'Bloqueado') {
+        if (stats.iqfGeral >= 85) novoStatus = 'Qualificado';
+        else if (stats.iqfGeral >= 65) novoStatus = 'Qualificado com Restrições';
+        else novoStatus = 'Não Qualificado';
+      }
+
+      const atualizado: Fornecedor = {
+        ...fornecedorComNovoLote,
+        notaAvaliacao: stats.iqfGeral,
+        statusQualificacao: novoStatus,
+        historicoAvaliacoes: historicoEvals,
+        atualizadoEm: new Date().toISOString()
+      };
+
+      await SupplierRepository.update(atualizado.id, atualizado);
+      setFornecedores(prev => prev.map(f => f.id === atualizado.id ? atualizado : f));
+      if (selectedSupplier?.id === atualizado.id) setSelectedSupplier(atualizado);
+
+      onAddLog(
+        'Inspeção de Lote Registrada',
+        `Lote #${inspecao.numeroLote} (${inspecao.resultado}) para ${target.nomeFantasia}. Novo IQF Automático: ${stats.iqfGeral}%`
+      );
+      showToast(
+        `Inspeção do lote #${inspecao.numeroLote} gravada! IQF recalculado para ${stats.iqfGeral}% (${stats.faixaIQF}).`,
+        'success'
+      );
+      setSupplierForInspecao(null);
+    } catch (err) {
+      console.error('Erro ao gravar inspeção:', err);
+      showToast('Erro ao gravar inspeção de lote.', 'error');
+    }
+  };
+
+  // 3. Gravar Avaliação de Desempenho IQF (Manual ou Automática)
+  const handleSaveAvaliacao = async (avaliacao: AvaliacaoFornecedor) => {
+    if (!supplierForAvaliacao) return;
+    try {
+      const target = supplierForAvaliacao;
+      const history = [avaliacao, ...(target.historicoAvaliacoes || [])];
+
+      // Reavaliação periódica calculada
+      const proxReav = calcularProximaReavaliacao(target.criticidade, avaliacao.dataAvaliacao);
+
+      let statusQual = target.statusQualificacao;
+      if (target.statusQualificacao !== 'Bloqueado') {
+        if (avaliacao.resultado === 'Aprovado') statusQual = 'Qualificado';
+        else if (avaliacao.resultado === 'Aprovado com Restrições') statusQual = 'Qualificado com Restrições';
+        else statusQual = 'Não Qualificado';
+      }
+
+      const atualizado: Fornecedor = {
+        ...target,
+        notaAvaliacao: avaliacao.notaGeral,
+        statusQualificacao: statusQual,
+        dataQualificacao: avaliacao.dataAvaliacao,
+        historicoAvaliacoes: history,
+        reavaliacao: {
+          periodicidadeMeses: proxReav.periodicidadeMeses,
+          dataUltimaReavaliacao: avaliacao.dataAvaliacao,
+          dataProximaReavaliacao: proxReav.dataProxima,
+          status: 'Em Dia'
+        },
+        atualizadoEm: new Date().toISOString()
+      };
+
+      await SupplierRepository.update(atualizado.id, atualizado);
+      setFornecedores(prev => prev.map(f => f.id === atualizado.id ? atualizado : f));
+      if (selectedSupplier?.id === atualizado.id) setSelectedSupplier(atualizado);
+
+      onAddLog(
+        'Avaliação IQF Realizada',
+        `Avaliou ${target.nomeFantasia}. Nota: ${avaliacao.notaGeral}% - Resultado: ${avaliacao.resultado}`
+      );
+      showToast(`Avaliação gravada com sucesso! Nota: ${avaliacao.notaGeral}% (${avaliacao.resultado})`, 'success');
+      setSupplierForAvaliacao(null);
+    } catch (err) {
+      console.error('Erro ao gravar avaliação:', err);
+      showToast('Erro ao salvar avaliação.', 'error');
+    }
+  };
+
+  // 4. Gravar Não Conformidade (RNC) e Plano de Ação
+  const handleSaveRNC = async (rnc: OcorrenciaRNCFornecedor, plano?: PlanoAcaoFornecedor) => {
+    if (!supplierForRNC) return;
+    try {
+      const target = supplierForRNC;
+      const novasRNCs = [rnc, ...(target.ocorrenciasRNC || [])];
+      const novosPlanos = plano ? [plano, ...(target.planosAcao || [])] : (target.planosAcao || []);
+
+      const temp: Fornecedor = {
+        ...target,
+        ocorrenciasRNC: novasRNCs,
+        planosAcao: novosPlanos
+      };
+
+      const stats = calcularEstatisticasReaisFornecedor(temp);
+
+      const atualizado: Fornecedor = {
+        ...temp,
+        notaAvaliacao: stats.iqfGeral,
+        atualizadoEm: new Date().toISOString()
+      };
+
+      await SupplierRepository.update(atualizado.id, atualizado);
+      setFornecedores(prev => prev.map(f => f.id === atualizado.id ? atualizado : f));
+      if (selectedSupplier?.id === atualizado.id) setSelectedSupplier(atualizado);
+
+      onAddLog(
+        'Não Conformidade Aberta',
+        `RNC ${rnc.codigoRNC || ''} (${rnc.gravidade}) vinculada ao fornecedor ${target.nomeFantasia}`
+      );
+      showToast(`RNC registrada com sucesso! Novo IQF: ${stats.iqfGeral}%`, 'success');
+      setSupplierForRNC(null);
+    } catch (err) {
+      console.error('Erro ao gravar RNC:', err);
+      showToast('Erro ao registrar não conformidade.', 'error');
+    }
+  };
+
+  // 5. Gravar Documento / Certificação
+  const handleSaveDocumento = async (doc: DocumentoFornecedor) => {
+    if (!supplierForDocumento) return;
+    try {
+      const target = supplierForDocumento;
+      const docs = [doc, ...(target.documentos || [])];
+
+      const atualizado: Fornecedor = {
+        ...target,
+        documentos: docs,
+        atualizadoEm: new Date().toISOString()
+      };
+
+      await SupplierRepository.update(atualizado.id, atualizado);
+      setFornecedores(prev => prev.map(f => f.id === atualizado.id ? atualizado : f));
+      if (selectedSupplier?.id === atualizado.id) setSelectedSupplier(atualizado);
+
+      onAddLog('Documento Anexado', `Anexou "${doc.titulo}" (${doc.tipo}) para ${target.nomeFantasia}`);
+      showToast(`Documento "${doc.tipo}" cadastrado com sucesso!`, 'success');
+      setSupplierForDocumento(null);
+    } catch (err) {
+      console.error('Erro ao gravar documento:', err);
+      showToast('Erro ao salvar documento.', 'error');
+    }
+  };
+
+  // 6. Gravar Auditoria de 2ª Parte
+  const handleSaveAuditoria = async (aud: AuditoriaFornecedor) => {
+    if (!supplierForAuditoria) return;
+    try {
+      const target = supplierForAuditoria;
+      const auds = [aud, ...(target.auditorias || [])];
+
+      const atualizado: Fornecedor = {
+        ...target,
+        auditorias: auds,
+        atualizadoEm: new Date().toISOString()
+      };
+
+      await SupplierRepository.update(atualizado.id, atualizado);
+      setFornecedores(prev => prev.map(f => f.id === atualizado.id ? atualizado : f));
+      if (selectedSupplier?.id === atualizado.id) setSelectedSupplier(atualizado);
+
+      onAddLog('Auditoria Registrada', `Auditoria ${aud.codigo} realizada em ${target.nomeFantasia}. Nota: ${aud.notaChecklist}%`);
+      showToast(`Auditoria ${aud.codigo} gravada com sucesso!`, 'success');
+      setSupplierForAuditoria(null);
+    } catch (err) {
+      console.error('Erro ao gravar auditoria:', err);
+      showToast('Erro ao registrar auditoria.', 'error');
+    }
+  };
+
+  // 7. Bloqueio e Desbloqueio Controlado
+  const handleConfirmBloqueio = async (novoStatus: Fornecedor['statusQualificacao'], registro: BloqueioHistorico) => {
+    if (!supplierForBloqueio) return;
+    try {
+      const target = supplierForBloqueio;
+      const history = [registro, ...(target.historicoBloqueios || [])];
+
+      const atualizado: Fornecedor = {
+        ...target,
+        statusQualificacao: novoStatus,
+        historicoBloqueios: history,
+        atualizadoEm: new Date().toISOString()
+      };
+
+      await SupplierRepository.update(atualizado.id, atualizado);
+      setFornecedores(prev => prev.map(f => f.id === atualizado.id ? atualizado : f));
+      if (selectedSupplier?.id === atualizado.id) setSelectedSupplier(atualizado);
+
+      onAddLog(
+        `Procedimento de ${registro.tipo}`,
+        `${registro.tipo} para ${target.nomeFantasia}. Motivo: ${registro.motivo}`
+      );
+      showToast(`Status atualizado para "${novoStatus}"!`, 'success');
+      setSupplierForBloqueio(null);
+    } catch (err) {
+      console.error('Erro ao atualizar bloqueio:', err);
+      showToast('Erro ao atualizar status do fornecedor.', 'error');
+    }
+  };
+
+  // 8. Recalcular IQF com 1 clique usando dados reais de inspeções
+  const handleRecalcularIQF = async (fornecedorAlvo: Fornecedor) => {
+    try {
+      const stats = calcularEstatisticasReaisFornecedor(fornecedorAlvo);
+      const evalAuto = criarAvaliacaoAutomaticaPorDadosReais(fornecedorAlvo);
+      const historicoEvals = [evalAuto, ...(fornecedorAlvo.historicoAvaliacoes || [])];
+
+      let statusQual = fornecedorAlvo.statusQualificacao;
+      if (fornecedorAlvo.statusQualificacao !== 'Bloqueado') {
+        if (stats.iqfGeral >= 85) statusQual = 'Qualificado';
+        else if (stats.iqfGeral >= 65) statusQual = 'Qualificado com Restrições';
+        else statusQual = 'Não Qualificado';
+      }
+
+      const atualizado: Fornecedor = {
+        ...fornecedorAlvo,
+        notaAvaliacao: stats.iqfGeral,
+        statusQualificacao: statusQual,
+        historicoAvaliacoes: historicoEvals,
+        atualizadoEm: new Date().toISOString()
+      };
+
+      await SupplierRepository.update(atualizado.id, atualizado);
+      setFornecedores(prev => prev.map(f => f.id === atualizado.id ? atualizado : f));
+      if (selectedSupplier?.id === atualizado.id) setSelectedSupplier(atualizado);
+
+      onAddLog('Recálculo de IQF Automatizado', `Recalculou IQF real de ${fornecedorAlvo.nomeFantasia} para ${stats.iqfGeral}% (${stats.faixaIQF})`);
+      showToast(`IQF recalculado com dados reais: ${stats.iqfGeral}% (${stats.faixaIQF})`, 'success');
+    } catch (err) {
+      console.error('Erro ao recalcular IQF:', err);
+      showToast('Erro ao recalcular IQF.', 'error');
+    }
+  };
+
+  // 9. Exclusão de Fornecedor
+  const handleDeleteSupplier = async (id: string, name: string) => {
+    try {
+      await SupplierRepository.delete(id);
+      setFornecedores(prev => prev.filter(f => f.id !== id));
+      if (selectedSupplier?.id === id) setSelectedSupplier(null);
+      setSupplierToDelete(null);
+      onAddLog('Exclusão de Fornecedor', `Removeu o fornecedor ${name}`);
+      showToast(`Fornecedor "${name}" excluído com sucesso.`, 'success');
+    } catch (err) {
+      console.error('Erro ao excluir fornecedor:', err);
+      showToast('Erro ao excluir fornecedor.', 'error');
     }
   };
 
   return (
-    <div id="fornecedores-module" className="p-6 space-y-6 max-w-7xl mx-auto">
+    <div className="space-y-6">
       
-      {/* Header do Módulo */}
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 border-b border-gray-100 pb-5">
-        <div className="flex items-center space-x-3">
-          <div className="p-3 bg-blue-50 text-blue-600 rounded-xl">
-            <Truck className="w-6 h-6" />
-          </div>
-          <div>
-            <h1 className="text-xl font-bold text-gray-900 font-sans tracking-tight">
-              {personalizacao?.fornecedoresTitulo || 'Avaliação de Fornecedores'}
-            </h1>
-            <p className="text-xs text-gray-500">
-              {personalizacao?.fornecedoresSubtitulo || 'Qualificação, monitoramento de desempenho e conformidade de serviços e materiais externos (ISO 9001:2015 8.4)'}
-            </p>
-          </div>
-        </div>
-        {canCreate && (
-          <button
-            onClick={() => {
-              resetForm();
-              setIsAddingSupplier(true);
-            }}
-            className="inline-flex items-center justify-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors shadow-sm cursor-pointer"
+      {/* Toast Notification */}
+      <AnimatePresence>
+        {toastMessage && (
+          <motion.div
+            initial={{ opacity: 0, y: -20, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -20, scale: 0.95 }}
+            className={`fixed top-5 right-5 z-50 px-4 py-3 rounded-xl shadow-xl flex items-center space-x-2 text-xs font-bold border ${
+              toastMessage.type === 'success'
+                ? 'bg-emerald-600 text-white border-emerald-500'
+                : 'bg-rose-600 text-white border-rose-500'
+            }`}
           >
-            <Plus className="w-4 h-4 mr-2" />
-            Cadastrar Fornecedor
-          </button>
+            {toastMessage.type === 'success' ? <CheckCircle2 className="w-4 h-4" /> : <XCircle className="w-4 h-4" />}
+            <span>{toastMessage.text}</span>
+          </motion.div>
         )}
+      </AnimatePresence>
+
+      {/* Header Executivo do Módulo */}
+      <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+        <div className="space-y-1">
+          <div className="flex items-center space-x-3">
+            <div className="p-3 bg-linear-to-tr from-blue-700 to-indigo-700 rounded-xl text-white shadow-xs">
+              <Truck className="w-6 h-6" />
+            </div>
+            <div>
+              <div className="flex items-center space-x-2">
+                <h1 className="text-xl font-black text-slate-900 dark:text-white tracking-tight">
+                  Gestão & Qualificação de Fornecedores
+                </h1>
+                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-100 dark:bg-blue-900/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                  ISO 9001:2015 • 8.4
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                Ciclo completo: Cadastro → Homologação → Inspeção de Lotes Têxteis → RNCs → IQF Automático → Reavaliação
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Botões Globais da Barra Superior */}
+        <div className="flex items-center flex-wrap gap-2.5">
+          <button
+            onClick={() => exportarFornecedoresCSV(fornecedores)}
+            className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold rounded-xl transition-colors cursor-pointer flex items-center border border-slate-200 dark:border-slate-700 shadow-2xs"
+            title="Exportar base completa para planilha Excel (CSV)"
+          >
+            <Download className="w-3.5 h-3.5 mr-1.5" />
+            Exportar Excel
+          </button>
+
+          {canCreate && (
+            <button
+              onClick={() => { setSupplierToEdit(null); setIsAddingSupplier(true); }}
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl transition-colors cursor-pointer flex items-center shadow-xs"
+            >
+              <Plus className="w-4 h-4 mr-1.5" />
+              Novo Fornecedor
+            </button>
+          )}
+        </div>
       </div>
 
-      {/* Indicadores Estatísticos */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        
-        <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm flex items-center space-x-4">
-          <div className="p-3 rounded-lg bg-blue-50 text-blue-600">
-            <Truck className="w-6 h-6" />
-          </div>
-          <div>
-            <p className="text-xs text-gray-400 font-medium uppercase tracking-wider">Total de Fornecedores</p>
-            <h3 className="text-2xl font-bold text-gray-900">{totalFornecedores}</h3>
-            <p className="text-[10px] text-gray-500">{criticidadeAltaCount} de alta criticidade</p>
-          </div>
-        </div>
+      {/* Navegação entre Visões do Módulo (Lista, Ranking, Central de Alertas) */}
+      <div className="flex border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 rounded-xl px-4 overflow-x-auto shadow-2xs">
+        <button
+          onClick={() => setVisaoAtiva('lista')}
+          className={`flex items-center px-4 py-3 text-xs font-bold border-b-2 transition-colors cursor-pointer shrink-0 ${
+            visaoAtiva === 'lista'
+              ? 'border-blue-600 text-blue-600 dark:text-blue-400'
+              : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+          }`}
+        >
+          <Layers className="w-4 h-4 mr-1.5" />
+          Lista Mestra de Fornecedores ({totalFornecedores})
+        </button>
 
-        <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm flex items-center space-x-4">
-          <div className="p-3 rounded-lg bg-emerald-50 text-emerald-600">
-            <CheckCircle2 className="w-6 h-6" />
-          </div>
-          <div>
-            <p className="text-xs text-gray-400 font-medium uppercase tracking-wider">Homologados / Qualificados</p>
-            <h3 className="text-2xl font-bold text-emerald-600">{qualificadosCount + qualificacaoRestricaoCount}</h3>
-            <p className="text-[10px] text-gray-500">{qualificacaoRestricaoCount} com restrições técnicas</p>
-          </div>
-        </div>
+        <button
+          onClick={() => setVisaoAtiva('ranking')}
+          className={`flex items-center px-4 py-3 text-xs font-bold border-b-2 transition-colors cursor-pointer shrink-0 ${
+            visaoAtiva === 'ranking'
+              ? 'border-blue-600 text-blue-600 dark:text-blue-400'
+              : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+          }`}
+        >
+          <Trophy className="w-4 h-4 mr-1.5" />
+          Ranking & Benchmark ({mediaIQFBase}% IQF Médio)
+        </button>
 
-        <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm flex items-center space-x-4">
-          <div className="p-3 rounded-lg bg-blue-50 text-blue-600">
-            <Clock className="w-6 h-6" />
-          </div>
-          <div>
-            <p className="text-xs text-gray-400 font-medium uppercase tracking-wider">Em Avaliação Inicial</p>
-            <h3 className="text-2xl font-bold text-blue-600">{emAvaliacaoCount}</h3>
-            <p className="text-[10px] text-gray-500">Amostragem ou documentação</p>
-          </div>
-        </div>
-
-        <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm flex items-center space-x-4">
-          <div className="p-3 rounded-lg bg-rose-50 text-rose-600">
-            <XCircle className="w-6 h-6" />
-          </div>
-          <div>
-            <p className="text-xs text-gray-400 font-medium uppercase tracking-wider">Bloqueados / Reprovados</p>
-            <h3 className="text-2xl font-bold text-rose-600">{naoQualificadosCount}</h3>
-            <p className="text-[10px] text-gray-500">Requer substituição ou auditoria</p>
-          </div>
-        </div>
-
+        <button
+          onClick={() => setVisaoAtiva('alertas')}
+          className={`flex items-center px-4 py-3 text-xs font-bold border-b-2 transition-colors cursor-pointer shrink-0 ${
+            visaoAtiva === 'alertas'
+              ? 'border-blue-600 text-blue-600 dark:text-blue-400'
+              : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+          }`}
+        >
+          <Bell className="w-4 h-4 mr-1.5" />
+          Central de Alertas & Vencimentos
+          {todosAlertas.length > 0 && (
+            <span className="ml-2 px-1.5 py-0.2 rounded-full text-[10px] font-extrabold bg-rose-500 text-white">
+              {todosAlertas.length}
+            </span>
+          )}
+        </button>
       </div>
 
-      {/* Filtros e Busca */}
-      <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm space-y-3">
-        <div className="flex flex-col md:flex-row gap-3">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Buscar fornecedores por Razão Social, Nome Fantasia, CNPJ, Contato..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-9 pr-4 py-2 w-full border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
-            />
+      {/* ======================================================== */}
+      {/* VISÃO 1: LISTA MESTRA DE FORNECEDORES */}
+      {/* ======================================================== */}
+      {visaoAtiva === 'lista' && (
+        <div className="space-y-6">
+          {/* Cards de Métricas Principais */}
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3.5">
+            <div className="p-4 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-2xs">
+              <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider block">Total de Fornecedores</span>
+              <div className="text-2xl font-black font-mono text-slate-900 dark:text-white mt-0.5">{totalFornecedores}</div>
+              <span className="text-[10px] text-slate-500 mt-1 block">Base ativa cadastrada</span>
+            </div>
+
+            <div className="p-4 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-2xs">
+              <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider block">Qualificados Plenos</span>
+              <div className="text-2xl font-black font-mono text-emerald-600 mt-0.5">{qualificadosCount}</div>
+              <span className="text-[10px] text-emerald-600 mt-1 block">Homologação 100% em dia</span>
+            </div>
+
+            <div className="p-4 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-2xs">
+              <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider block">Com Restrições</span>
+              <div className="text-2xl font-black font-mono text-amber-600 mt-0.5">{restricaoCount}</div>
+              <span className="text-[10px] text-amber-600 mt-1 block">Monitoramento especial</span>
+            </div>
+
+            <div className="p-4 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-2xs">
+              <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider block">Bloqueados / Suspensos</span>
+              <div className="text-2xl font-black font-mono text-rose-600 mt-0.5">{bloqueadosCount}</div>
+              <span className="text-[10px] text-rose-600 mt-1 block">Compras suspensas</span>
+            </div>
+
+            <div className="p-4 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-2xs">
+              <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider block">Média IQF Geral</span>
+              <div className="text-2xl font-black font-mono text-blue-600 mt-0.5">{mediaIQFBase}%</div>
+              <span className="text-[10px] text-blue-600 mt-1 block">Índice ponderado real</span>
+            </div>
           </div>
-          
-          <div className="flex flex-wrap gap-2">
-            
-            <div className="flex items-center space-x-1 border border-gray-200 rounded-lg px-2 py-1">
-              <span className="text-[11px] text-gray-400">Categoria:</span>
+
+          {/* Filtros e Busca */}
+          <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-2xs flex flex-col md:flex-row gap-3 items-center justify-between">
+            {/* Input de Busca */}
+            <div className="relative w-full md:w-96">
+              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input 
+                type="text" 
+                placeholder="Buscar por fornecedor, CNPJ, contato, artigo ou categoria..."
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                className="w-full pl-9 pr-4 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+
+            {/* Selects de Filtragem */}
+            <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
               <select
                 value={selectedCategoria}
-                onChange={(e) => setSelectedCategoria(e.target.value)}
-                className="bg-transparent text-xs font-semibold text-gray-700 border-none outline-none focus:ring-0"
+                onChange={e => setSelectedCategoria(e.target.value)}
+                className="text-xs px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl font-medium"
               >
-                <option value="todos">Todas</option>
-                {categorias.map((cat) => (
+                <option value="todos">Todas as Categorias</option>
+                {categorias.map(cat => (
                   <option key={cat} value={cat}>{cat}</option>
                 ))}
               </select>
-            </div>
 
-            <div className="flex items-center space-x-1 border border-gray-200 rounded-lg px-2 py-1">
-              <span className="text-[11px] text-gray-400">Criticidade:</span>
               <select
                 value={selectedCriticidade}
-                onChange={(e) => setSelectedCriticidade(e.target.value)}
-                className="bg-transparent text-xs font-semibold text-gray-700 border-none outline-none focus:ring-0"
+                onChange={e => setSelectedCriticidade(e.target.value)}
+                className="text-xs px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl font-medium"
               >
-                <option value="todos">Todas</option>
-                <option value="Alta">Alta</option>
-                <option value="Média">Média</option>
-                <option value="Baixa">Baixa</option>
+                <option value="todos">Toda Criticidade</option>
+                <option value="Alta">Criticidade Alta</option>
+                <option value="Média">Criticidade Média</option>
+                <option value="Baixa">Criticidade Baixa</option>
               </select>
-            </div>
 
-            <div className="flex items-center space-x-1 border border-gray-200 rounded-lg px-2 py-1">
-              <span className="text-[11px] text-gray-400">Status:</span>
               <select
                 value={selectedStatus}
-                onChange={(e) => setSelectedStatus(e.target.value)}
-                className="bg-transparent text-xs font-semibold text-gray-700 border-none outline-none focus:ring-0"
+                onChange={e => setSelectedStatus(e.target.value)}
+                className="text-xs px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl font-medium"
               >
-                <option value="todos">Todos</option>
+                <option value="todos">Todos os Status</option>
                 <option value="Qualificado">Qualificado</option>
                 <option value="Qualificado com Restrições">Com Restrições</option>
                 <option value="Em Avaliação">Em Avaliação</option>
                 <option value="Não Qualificado">Não Qualificado</option>
+                <option value="Bloqueado">Bloqueado</option>
               </select>
             </div>
-
           </div>
-        </div>
-      </div>
 
-      {/* Lista Principal de Fornecedores */}
-      <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
-        {filteredFornecedores.length === 0 ? (
-          <div className="p-12 text-center">
-            <Truck className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-            <h3 className="text-sm font-bold text-gray-700">Nenhum fornecedor localizado</h3>
-            <p className="text-xs text-gray-500 mt-1">Experimente alterar os parâmetros de pesquisa ou filtros</p>
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="bg-slate-50 border-b border-gray-100 text-xs font-bold text-gray-500 uppercase tracking-wider">
-                  <th className="py-3.5 px-4">Fornecedor</th>
-                  <th className="py-3.5 px-4">Categoria</th>
-                  <th className="py-3.5 px-4">Criticidade</th>
-                  <th className="py-3.5 px-4">Status Qualificação</th>
-                  <th className="py-3.5 px-4 text-center">Nota Avaliação</th>
-                  <th className="py-3.5 px-4">Última Avaliação</th>
-                  <th className="py-3.5 px-4 text-right">Ações</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100 text-sm">
-                {filteredFornecedores.map(f => (
-                  <tr key={f.id} className="hover:bg-slate-50/50 transition-colors">
-                    <td className="py-4 px-4">
-                      <div>
-                        <span 
-                          onClick={() => setSelectedSupplier(f)}
-                          className="font-bold text-blue-600 hover:underline cursor-pointer block text-sm"
-                        >
-                          {f.nomeFantasia}
-                        </span>
-                        <span className="text-xs text-gray-400 block font-mono">{f.razaoSocial} • CNPJ: {f.cnpj}</span>
-                      </div>
-                    </td>
-                    <td className="py-4 px-4 text-gray-600">
-                      <span className="px-2 py-1 bg-slate-100 rounded text-xs text-gray-700 font-medium">
-                        {f.categoria}
-                      </span>
-                    </td>
-                    <td className="py-4 px-4">
-                      {getCriticidadeBadge(f.criticidade)}
-                    </td>
-                    <td className="py-4 px-4">
-                      {getStatusBadge(f.statusQualificacao)}
-                    </td>
-                    <td className="py-4 px-4 text-center">
-                      {f.notaAvaliacao !== undefined ? (
-                        <div className="flex items-center justify-center space-x-1.5">
-                          <span className={`text-sm font-bold font-mono px-2 py-0.5 rounded ${
-                            f.notaAvaliacao >= 85 ? 'bg-emerald-50 text-emerald-700' : 
-                            f.notaAvaliacao >= 70 ? 'bg-amber-50 text-amber-700' : 'bg-rose-50 text-rose-700'
-                          }`}>
-                            {f.notaAvaliacao}%
-                          </span>
-                        </div>
-                      ) : (
-                        <span className="text-xs text-gray-400 italic">Sem notas</span>
-                      )}
-                    </td>
-                    <td className="py-4 px-4 text-gray-500 text-xs">
-                      {f.dataQualificacao ? (
-                        <div className="flex items-center space-x-1">
-                          <Calendar className="w-3.5 h-3.5 text-gray-400" />
-                          <span>{f.dataQualificacao}</span>
-                        </div>
-                      ) : (
-                        <span className="text-gray-400 italic">Pendente</span>
-                      )}
-                    </td>
-                    <td className="py-4 px-4 text-right">
-                      <div className="flex items-center justify-end space-x-1.5">
-                        {canEdit && (
-                          <button
-                            onClick={() => setIsEvaluating(f)}
-                            title="Avaliar Desempenho (ISO 8.4)"
-                            className="p-1.5 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded transition-colors cursor-pointer"
-                          >
-                            <Award className="w-4 h-4" />
-                          </button>
-                        )}
-                        {canEdit && (
-                          <button
-                            onClick={() => setEditingSupplier(f)}
-                            title="Editar Cadastro"
-                            className="p-1.5 bg-slate-100 text-slate-600 hover:bg-slate-200 rounded transition-colors cursor-pointer"
-                          >
-                            <Edit3 className="w-4 h-4" />
-                          </button>
-                        )}
-                        {canDelete && (
-                          <button
-                            onClick={() => handleDeleteSupplier(f.id, f.nomeFantasia)}
-                            title="Remover Fornecedor"
-                            className="p-1.5 bg-rose-50 text-rose-600 hover:bg-rose-100 rounded transition-colors cursor-pointer"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        )}
-                      </div>
-                    </td>
+          {/* Tabela Mestra de Fornecedores */}
+          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-xs">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="bg-slate-50 dark:bg-slate-800/60 text-slate-500 font-semibold border-b border-slate-200 dark:border-slate-800">
+                    <th className="p-3.5 pl-5">Fornecedor / Razão Social</th>
+                    <th className="p-3.5">Categoria Têxtil</th>
+                    <th className="p-3.5">Criticidade</th>
+                    <th className="p-3.5 text-center">IQF Atual</th>
+                    <th className="p-3.5 text-center">Status Homologação</th>
+                    <th className="p-3.5 text-center">Lotes Inspecionados</th>
+                    <th className="p-3.5 text-center">Reavaliação</th>
+                    <th className="p-3.5 text-right pr-5">Ações</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-
-      {/* --- MODAL DE DETALHES DO FORNECEDOR --- */}
-      <AnimatePresence>
-        {selectedSupplier && (
-          <motion.div 
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto"
-          >
-            <motion.div 
-              initial={{ scale: 0.95, y: 15 }}
-              animate={{ scale: 1, y: 0 }}
-              exit={{ scale: 0.95, y: 15 }}
-              className="bg-white rounded-xl shadow-2xl max-w-3xl w-full border border-gray-100 overflow-hidden my-8"
-            >
-              {/* Header do Modal */}
-              <div className="bg-slate-900 text-white p-6 relative">
-                <button 
-                  onClick={() => setSelectedSupplier(null)}
-                  className="absolute right-4 top-4 text-slate-400 hover:text-white transition-colors"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-                <div className="flex items-start space-x-4">
-                  <div className="p-3 bg-slate-800 rounded-lg">
-                    <Truck className="w-7 h-7 text-blue-400" />
-                  </div>
-                  <div className="space-y-1">
-                    <div className="flex items-center space-x-2 flex-wrap gap-1">
-                      <h2 className="text-lg font-bold">{selectedSupplier.nomeFantasia}</h2>
-                      {getCriticidadeBadge(selectedSupplier.criticidade)}
-                    </div>
-                    <p className="text-xs text-slate-400 font-mono">{selectedSupplier.razaoSocial}</p>
-                    <p className="text-xs text-slate-400">CNPJ: {selectedSupplier.cnpj}</p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Corpo do Modal */}
-              <div className="p-6 space-y-6 max-h-[70vh] overflow-y-auto">
-                
-                {/* Status e Qualificação Geral */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-slate-50 p-4 rounded-xl border border-gray-100">
-                  <div>
-                    <span className="text-[10px] text-gray-400 block font-bold uppercase">Status de Homologação</span>
-                    <div className="mt-1">{getStatusBadge(selectedSupplier.statusQualificacao)}</div>
-                  </div>
-                  <div>
-                    <span className="text-[10px] text-gray-400 block font-bold uppercase">Categoria</span>
-                    <span className="text-sm font-semibold text-gray-800 block mt-1">{selectedSupplier.categoria}</span>
-                  </div>
-                  <div>
-                    <span className="text-[10px] text-gray-400 block font-bold uppercase">Score Geral Vickytex</span>
-                    {selectedSupplier.notaAvaliacao !== undefined ? (
-                      <span className="text-base font-extrabold font-mono text-blue-600 block mt-0.5">
-                        {selectedSupplier.notaAvaliacao}%
-                      </span>
-                    ) : (
-                      <span className="text-xs text-gray-400 block italic mt-1.5">Sem pontuação histórica</span>
-                    )}
-                  </div>
-                </div>
-
-                {/* Contato do Fornecedor */}
-                <div className="space-y-3">
-                  <h4 className="text-xs font-bold text-gray-700 uppercase tracking-wider flex items-center">
-                    <User className="w-3.5 h-3.5 mr-1 text-slate-500" />
-                    Informações de Contato
-                  </h4>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-white p-4 border border-gray-100 rounded-lg">
-                    <div className="space-y-0.5">
-                      <span className="text-xs text-gray-400 block">Responsável</span>
-                      <span className="text-sm font-medium text-gray-800">{selectedSupplier.contatoNome || 'Não informado'}</span>
-                    </div>
-                    <div className="space-y-0.5">
-                      <span className="text-xs text-gray-400 block flex items-center">
-                        <Mail className="w-3 h-3 mr-1 text-gray-400" /> Email
-                      </span>
-                      <span className="text-sm font-medium text-blue-600 hover:underline">
-                        {selectedSupplier.contatoEmail ? (
-                          <a href={`mailto:${selectedSupplier.contatoEmail}`}>{selectedSupplier.contatoEmail}</a>
-                        ) : (
-                          <span className="text-gray-400 italic">Não informado</span>
-                        )}
-                      </span>
-                    </div>
-                    <div className="space-y-0.5">
-                      <span className="text-xs text-gray-400 block flex items-center">
-                        <Phone className="w-3 h-3 mr-1 text-gray-400" /> Telefone
-                      </span>
-                      <span className="text-sm font-medium text-gray-800">{selectedSupplier.contatoTelefone || 'Não informado'}</span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Observações */}
-                {selectedSupplier.observacoes && (
-                  <div className="space-y-2">
-                    <h4 className="text-xs font-bold text-gray-700 uppercase tracking-wider flex items-center">
-                      <FileText className="w-3.5 h-3.5 mr-1 text-slate-500" />
-                      Instruções Técnicas & Observações
-                    </h4>
-                    <p className="text-xs text-gray-600 bg-slate-50 p-3.5 rounded-lg border border-gray-100 leading-relaxed font-mono">
-                      {selectedSupplier.observacoes}
-                    </p>
-                  </div>
-                )}
-
-                {/* Histórico de Avaliações */}
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <h4 className="text-xs font-bold text-gray-700 uppercase tracking-wider flex items-center">
-                      <Award className="w-3.5 h-3.5 mr-1 text-slate-500" />
-                      Histórico de Avaliações Técnicas (ISO 8.4)
-                    </h4>
-                    <button
-                      onClick={() => setIsEvaluating(selectedSupplier)}
-                      className="inline-flex items-center text-xs font-bold text-blue-600 hover:text-blue-800 cursor-pointer"
-                    >
-                      <PlusCircle className="w-3.5 h-3.5 mr-1" />
-                      Nova Avaliação
-                    </button>
-                  </div>
-
-                  {selectedSupplier.historicoAvaliacoes.length === 0 ? (
-                    <div className="text-center p-6 border border-dashed border-gray-200 rounded-lg text-gray-400 text-xs">
-                      Nenhuma avaliação registrada ainda. Realize a primeira avaliação para habilitar o status de homologação.
-                    </div>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                  {filteredFornecedores.length === 0 ? (
+                    <tr>
+                      <td colSpan={8} className="p-10 text-center text-slate-400">
+                        Nenhum fornecedor encontrado com os filtros aplicados.
+                      </td>
+                    </tr>
                   ) : (
-                    <div className="space-y-3">
-                      {selectedSupplier.historicoAvaliacoes.map(ev => (
-                        <div key={ev.id} className="border border-gray-100 rounded-lg p-4 space-y-3 bg-white hover:border-gray-200 transition-colors">
-                          <div className="flex items-start justify-between flex-wrap gap-2">
-                            <div>
-                              <span className="text-xs font-bold text-gray-700 block">Realizado por: {ev.avaliador}</span>
-                              <span className="text-[10px] text-gray-400 block font-mono">Em {ev.dataAvaliacao}</span>
-                            </div>
-                            <div className="flex items-center space-x-2">
-                              <span className={`px-2 py-0.5 rounded text-xs font-bold font-mono ${
-                                ev.resultado === 'Aprovado' ? 'bg-emerald-50 text-emerald-700' :
-                                ev.resultado === 'Aprovado com Restrições' ? 'bg-amber-50 text-amber-700' : 'bg-rose-50 text-rose-700'
-                              }`}>
-                                {ev.resultado}
-                              </span>
-                              <span className="text-sm font-extrabold font-mono text-slate-800">
-                                Score: {ev.notaGeral}%
-                              </span>
-                            </div>
-                          </div>
-
-                          {/* Detalhamento de notas por critérios */}
-                          <div className="grid grid-cols-3 gap-2.5 bg-slate-50 p-2.5 rounded text-xs font-mono">
-                            <div>
-                              <span className="text-[10px] text-gray-400 block uppercase">Qualidade Matéria-Prima</span>
-                              <span className="font-bold text-gray-700">{ev.criterioQualidade}/100</span>
-                            </div>
-                            <div>
-                              <span className="text-[10px] text-gray-400 block uppercase">Pontualidade Prazo</span>
-                              <span className="font-bold text-gray-700">{ev.criterioPrazo}/100</span>
-                            </div>
-                            <div>
-                              <span className="text-[10px] text-gray-400 block uppercase">Atendimento Comercial</span>
-                              <span className="font-bold text-gray-700">{ev.criterioAtendimento}/100</span>
-                            </div>
-                          </div>
-
-                          {ev.parecerTecnico && (
-                            <p className="text-xs text-gray-600 italic bg-gray-50/50 p-2 rounded border-l-2 border-slate-300">
-                              <strong>Parecer Técnico:</strong> {ev.parecerTecnico}
-                            </p>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-              </div>
-
-              {/* Rodapé do Modal */}
-              <div className="bg-slate-50 px-6 py-4 flex justify-end space-x-2 border-t border-gray-100">
-                <button
-                  onClick={() => setSelectedSupplier(null)}
-                  className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-semibold rounded-lg transition-colors cursor-pointer"
-                >
-                  Fechar
-                </button>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* --- FORMULÁRIO DE CADASTRO DE FORNECEDOR --- */}
-      <AnimatePresence>
-        {isAddingSupplier && (
-          <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
-            <motion.div 
-              initial={{ scale: 0.95, y: 15 }}
-              animate={{ scale: 1, y: 0 }}
-              exit={{ scale: 0.95, y: 15 }}
-              className="bg-white rounded-xl shadow-2xl max-w-2xl w-full border border-gray-100 overflow-hidden"
-            >
-              <div className="bg-blue-600 text-white p-5 flex items-center justify-between">
-                <h3 className="font-bold text-base flex items-center">
-                  <Truck className="w-5 h-5 mr-2" />
-                  Cadastrar Novo Fornecedor (ISO 8.4)
-                </h3>
-                <button onClick={() => setIsAddingSupplier(false)} className="text-white hover:text-blue-100 transition-colors">
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-
-              <form onSubmit={handleAddSupplier} className="p-6 space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-1">
-                    <label className="text-xs font-bold text-gray-600 block">Razão Social *</label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="Ex: Fiação e Tecelagem Vickytex"
-                      value={razaoSocial}
-                      onChange={(e) => setRazaoSocial(e.target.value)}
-                      className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-xs font-bold text-gray-600 block">Nome Fantasia</label>
-                    <input
-                      type="text"
-                      placeholder="Ex: Fiação Vickytex"
-                      value={nomeFantasia}
-                      onChange={(e) => setNomeFantasia(e.target.value)}
-                      className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-1">
-                    <label className="text-xs font-bold text-gray-600 block">CNPJ *</label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="Ex: 00.000.000/0001-00"
-                      value={cnpj}
-                      onChange={(e) => setCnpj(e.target.value)}
-                      className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <div className="flex items-center justify-between">
-                      <label className="text-xs font-bold text-gray-600 block">Categoria Têxtil/Serviço</label>
-                      <button
-                        type="button"
-                        onClick={() => setShowInlineAddCategory(!showInlineAddCategory)}
-                        className="text-[11px] font-bold text-blue-600 hover:text-blue-800 transition-colors"
-                      >
-                        {showInlineAddCategory ? 'Cancelar' : '+ Nova Categoria'}
-                      </button>
-                    </div>
-
-                    {showInlineAddCategory ? (
-                      <div className="flex gap-1.5 mt-1">
-                        <input
-                          type="text"
-                          placeholder="Ex: Aviamentos, Serviços de Lavanderia"
-                          value={newCategoryText}
-                          onChange={(e) => setNewCategoryText(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') {
-                              e.preventDefault();
-                              handleSaveInlineCategory();
-                            }
-                          }}
-                          className="flex-1 border border-blue-400 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 bg-blue-50/30"
-                          autoFocus
-                        />
-                        <button
-                          type="button"
-                          onClick={handleSaveInlineCategory}
-                          className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-bold hover:bg-blue-700 transition-colors shrink-0"
+                    filteredFornecedores.map(f => {
+                      const stats = calcularEstatisticasReaisFornecedor(f);
+                      const alertasFornec = extrairAlertasFornecedor(f);
+                      return (
+                        <tr 
+                          key={f.id}
+                          className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors"
                         >
-                          Salvar
-                        </button>
-                      </div>
-                    ) : (
-                      <select
-                        value={categoria}
-                        onChange={(e) => setCategoria(e.target.value as any)}
-                        className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white"
-                      >
-                        {categorias.map((cat) => (
-                          <option key={cat} value={cat}>{cat}</option>
-                        ))}
-                      </select>
-                    )}
-                  </div>
-                </div>
+                          {/* Coluna Fornecedor */}
+                          <td 
+                            className="p-3.5 pl-5 cursor-pointer"
+                            onClick={() => setSelectedSupplier(f)}
+                          >
+                            <div className="font-extrabold text-slate-900 dark:text-white flex items-center space-x-1.5">
+                              <span>{f.nomeFantasia || f.razaoSocial}</span>
+                              {alertasFornec.length > 0 && (
+                                <span className="w-2 h-2 rounded-full bg-amber-500" title={`${alertasFornec.length} alertas SGQ pendentes`} />
+                              )}
+                            </div>
+                            <span className="text-[10px] font-mono text-slate-400 block mt-0.5">
+                              CNPJ: {f.cnpj} • Contato: {f.contatoNome || '-'}
+                            </span>
+                          </td>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 border-t border-gray-100 pt-4">
-                  <div className="space-y-1">
-                    <label className="text-xs font-bold text-gray-600 block">Contato (Nome)</label>
-                    <input
-                      type="text"
-                      placeholder="Ex: João Silva"
-                      value={contatoNome}
-                      onChange={(e) => setContatoNome(e.target.value)}
-                      className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-xs font-bold text-gray-600 block">Contato (Email)</label>
-                    <input
-                      type="email"
-                      placeholder="Ex: comercial@fornecedor.com"
-                      value={contatoEmail}
-                      onChange={(e) => setContatoEmail(e.target.value)}
-                      className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-xs font-bold text-gray-600 block">Contato (Telefone)</label>
-                    <input
-                      type="text"
-                      placeholder="Ex: (11) 98765-4321"
-                      value={contatoTelefone}
-                      onChange={(e) => setContatoTelefone(e.target.value)}
-                      className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono"
-                    />
-                  </div>
-                </div>
+                          {/* Categoria */}
+                          <td className="p-3.5 text-slate-600 dark:text-slate-300">
+                            <span className="font-medium">{f.categoria}</span>
+                            {f.subcategoria && (
+                              <span className="text-[10px] text-slate-400 block">{f.subcategoria}</span>
+                            )}
+                          </td>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-1">
-                    <label className="text-xs font-bold text-gray-600 block">Criticidade do Fornecimento</label>
-                    <select
-                      value={criticidade}
-                      onChange={(e) => setCriticidade(e.target.value as Fornecedor['criticidade'])}
-                      className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white"
-                    >
-                      <option value="Alta">Alta (Impacta diretamente no produto final)</option>
-                      <option value="Média">Média (Impacto operacional moderado)</option>
-                      <option value="Baixa">Baixa (Pouco impacto no produto final)</option>
-                    </select>
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-xs font-bold text-gray-400 block flex items-center">
-                      <HelpCircle className="w-3.5 h-3.5 mr-1" /> Status Inicial
-                    </label>
-                    <div className="py-2 px-3 bg-slate-50 rounded-lg text-xs font-semibold text-slate-500 border border-slate-100 font-mono">
-                      EM AVALIAÇÃO INICIAL
-                    </div>
-                  </div>
-                </div>
+                          {/* Criticidade */}
+                          <td className="p-3.5">
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                              f.criticidade === 'Alta' ? 'bg-rose-100 text-rose-800' :
+                              f.criticidade === 'Média' ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'
+                            }`}>
+                              {f.criticidade}
+                            </span>
+                          </td>
 
-                <div className="space-y-1">
-                  <label className="text-xs font-bold text-gray-600 block">Critérios Especiais ou Instruções de Recebimento</label>
-                  <textarea
-                    rows={3}
-                    placeholder="Ex: Exigir laudo de pureza química do lote de tintura no momento da entrega do material..."
-                    value={observacoes}
-                    onChange={(e) => setObservacoes(e.target.value)}
-                    className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono"
-                  />
-                </div>
+                          {/* IQF Score */}
+                          <td className="p-3.5 text-center">
+                            <span className="font-mono font-extrabold text-sm text-slate-900 dark:text-white">
+                              {stats.iqfGeral}%
+                            </span>
+                            <span className={`text-[10px] font-bold block ${
+                              stats.faixaIQF === 'A - Excelente' ? 'text-emerald-600' :
+                              stats.faixaIQF === 'B - Bom' ? 'text-blue-600' :
+                              stats.faixaIQF === 'C - Regular' ? 'text-amber-600' : 'text-rose-600'
+                            }`}>
+                              Faixa {stats.faixaIQF.split(' - ')[0]}
+                            </span>
+                          </td>
 
-                <div className="bg-slate-50 px-6 py-4 flex justify-end space-x-2 -mx-6 -mb-6 border-t border-gray-100 mt-6">
-                  <button
-                    type="button"
-                    disabled={isSubmittingSupplier}
-                    onClick={() => setIsAddingSupplier(false)}
-                    className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-semibold rounded-lg transition-colors cursor-pointer disabled:opacity-50"
-                  >
-                    Cancelar
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={isSubmittingSupplier}
-                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg transition-colors cursor-pointer flex items-center space-x-1.5 disabled:opacity-50"
-                  >
-                    {isSubmittingSupplier ? (
-                      <>
-                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                        <span>Salvando...</span>
-                      </>
-                    ) : (
-                      <span>Salvar Cadastro</span>
-                    )}
-                  </button>
-                </div>
-              </form>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
+                          {/* Status */}
+                          <td className="p-3.5 text-center">
+                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-bold ${
+                              f.statusQualificacao === 'Qualificado' ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' :
+                              f.statusQualificacao === 'Qualificado com Restrições' ? 'bg-amber-100 text-amber-800 border border-amber-300' :
+                              f.statusQualificacao === 'Bloqueado' ? 'bg-rose-100 text-rose-800 border border-rose-300' :
+                              'bg-blue-100 text-blue-800 border border-blue-300'
+                            }`}>
+                              {f.statusQualificacao === 'Qualificado' && <CheckCircle2 className="w-3 h-3 mr-1" />}
+                              {f.statusQualificacao === 'Qualificado com Restrições' && <AlertTriangle className="w-3 h-3 mr-1" />}
+                              {f.statusQualificacao === 'Bloqueado' && <XCircle className="w-3 h-3 mr-1" />}
+                              {f.statusQualificacao}
+                            </span>
+                          </td>
 
-      {/* --- FORMULÁRIO DE EDIÇÃO DE FORNECEDOR --- */}
-      <AnimatePresence>
-        {editingSupplier && (
-          <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
-            <motion.div 
-              initial={{ scale: 0.95, y: 15 }}
-              animate={{ scale: 1, y: 0 }}
-              exit={{ scale: 0.95, y: 15 }}
-              className="bg-white rounded-xl shadow-2xl max-w-2xl w-full border border-gray-100 overflow-hidden"
-            >
-              <div className="bg-slate-850 text-white p-5 flex items-center justify-between" style={{ backgroundColor: '#1e293b' }}>
-                <h3 className="font-bold text-base flex items-center">
-                  <Edit3 className="w-5 h-5 mr-2 text-blue-400" />
-                  Editar Cadastro do Fornecedor
-                </h3>
-                <button onClick={() => setEditingSupplier(null)} className="text-white hover:text-slate-200 transition-colors">
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
+                          {/* Lotes Inspecionados */}
+                          <td className="p-3.5 text-center font-mono">
+                            <span className="font-bold text-slate-800 dark:text-slate-200">
+                              {stats.totalLotes}
+                            </span>
+                            <span className="text-[10px] text-slate-400 block font-normal">
+                              {stats.taxaAprovacao}% aprov.
+                            </span>
+                          </td>
 
-              <form onSubmit={handleUpdateSupplier} className="p-6 space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-1">
-                    <label className="text-xs font-bold text-gray-600 block">Razão Social *</label>
-                    <input
-                      type="text"
-                      required
-                      value={razaoSocial}
-                      onChange={(e) => setRazaoSocial(e.target.value)}
-                      className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-xs font-bold text-gray-600 block">Nome Fantasia</label>
-                    <input
-                      type="text"
-                      value={nomeFantasia}
-                      onChange={(e) => setNomeFantasia(e.target.value)}
-                      className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
-                    />
-                  </div>
-                </div>
+                          {/* Reavaliação */}
+                          <td className="p-3.5 text-center font-mono text-[11px] text-slate-600 dark:text-slate-400">
+                            {f.reavaliacao?.dataProximaReavaliacao || '2026-12-10'}
+                          </td>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-1">
-                    <label className="text-xs font-bold text-gray-600 block">CNPJ *</label>
-                    <input
-                      type="text"
-                      required
-                      value={cnpj}
-                      onChange={(e) => setCnpj(e.target.value)}
-                      className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <div className="flex items-center justify-between">
-                      <label className="text-xs font-bold text-gray-600 block">Categoria Têxtil/Serviço</label>
-                      <button
-                        type="button"
-                        onClick={() => setShowInlineAddCategory(!showInlineAddCategory)}
-                        className="text-[11px] font-bold text-blue-600 hover:text-blue-800 transition-colors"
-                      >
-                        {showInlineAddCategory ? 'Cancelar' : '+ Nova Categoria'}
-                      </button>
-                    </div>
+                          {/* Ações */}
+                          <td className="p-3.5 text-right pr-5">
+                            <div className="flex items-center justify-end space-x-1.5">
+                              <button
+                                onClick={() => setSelectedSupplier(f)}
+                                className="p-1.5 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/40 rounded-lg cursor-pointer transition-colors"
+                                title="Ver Ficha 360°"
+                              >
+                                <Eye className="w-4 h-4" />
+                              </button>
 
-                    {showInlineAddCategory ? (
-                      <div className="flex gap-1.5 mt-1">
-                        <input
-                          type="text"
-                          placeholder="Ex: Aviamentos, Serviços de Lavanderia"
-                          value={newCategoryText}
-                          onChange={(e) => setNewCategoryText(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') {
-                              e.preventDefault();
-                              handleSaveInlineCategory();
-                            }
-                          }}
-                          className="flex-1 border border-blue-400 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 bg-blue-50/30"
-                          autoFocus
-                        />
-                        <button
-                          type="button"
-                          onClick={handleSaveInlineCategory}
-                          className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-bold hover:bg-blue-700 transition-colors shrink-0"
-                        >
-                          Salvar
-                        </button>
-                      </div>
-                    ) : (
-                      <select
-                        value={categoria}
-                        onChange={(e) => setCategoria(e.target.value as any)}
-                        className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white"
-                      >
-                        {categorias.map((cat) => (
-                          <option key={cat} value={cat}>{cat}</option>
-                        ))}
-                      </select>
-                    )}
-                  </div>
-                </div>
+                              <button
+                                onClick={() => setSupplierForInspecao(f)}
+                                className="p-1.5 text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 rounded-lg cursor-pointer transition-colors"
+                                title="Nova Inspeção de Lote"
+                              >
+                                <ClipboardCheck className="w-4 h-4" />
+                              </button>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 border-t border-gray-100 pt-4">
-                  <div className="space-y-1">
-                    <label className="text-xs font-bold text-gray-600 block">Contato (Nome)</label>
-                    <input
-                      type="text"
-                      value={contatoNome}
-                      onChange={(e) => setContatoNome(e.target.value)}
-                      className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-xs font-bold text-gray-600 block">Contato (Email)</label>
-                    <input
-                      type="email"
-                      value={contatoEmail}
-                      onChange={(e) => setContatoEmail(e.target.value)}
-                      className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-xs font-bold text-gray-600 block">Contato (Telefone)</label>
-                    <input
-                      type="text"
-                      value={contatoTelefone}
-                      onChange={(e) => setContatoTelefone(e.target.value)}
-                      className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono"
-                    />
-                  </div>
-                </div>
+                              <button
+                                onClick={() => handleRecalcularIQF(f)}
+                                className="p-1.5 text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 rounded-lg cursor-pointer transition-colors"
+                                title="Recalcular IQF com Dados Reais"
+                              >
+                                <Sparkles className="w-4 h-4" />
+                              </button>
 
-                <div className="space-y-1">
-                  <label className="text-xs font-bold text-gray-600 block">Criticidade do Fornecimento</label>
-                  <select
-                    value={criticidade}
-                    onChange={(e) => setCriticidade(e.target.value as Fornecedor['criticidade'])}
-                    className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white"
-                  >
-                    <option value="Alta">Alta (Impacta diretamente no produto final)</option>
-                    <option value="Média">Média (Impacto operacional moderado)</option>
-                    <option value="Baixa">Baixa (Pouco impacto no produto final)</option>
-                  </select>
-                </div>
+                              {canEdit && (
+                                <button
+                                  onClick={() => { setSupplierToEdit(f); setIsAddingSupplier(true); }}
+                                  className="p-1.5 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg cursor-pointer transition-colors"
+                                  title="Editar Cadastro"
+                                >
+                                  <Edit3 className="w-4 h-4" />
+                                </button>
+                              )}
 
-                <div className="space-y-1">
-                  <label className="text-xs font-bold text-gray-600 block">Critérios Especiais ou Instruções de Recebimento</label>
-                  <textarea
-                    rows={3}
-                    value={observacoes}
-                    onChange={(e) => setObservacoes(e.target.value)}
-                    className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono"
-                  />
-                </div>
-
-                <div className="bg-slate-50 px-6 py-4 flex justify-end space-x-2 -mx-6 -mb-6 border-t border-gray-100 mt-6">
-                  <button
-                    type="button"
-                    disabled={isSubmittingSupplier}
-                    onClick={() => setEditingSupplier(null)}
-                    className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-semibold rounded-lg transition-colors cursor-pointer disabled:opacity-50"
-                  >
-                    Cancelar
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={isSubmittingSupplier}
-                    className="px-4 py-2 bg-slate-900 hover:bg-slate-850 text-white text-xs font-semibold rounded-lg transition-colors cursor-pointer flex items-center space-x-1.5 disabled:opacity-50"
-                  >
-                    {isSubmittingSupplier ? (
-                      <>
-                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                        <span>Salvando...</span>
-                      </>
-                    ) : (
-                      <span>Salvar Alterações</span>
-                    )}
-                  </button>
-                </div>
-              </form>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
-
-      {/* --- FORMULÁRIO DE REALIZAÇÃO DE AVALIAÇÃO TÉCNICA (ISO 8.4) --- */}
-      <AnimatePresence>
-        {isEvaluating && (
-          <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
-            <motion.div 
-              initial={{ scale: 0.95, y: 15 }}
-              animate={{ scale: 1, y: 0 }}
-              exit={{ scale: 0.95, y: 15 }}
-              className="bg-white rounded-xl shadow-2xl max-w-lg w-full border border-gray-100 overflow-hidden"
-            >
-              <div className="bg-blue-900 text-white p-5 flex items-center justify-between">
-                <h3 className="font-bold text-base flex items-center">
-                  <Award className="w-5 h-5 mr-2 text-blue-400" />
-                  Nova Avaliação Técnica: {isEvaluating.nomeFantasia}
-                </h3>
-                <button onClick={() => {
-                  setIsEvaluating(null);
-                  resetEvalForm();
-                }} className="text-white hover:text-blue-100 transition-colors">
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-
-              <form onSubmit={handlePerformEvaluation} className="p-6 space-y-4">
-                <div className="space-y-1">
-                  <label className="text-xs font-bold text-gray-600 block">Nome do Avaliador *</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="Ex: Carlos (Qualidade / Vickytex)"
-                    value={evaluator}
-                    onChange={(e) => setEvaluator(e.target.value)}
-                    className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
-                  />
-                </div>
-
-                {/* Critérios com sliders/inputs */}
-                <div className="bg-slate-50 p-4 rounded-xl border border-gray-100 space-y-4">
-                  <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wide">Critérios de Avaliação (0 a 100%)</h4>
-                  
-                  <div className="space-y-1">
-                    <div className="flex justify-between text-xs font-medium">
-                      <span className="text-gray-600">Qualidade da Matéria-Prima / Serviço:</span>
-                      <span className="text-blue-600 font-bold font-mono">{criterioQualidade}%</span>
-                    </div>
-                    <input
-                      type="range"
-                      min="0"
-                      max="100"
-                      value={criterioQualidade}
-                      onChange={(e) => setCriterioQualidade(Number(e.target.value))}
-                      className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
-                    />
-                  </div>
-
-                  <div className="space-y-1">
-                    <div className="flex justify-between text-xs font-medium">
-                      <span className="text-gray-600">Pontualidade de Entrega / Cronograma:</span>
-                      <span className="text-blue-600 font-bold font-mono">{criterioPrazo}%</span>
-                    </div>
-                    <input
-                      type="range"
-                      min="0"
-                      max="100"
-                      value={criterioPrazo}
-                      onChange={(e) => setCriterioPrazo(Number(e.target.value))}
-                      className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
-                    />
-                  </div>
-
-                  <div className="space-y-1">
-                    <div className="flex justify-between text-xs font-medium">
-                      <span className="text-gray-600">Suporte, Atendimento e Laudos Técnicos:</span>
-                      <span className="text-blue-600 font-bold font-mono">{criterioAtendimento}%</span>
-                    </div>
-                    <input
-                      type="range"
-                      min="0"
-                      max="100"
-                      value={criterioAtendimento}
-                      onChange={(e) => setCriterioAtendimento(Number(e.target.value))}
-                      className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
-                    />
-                  </div>
-                </div>
-
-                {/* Score Previsto e Indicação */}
-                <div className="p-3 bg-blue-50/50 rounded-lg border border-blue-100 flex items-center justify-between text-xs font-semibold">
-                  <span className="text-slate-600">Média Geral Projetada:</span>
-                  <div className="flex items-center space-x-2">
-                    <span className="text-sm font-extrabold text-blue-700 font-mono">
-                      {Math.round((Number(criterioQualidade) + Number(criterioPrazo) + Number(criterioAtendimento)) / 3)}%
-                    </span>
-                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                      Math.round((Number(criterioQualidade) + Number(criterioPrazo) + Number(criterioAtendimento)) / 3) >= 85 ? 'bg-emerald-100 text-emerald-800' :
-                      Math.round((Number(criterioQualidade) + Number(criterioPrazo) + Number(criterioAtendimento)) / 3) >= 70 ? 'bg-amber-100 text-amber-800' : 'bg-red-100 text-red-800'
-                    }`}>
-                      {Math.round((Number(criterioQualidade) + Number(criterioPrazo) + Number(criterioAtendimento)) / 3) >= 85 ? 'Aprovado' :
-                       Math.round((Number(criterioQualidade) + Number(criterioPrazo) + Number(criterioAtendimento)) / 3) >= 70 ? 'Aprovado com Restrições' : 'Reprovado'}
-                    </span>
-                  </div>
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-xs font-bold text-gray-600 block">Parecer Técnico / Notas da Auditoria do Lote</label>
-                  <textarea
-                    rows={3}
-                    placeholder="Ex: Amostragem de fios apresentou boa estabilidade dimensional e sem quebras em teares de alta velocidade..."
-                    value={parecerTecnico}
-                    onChange={(e) => setParecerTecnico(e.target.value)}
-                    className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono"
-                  />
-                </div>
-
-                <div className="bg-slate-50 px-6 py-4 flex justify-end space-x-2 -mx-6 -mb-6 border-t border-gray-100 mt-6">
-                  <button
-                    type="button"
-                    disabled={isSubmittingEval}
-                    onClick={() => {
-                      setIsEvaluating(null);
-                      resetEvalForm();
-                    }}
-                    className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-semibold rounded-lg transition-colors cursor-pointer disabled:opacity-50"
-                  >
-                    Cancelar
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={isSubmittingEval}
-                    className="px-4 py-2 bg-blue-950 hover:bg-blue-900 text-white text-xs font-semibold rounded-lg transition-colors cursor-pointer flex items-center space-x-1.5 disabled:opacity-50"
-                  >
-                    {isSubmittingEval ? (
-                      <>
-                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                        <span>Gravando Avaliação...</span>
-                      </>
-                    ) : (
-                      <span>Registrar Avaliação</span>
-                    )}
-                  </button>
-                </div>
-              </form>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
-      {/* --- CONFIRMAÇÃO DE EXCLUSÃO DE FORNECEDOR --- */}
-      <AnimatePresence>
-        {supplierToDelete && (
-          <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-            <motion.div
-              initial={{ scale: 0.95, y: 15 }}
-              animate={{ scale: 1, y: 0 }}
-              exit={{ scale: 0.95, y: 15 }}
-              className="bg-white rounded-xl shadow-2xl max-w-md w-full border border-gray-100 overflow-hidden p-6 space-y-4"
-            >
-              <div className="flex items-center space-x-3 pb-2 border-b border-gray-100">
-                <div className="p-2.5 bg-rose-50 text-rose-600 rounded-full shrink-0">
-                  <X className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="text-sm font-bold text-gray-900">
-                    Confirmar Exclusão de Fornecedor
-                  </h3>
-                  <p className="text-[10px] text-gray-400">Qualidade Vickytex — Homologação de Fornecedores</p>
-                </div>
-              </div>
-
-              <div className="space-y-3">
-                <p className="text-xs text-gray-600 leading-relaxed">
-                  Deseja realmente remover permanentemente o registro do fornecedor:
-                  <strong className="text-gray-900 font-extrabold block mt-1 text-sm bg-slate-50 px-3 py-2 rounded-lg border border-gray-200 font-mono">
-                    {supplierToDelete.name}
-                  </strong>
-                </p>
-                <p className="text-[10px] text-rose-600 font-semibold bg-rose-50/50 p-2.5 rounded-lg border border-rose-100">
-                  Atenção: Essa operação é permanente e removerá todo o histórico de avaliações vinculadas a este fornecedor.
-                </p>
-              </div>
-
-              <div className="flex items-center justify-end space-x-2 pt-3 border-t border-gray-100">
-                <button
-                  type="button"
-                  disabled={isDeletingSupplier}
-                  onClick={() => setSupplierToDelete(null)}
-                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-bold transition-colors disabled:opacity-50"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="button"
-                  disabled={isDeletingSupplier}
-                  onClick={confirmDeleteSupplier}
-                  className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-bold transition-colors shadow-xs flex items-center space-x-1.5 disabled:opacity-50"
-                >
-                  {isDeletingSupplier ? (
-                    <>
-                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                      <span>Removendo...</span>
-                    </>
-                  ) : (
-                    <span>Sim, Remover Fornecedor</span>
+                              {canDelete && (
+                                <button
+                                  onClick={() => setSupplierToDelete({ id: f.id, name: f.nomeFantasia || f.razaoSocial })}
+                                  className="p-1.5 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg cursor-pointer transition-colors"
+                                  title="Excluir Fornecedor"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
                   )}
-                </button>
-              </div>
-            </motion.div>
+                </tbody>
+              </table>
+            </div>
           </div>
-        )}
-      </AnimatePresence>
-
-      {/* Toast Notification Overlay */}
-      <AnimatePresence>
-        {toastMessage && (
-          <motion.div
-            initial={{ opacity: 0, y: 20, scale: 0.95 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 10, scale: 0.95 }}
-            className={`fixed bottom-6 right-6 z-50 flex items-center space-x-3 px-4 py-3 rounded-xl shadow-xl border ${
-              toastMessage.type === 'success'
-                ? 'bg-slate-900 text-white border-slate-800'
-                : 'bg-rose-900 text-white border-rose-800'
-            }`}
-          >
-            {toastMessage.type === 'success' ? (
-              <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-            ) : (
-              <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
-            )}
-            <span className="text-xs font-medium">{toastMessage.text}</span>
-            <button
-              onClick={() => setToastMessage(null)}
-              className="text-slate-400 hover:text-white ml-2 transition-colors"
-            >
-              <X className="w-3.5 h-3.5" />
-            </button>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Cartão de Ajuda ao Auditor sobre Cláusula ISO */}
-      <div id="fornecedores-help-box" className="p-5 rounded-xl border border-blue-100 dark:border-blue-950 bg-blue-50/20 dark:bg-blue-950/15 flex items-start space-x-3.5 mt-6">
-        <Award className="w-5 h-5 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
-        <div>
-          <h4 className="text-xs font-bold text-blue-800 dark:text-blue-300">
-            {personalizacao?.fornecedoresAjudaTitulo || 'Controle de Processos, Produtos e Serviços Providos Externamente (ISO 8.4)'}
-          </h4>
-          <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
-            {personalizacao?.fornecedoresAjudaSubtitulo || 'A organização deve assegurar que processos, produtos e serviços providos externamente estejam em conformidade com os requisitos. Isso inclui a definição e aplicação de critérios para a avaliação, seleção, monitoramento de desempenho e reavaliação de fornecedores externos.'}
-          </p>
         </div>
-      </div>
+      )}
+
+      {/* ======================================================== */}
+      {/* VISÃO 2: RANKING & BENCHMARK */}
+      {/* ======================================================== */}
+      {visaoAtiva === 'ranking' && (
+        <FornecedorRankingDashboard 
+          fornecedores={fornecedores}
+          onSelectFornecedor={(f) => setSelectedSupplier(f)}
+        />
+      )}
+
+      {/* ======================================================== */}
+      {/* VISÃO 3: CENTRAL DE ALERTAS & VENCIMENTOS */}
+      {/* ======================================================== */}
+      {visaoAtiva === 'alertas' && (
+        <FornecedorAlertasCentral 
+          fornecedores={fornecedores}
+          onSelectFornecedor={(f) => setSelectedSupplier(f)}
+        />
+      )}
+
+      {/* ======================================================== */}
+      {/* MODAL 360° DE DETALHES COMPLETOS (9 ABAS) */}
+      {/* ======================================================== */}
+      {selectedSupplier && (
+        <FornecedorModalDetalhes 
+          fornecedor={selectedSupplier}
+          onClose={() => setSelectedSupplier(null)}
+          onEditFornecedor={(f) => { setSelectedSupplier(null); setSupplierToEdit(f); setIsAddingSupplier(true); }}
+          onOpenNovaInspecao={(f) => setSupplierForInspecao(f)}
+          onOpenNovaAvaliacao={(f) => setSupplierForAvaliacao(f)}
+          onOpenNovaRNC={(f) => setSupplierForRNC(f)}
+          onOpenNovoDocumento={(f) => setSupplierForDocumento(f)}
+          onOpenNovaAuditoria={(f) => setSupplierForAuditoria(f)}
+          onOpenBloqueio={(f) => setSupplierForBloqueio(f)}
+          onOpenImpressao={(f) => setSupplierForImpressao(f)}
+          onRecalcularIQFAutomatico={(f) => handleRecalcularIQF(f)}
+        />
+      )}
+
+      {/* MODAL DE CADASTRO / EDIÇÃO */}
+      {isAddingSupplier && (
+        <FornecedorModalCadastro 
+          fornecedorEditar={supplierToEdit}
+          categoriasExistentes={categorias}
+          fornecedoresCadastrados={fornecedores}
+          onClose={() => { setIsAddingSupplier(false); setSupplierToEdit(null); }}
+          onSave={handleSaveSupplier}
+        />
+      )}
+
+      {/* MODAL DE NOVA INSPEÇÃO DE LOTE TÊXTIL */}
+      {supplierForInspecao && (
+        <FornecedorModalInspecao 
+          fornecedor={supplierForInspecao}
+          onClose={() => setSupplierForInspecao(null)}
+          onSaveInspecao={handleSaveInspecao}
+        />
+      )}
+
+      {/* MODAL DE AVALIAÇÃO IQF */}
+      {supplierForAvaliacao && (
+        <FornecedorModalAvaliacao 
+          fornecedor={supplierForAvaliacao}
+          onClose={() => setSupplierForAvaliacao(null)}
+          onSaveAvaliacao={handleSaveAvaliacao}
+        />
+      )}
+
+      {/* MODAL DE NOVA NÃO CONFORMIDADE (RNC) */}
+      {supplierForRNC && (
+        <FornecedorModalRNC 
+          fornecedor={supplierForRNC}
+          onClose={() => setSupplierForRNC(null)}
+          onSaveRNC={handleSaveRNC}
+        />
+      )}
+
+      {/* MODAL DE NOVO DOCUMENTO */}
+      {supplierForDocumento && (
+        <FornecedorModalDocumento 
+          fornecedor={supplierForDocumento}
+          onClose={() => setSupplierForDocumento(null)}
+          onSaveDocumento={handleSaveDocumento}
+        />
+      )}
+
+      {/* MODAL DE NOVA AUDITORIA */}
+      {supplierForAuditoria && (
+        <FornecedorModalAuditoria 
+          fornecedor={supplierForAuditoria}
+          onClose={() => setSupplierForAuditoria(null)}
+          onSaveAuditoria={handleSaveAuditoria}
+        />
+      )}
+
+      {/* MODAL DE BLOQUEIO / DESBLOQUEIO */}
+      {supplierForBloqueio && (
+        <FornecedorModalBloqueio 
+          fornecedor={supplierForBloqueio}
+          onClose={() => setSupplierForBloqueio(null)}
+          onConfirm={handleConfirmBloqueio}
+        />
+      )}
+
+      {/* MODAL DE FICHA DE IMPRESSÃO (PDF/PRINT) */}
+      {supplierForImpressao && (
+        <FornecedorFichaImpressao 
+          fornecedor={supplierForImpressao}
+          onClose={() => setSupplierForImpressao(null)}
+        />
+      )}
+
+      {/* MODAL DE CONFIRMAÇÃO DE EXCLUSÃO */}
+      {supplierToDelete && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-xl max-w-sm w-full p-6 border border-slate-200 dark:border-slate-800 space-y-4">
+            <div className="flex items-center space-x-3 text-rose-600">
+              <AlertTriangle className="w-6 h-6" />
+              <h3 className="font-extrabold text-sm text-slate-900 dark:text-white">Confirmar Exclusão</h3>
+            </div>
+            <p className="text-xs text-slate-600 dark:text-slate-400">
+              Deseja realmente remover o fornecedor <strong>{supplierToDelete.name}</strong>? Todo o histórico de avaliações e inspeções será removido.
+            </p>
+            <div className="flex items-center justify-end space-x-2 pt-2">
+              <button
+                onClick={() => setSupplierToDelete(null)}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-semibold rounded-lg transition-colors cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={() => handleDeleteSupplier(supplierToDelete.id, supplierToDelete.name)}
+                className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-lg transition-colors cursor-pointer"
+              >
+                Sim, Excluir
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

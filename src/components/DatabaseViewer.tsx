@@ -22,7 +22,6 @@ import {
 } from 'lucide-react';
 import { ConfirmModal } from './common/ConfirmModal';
 import { Documento, ActivityLog, Auditoria, NaoConformidade, PlanoAcao, RiscoOportunidade, Auditoria5S, UserAccount, RolePermission } from '../types';
-import { INITIAL_FORNECEDORES } from '../utils/mockData';
 import { db } from '../firebase/firebase';
 import { collection, getDocs } from 'firebase/firestore';
 
