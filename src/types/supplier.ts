@@ -89,8 +89,24 @@ export interface AprovacaoEtapa {
   justificativa?: string;
 }
 
+// Item individual de parâmetro de inspeção com Item, Resultado, Padrão, Unidade, Tolerância Mín e Máx
+export interface ParametroInspecaoItem {
+  id: string;
+  nome: string; // Ex: "Gramatura", "Largura Útil", "Delta E"
+  valorResultado: number | string; // Valor medido/obtido
+  valorPadrao: number | string; // Valor especificado/esperado
+  unidadeMedida: string; // Ex: "g/m²", "cm", "ΔE", "%", "SPI", "N", "grau"
+  toleranciaMin?: number | string; // Mínimo tolerado
+  toleranciaMax?: number | string; // Máximo tolerado
+  statusConformidade: 'Conforme' | 'Fora da Tolerância' | 'Alerta';
+  observacao?: string;
+}
+
 // Parâmetros operacionais têxteis Vickytex por lote
 export interface ParametrosTexteisLote {
+  // Itens dinâmicos parametrizados (Item, Resultado x Padrão, Unidade, Min/Max)
+  itensParametros?: ParametroInspecaoItem[];
+
   // Malharias e Tinturarias
   deltaE?: number; // Desvio de cor (ideal <= 0.8)
   gramaturaReal?: number; // g/m²

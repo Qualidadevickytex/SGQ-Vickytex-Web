@@ -186,7 +186,20 @@ export const FornecedorFichaImpressao: React.FC<FornecedorFichaImpressaoProps> =
                       <td className="p-2 font-mono">{insp.quantidadeRecebida} {insp.unidade}</td>
                       <td className="p-2 font-bold">{insp.resultado}</td>
                       <td className="p-2 font-mono">{insp.taxaDefeitoPercentual}%</td>
-                      <td className="p-2 text-slate-600">{insp.observacoes || '-'}</td>
+                      <td className="p-2 text-slate-600">
+                        {insp.parametrosTexteis?.itensParametros && insp.parametrosTexteis.itensParametros.length > 0 ? (
+                          <div className="space-y-0.5 text-[10px]">
+                            {insp.parametrosTexteis.itensParametros.slice(0, 3).map((it, idx) => (
+                              <div key={idx}>
+                                <strong>{it.nome}:</strong> {it.valorResultado} {it.unidadeMedida} (Padrão: {it.valorPadrao} {it.unidadeMedida}) - {it.statusConformidade}
+                              </div>
+                            ))}
+                            {insp.observacoes && <p className="italic mt-0.5">{insp.observacoes}</p>}
+                          </div>
+                        ) : (
+                          insp.observacoes || '-'
+                        )}
+                      </td>
                     </tr>
                   ))}
                 </tbody>

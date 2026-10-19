@@ -50,6 +50,8 @@ export const DocumentoAbasDetalhes: React.FC<DocumentoAbasDetalhesProps> = ({
   const [copyDataEntrega, setCopyDataEntrega] = useState(new Date().toISOString().split('T')[0]);
   const [copyRecebidoPor, setCopyRecebidoPor] = useState('');
   const [isAddCopyOpen, setIsAddCopyOpen] = useState(false);
+  const [editingCopy, setEditingCopy] = useState<CopiaDistribuida | null>(null);
+  const [deletingCopyId, setDeletingCopyId] = useState<string | null>(null);
 
   // Nova Revisão
   const [isRevisionModalOpen, setIsRevisionModalOpen] = useState(false);
@@ -492,6 +494,8 @@ export const DocumentoAbasDetalhes: React.FC<DocumentoAbasDetalhesProps> = ({
 
   // Avançar fase do fluxo com validação de senha do usuário
   const handleAdvanceStatus = async (nextStatus: DocumentStatus, actionName: string, detailName: string, requiredPerfil?: string) => {
+    if (isSigning) return;
+
     setIsSigning(true);
     setSignatureError('');
 
@@ -872,6 +876,69 @@ export const DocumentoAbasDetalhes: React.FC<DocumentoAbasDetalhesProps> = ({
     
     onUpdateDocument(docWithLogs);
     onAddLog('Recall de Cópia', `Recolhimento físico/digital registrado para cópia obsoleta do documento ${activeDoc.codigo}.`, activeDoc.id);
+  };
+
+  // Salvar Edição de Cópia Distribuída
+  const handleUpdateCopy = (updatedCopy: CopiaDistribuida) => {
+    if (!activeDoc.distribuicaoCopias) return;
+
+    const updatedCopies = activeDoc.distribuicaoCopias.map(c => 
+      c.id === updatedCopy.id ? updatedCopy : c
+    );
+
+    const updatedDoc: Documento = {
+      ...activeDoc,
+      distribuicaoCopias: updatedCopies,
+      updatedAt: new Date().toISOString()
+    };
+
+    const docWithLogs = addDocumentLog(
+      updatedDoc,
+      'Cópia Atualizada',
+      `Dados da cópia controlada para ${updatedCopy.destinatario} foram alterados por ${currentUser?.name || currentUser?.email || 'Usuário'}.`
+    );
+
+    onUpdateDocument(docWithLogs);
+    onAddLog(
+      'Edição de Cópia',
+      `Cópia do documento ${activeDoc.codigo} para ${updatedCopy.destinatario} atualizada.`,
+      activeDoc.id
+    );
+
+    setEditingCopy(null);
+    setActionSuccessMsg('Cópia controlada atualizada com sucesso!');
+    setTimeout(() => setActionSuccessMsg(''), 3000);
+  };
+
+  // Excluir Definitivamente Registro de Cópia Controlada
+  const handleDeleteCopy = (copyId: string) => {
+    if (!activeDoc.distribuicaoCopias) return;
+
+    const copyToRemove = activeDoc.distribuicaoCopias.find(c => c.id === copyId);
+    const updatedCopies = activeDoc.distribuicaoCopias.filter(c => c.id !== copyId);
+
+    const updatedDoc: Documento = {
+      ...activeDoc,
+      distribuicaoCopias: updatedCopies,
+      updatedAt: new Date().toISOString()
+    };
+
+    const docWithLogs = addDocumentLog(
+      updatedDoc,
+      'Cópia Excluída',
+      `Registro da cópia controlada ${copyToRemove?.destinatario || ''} foi excluído por ${currentUser?.name || currentUser?.email || 'Usuário'}.`
+    );
+
+    onUpdateDocument(docWithLogs);
+    onAddLog(
+      'Exclusão de Cópia',
+      `Cópia do documento ${activeDoc.codigo} (${copyToRemove?.destinatario || ''}) excluída do controle de distribuição.`,
+      activeDoc.id
+    );
+
+    setDeletingCopyId(null);
+    setActionSuccessMsg('Cópia controlada excluída com sucesso!');
+    setTimeout(() => setActionSuccessMsg(''), 3000);
   };
 
   // Iniciar Nova Revisão Técnica (ISO 9001:2015 - Ciclo PDCA)
@@ -2044,7 +2111,7 @@ export const DocumentoAbasDetalhes: React.FC<DocumentoAbasDetalhesProps> = ({
                       )}
                     </div>
 
-                    <div className="flex items-center gap-2 shrink-0">
+                    <div className="flex items-center gap-1.5 shrink-0">
                       {/* Botão de Recebimento de Cópia */}
                       {copia.status === 'Ativa' && copia.aceiteStatus !== 'Aceito' && (
                         <button
@@ -2066,6 +2133,28 @@ export const DocumentoAbasDetalhes: React.FC<DocumentoAbasDetalhesProps> = ({
                           Recolher (Recall)
                         </button>
                       )}
+
+                      {/* Editar Cópia */}
+                      {(currentUser?.role === 'Qualidade' || currentUser?.role === 'Supervisor' || currentUser?.role === 'Administrador' || currentUser?.role === 'Gestor') && (
+                        <button
+                          onClick={() => setEditingCopy(copia)}
+                          className="p-1 text-slate-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/40 rounded-lg transition-colors cursor-pointer"
+                          title="Editar dados desta cópia"
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+
+                      {/* Excluir Cópia */}
+                      {(currentUser?.role === 'Qualidade' || currentUser?.role === 'Administrador') && (
+                        <button
+                          onClick={() => setDeletingCopyId(copia.id)}
+                          className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg transition-colors cursor-pointer"
+                          title="Excluir registro desta cópia"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
                     </div>
                   </div>
                 ))
@@ -2074,6 +2163,195 @@ export const DocumentoAbasDetalhes: React.FC<DocumentoAbasDetalhesProps> = ({
                   <p className="text-xs text-slate-400 italic">Nenhuma cópia controlada digital ou física distribuída registrada para este documento.</p>
                 </div>
               )}
+            </div>
+          </div>
+        )}
+
+        {/* Modal de Edição de Cópia Distribuída */}
+        {editingCopy && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+            <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl max-w-md w-full border border-slate-200 dark:border-slate-800 p-5 space-y-4 animate-fade-in">
+              <div className="flex items-center justify-between pb-3 border-b border-slate-150 dark:border-slate-800">
+                <div className="flex items-center space-x-2">
+                  <div className="p-2 bg-blue-100 dark:bg-blue-900/50 text-blue-600 rounded-lg">
+                    <Pencil className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-extrabold text-slate-800 dark:text-slate-100">Editar Cópia Controlada</h3>
+                    <p className="text-[10px] text-slate-400">Atualize os dados de entrega ou posto de trabalho</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setEditingCopy(null)}
+                  className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-lg cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (editingCopy) handleUpdateCopy(editingCopy);
+                }}
+                className="space-y-3"
+              >
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">
+                    Destinatário / Posto de Trabalho *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={editingCopy.destinatario}
+                    onChange={(e) => setEditingCopy({ ...editingCopy, destinatario: e.target.value })}
+                    className="w-full p-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs"
+                    placeholder="Ex: Tear Circular, Almoxarifado, Google Drive"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">
+                    Responsável / Líder do Setor *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={editingCopy.recebidoPor}
+                    onChange={(e) => setEditingCopy({ ...editingCopy, recebidoPor: e.target.value })}
+                    className="w-full p-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs"
+                    placeholder="Ex: Carlos (Líder Fiação)"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">
+                      Tipo de Cópia
+                    </label>
+                    <select
+                      value={editingCopy.tipo}
+                      onChange={(e) => setEditingCopy({ ...editingCopy, tipo: e.target.value as any })}
+                      className="w-full p-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs"
+                    >
+                      <option value="Digital Controlada">Digital Controlada</option>
+                      <option value="Física Impressa">Física Impressa</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">
+                      Quantidade
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      value={editingCopy.quantidade}
+                      onChange={(e) => setEditingCopy({ ...editingCopy, quantidade: Number(e.target.value) })}
+                      className="w-full p-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">
+                      Data de Entrega
+                    </label>
+                    <input
+                      type="date"
+                      value={editingCopy.dataEntrega}
+                      onChange={(e) => setEditingCopy({ ...editingCopy, dataEntrega: e.target.value })}
+                      className="w-full p-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">
+                      Status da Cópia
+                    </label>
+                    <select
+                      value={editingCopy.status}
+                      onChange={(e) => setEditingCopy({ ...editingCopy, status: e.target.value as any })}
+                      className="w-full p-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs"
+                    >
+                      <option value="Ativa">Ativa</option>
+                      <option value="Substituída">Substituída</option>
+                      <option value="Recolhida">Recolhida</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">
+                    Protocolo de Recebimento
+                  </label>
+                  <select
+                    value={editingCopy.aceiteStatus || 'Pendente'}
+                    onChange={(e) => setEditingCopy({ 
+                      ...editingCopy, 
+                      aceiteStatus: e.target.value as any,
+                      dataAceite: e.target.value === 'Aceito' ? (editingCopy.dataAceite || new Date().toLocaleDateString('pt-BR')) : undefined
+                    })}
+                    className="w-full p-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs"
+                  >
+                    <option value="Pendente">⏱ Pendente de Aceite</option>
+                    <option value="Aceito">✓ Recebido e Assinado</option>
+                  </select>
+                </div>
+
+                <div className="pt-3 border-t border-slate-150 dark:border-slate-800 flex justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setEditingCopy(null)}
+                    className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-lg text-xs font-semibold cursor-pointer"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold shadow-xs cursor-pointer flex items-center gap-1.5"
+                  >
+                    <Save className="w-3.5 h-3.5" />
+                    Salvar Alterações
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* Confirmação de Exclusão de Cópia */}
+        {deletingCopyId && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+            <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl max-w-sm w-full border border-slate-200 dark:border-slate-800 p-5 space-y-4 animate-fade-in text-center">
+              <div className="w-12 h-12 bg-rose-100 dark:bg-rose-950/40 text-rose-600 rounded-full flex items-center justify-center mx-auto">
+                <Trash2 className="w-6 h-6" />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-sm font-extrabold text-slate-900 dark:text-white">
+                  Excluir Cópia Controlada?
+                </h3>
+                <p className="text-xs text-slate-500">
+                  Tem certeza de que deseja remover esta cópia do controle de distribuição? Esta ação será registrada no histórico de auditoria.
+                </p>
+              </div>
+              <div className="flex items-center justify-center gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setDeletingCopyId(null)}
+                  className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-lg text-xs font-semibold cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleDeleteCopy(deletingCopyId)}
+                  className="px-4 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-bold shadow-xs cursor-pointer"
+                >
+                  Confirmar Exclusão
+                </button>
+              </div>
             </div>
           </div>
         )}

@@ -127,6 +127,11 @@ export function calcularEstatisticasReaisFornecedor(f: Fornecedor): ResumoEstati
         if (p.conformidadeTabelaMedidas === 'Fora da Tolerância') desviosTecnicos++;
         if (p.aderenciaResistenciaLavagem === 'Descascando / Trincando') desviosTecnicos++;
         if (p.especificacaoTecnicaConforme === false) desviosTecnicos++;
+        if (p.itensParametros && Array.isArray(p.itensParametros)) {
+          p.itensParametros.forEach(item => {
+            if (item.statusConformidade === 'Fora da Tolerância') desviosTecnicos++;
+          });
+        }
       }
     });
     scoreEspecificacoes = Math.max(40, Math.min(100, 100 - (desviosTecnicos * 12)));

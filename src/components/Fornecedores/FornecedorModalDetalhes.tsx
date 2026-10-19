@@ -69,8 +69,16 @@ export const FornecedorModalDetalhes: React.FC<FornecedorModalDetalhesProps> = (
   onUpdatePlanoAcaoStatus
 }) => {
   const [activeTab, setActiveTab] = useState<number>(1);
+  const [filtroVerificacao, setFiltroVerificacao] = useState<'todos' | 'inspecoes' | 'auditorias'>('todos');
   const stats = calcularEstatisticasReaisFornecedor(fornecedor);
   const alertas = extrairAlertasFornecedor(fornecedor);
+
+  const totalInspecoes = fornecedor.historicoInspecoes?.length || 0;
+  const totalAuditorias = fornecedor.auditorias?.length || 0;
+  const totalVerificacoes = totalInspecoes + totalAuditorias;
+  const mediaAuditorias = totalAuditorias > 0 
+    ? Math.round((fornecedor.auditorias || []).reduce((acc, a) => acc + (a.notaChecklist || 0), 0) / totalAuditorias) 
+    : 0;
 
   const isMalhariaTinturaria = fornecedor.categoria.toLowerCase().includes('tinturaria') || fornecedor.categoria.toLowerCase().includes('malharia');
   const isFaccao = fornecedor.categoria.toLowerCase().includes('facção') || fornecedor.categoria.toLowerCase().includes('costura');
@@ -171,7 +179,7 @@ export const FornecedorModalDetalhes: React.FC<FornecedorModalDetalhesProps> = (
           </div>
         )}
 
-        {/* Menu das 9 Abas do Ciclo Completo ISO 9001 - Com scroll suave e visual limpo */}
+        {/* Menu das 8 Abas do Ciclo Completo ISO 9001 - Com scroll suave e visual limpo */}
         <div className="border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/80 relative">
           <div className="flex overflow-x-auto select-none scrollbar-thin scrollbar-thumb-slate-300 dark:scrollbar-thumb-slate-700 scroll-smooth px-2">
             {[
@@ -179,11 +187,10 @@ export const FornecedorModalDetalhes: React.FC<FornecedorModalDetalhesProps> = (
               { id: 2, label: '2. Riscos', badge: fornecedor.gestaoRisco?.monossuprimento ? 'Mono' : undefined, icon: ShieldAlert },
               { id: 3, label: '3. Qualificação', icon: ShieldCheck },
               { id: 4, label: `4. Documentação (${fornecedor.documentos?.length || 0})`, icon: FileCheck2 },
-              { id: 5, label: `5. Inspeções (${fornecedor.historicoInspecoes?.length || 0})`, icon: ClipboardCheck },
+              { id: 5, label: `5. Inspeções & Auditorias (${totalVerificacoes})`, icon: ClipboardCheck },
               { id: 6, label: `6. Não Conformidades (${fornecedor.ocorrenciasRNC?.length || 0})`, icon: FileWarning, hasAlert: (fornecedor.ocorrenciasRNC?.filter(r => r.status === 'Aberta').length || 0) > 0 },
               { id: 7, label: stats.totalLotes > 0 || (fornecedor.historicoAvaliacoes && fornecedor.historicoAvaliacoes.length > 0) ? `7. Avaliações (IQF ${stats.iqfGeral}%)` : `7. Avaliações (Sem lotes)`, icon: Award },
-              { id: 8, label: `8. Auditorias (${fornecedor.auditorias?.length || 0})`, icon: CheckSquare },
-              { id: 9, label: '9. Histórico', icon: History },
+              { id: 8, label: '8. Histórico & Log', icon: History },
             ].map(tab => {
               const Icon = tab.icon;
               const isActive = activeTab === tab.id;
@@ -402,6 +409,9 @@ export const FornecedorModalDetalhes: React.FC<FornecedorModalDetalhesProps> = (
           {/* ======================================================== */}
           {/* ABA 3: QUALIFICAÇÃO & APROVAÇÃO */}
           {/* ======================================================== */}
+          {/* ======================================================== */}
+          {/* ABA 3: QUALIFICAÇÃO & APROVAÇÃO */}
+          {/* ======================================================== */}
           {activeTab === 3 && (
             <div className="space-y-6 animate-fade-in">
               {/* Qualificação Inicial */}
@@ -411,48 +421,72 @@ export const FornecedorModalDetalhes: React.FC<FornecedorModalDetalhesProps> = (
                     <ShieldCheck className="w-4 h-4 mr-1.5 text-blue-600" />
                     Processo de Qualificação & Homologação Inicial
                   </h3>
-                  {fornecedor.qualificacaoInicial?.statusFinal && (
-                    <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
-                      {fornecedor.qualificacaoInicial.statusFinal}
-                    </span>
-                  )}
+                  <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold border ${
+                    (fornecedor.qualificacaoInicial?.statusFinal || fornecedor.statusQualificacao) === 'Qualificado'
+                      ? 'bg-emerald-100 text-emerald-800 border-emerald-300 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800'
+                      : (fornecedor.qualificacaoInicial?.statusFinal || fornecedor.statusQualificacao) === 'Qualificado com Restrições'
+                      ? 'bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800'
+                      : (fornecedor.qualificacaoInicial?.statusFinal || fornecedor.statusQualificacao) === 'Bloqueado' || (fornecedor.qualificacaoInicial?.statusFinal || fornecedor.statusQualificacao) === 'Não Qualificado' || (fornecedor.qualificacaoInicial?.statusFinal || fornecedor.statusQualificacao) === 'Reprovado'
+                      ? 'bg-rose-100 text-rose-800 border-rose-300 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800'
+                      : 'bg-blue-100 text-blue-800 border-blue-300 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-800'
+                  }`}>
+                    {fornecedor.qualificacaoInicial?.statusFinal || fornecedor.statusQualificacao || 'Em Avaliação'}
+                  </span>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs bg-slate-50 dark:bg-slate-900/50 p-3.5 rounded-xl border border-slate-150 dark:border-slate-800">
                   <div>
                     <span className="text-slate-400 text-[10px] block uppercase font-semibold">Início do Processo</span>
                     <span className="font-bold text-slate-800 dark:text-slate-200 font-mono">
-                      {fornecedor.qualificacaoInicial?.dataInicio || '2026-01-10'}
+                      {fornecedor.qualificacaoInicial?.dataInicio || fornecedor.dataQualificacao || 'Aguardando Início'}
                     </span>
                   </div>
                   <div>
                     <span className="text-slate-400 text-[10px] block uppercase font-semibold">Lote Piloto / Amostras</span>
-                    <span className="font-bold text-emerald-600">
-                      {fornecedor.qualificacaoInicial?.lotePilotoStatus || 'Aprovado'}
+                    <span className={`font-bold ${
+                      fornecedor.qualificacaoInicial?.lotePilotoStatus === 'Aprovado' ? 'text-emerald-600' :
+                      fornecedor.qualificacaoInicial?.lotePilotoStatus === 'Reprovado' ? 'text-rose-600' :
+                      'text-amber-600'
+                    }`}>
+                      {fornecedor.qualificacaoInicial?.lotePilotoStatus || (fornecedor.statusQualificacao === 'Qualificado' ? 'Aprovado' : 'Pendente / Em Testes')}
                     </span>
                   </div>
                   <div>
                     <span className="text-slate-400 text-[10px] block uppercase font-semibold">Auditoria de Homologação</span>
-                    <span className="font-bold text-emerald-600">
-                      {fornecedor.qualificacaoInicial?.auditoriaInicialStatus || 'Conforme'}
+                    <span className={`font-bold ${
+                      fornecedor.qualificacaoInicial?.auditoriaInicialStatus === 'Conforme' ? 'text-emerald-600' :
+                      fornecedor.qualificacaoInicial?.auditoriaInicialStatus === 'Não Conforme' ? 'text-rose-600' :
+                      'text-slate-500'
+                    }`}>
+                      {fornecedor.qualificacaoInicial?.auditoriaInicialStatus || (fornecedor.auditorias && fornecedor.auditorias.length > 0 ? 'Conforme' : 'Não Realizada')}
                     </span>
                   </div>
                 </div>
 
                 {/* Critérios Iniciais */}
-                {fornecedor.qualificacaoInicial?.criterios && (
+                {fornecedor.qualificacaoInicial?.criterios && fornecedor.qualificacaoInicial.criterios.length > 0 ? (
                   <div className="space-y-2">
                     <span className="text-[11px] font-bold text-slate-700 dark:text-slate-300 block">Critérios Técnicos Verificados:</span>
                     <div className="space-y-1.5">
                       {fornecedor.qualificacaoInicial.criterios.map(cr => (
                         <div key={cr.id} className="flex items-center justify-between p-2.5 bg-slate-50 dark:bg-slate-800/40 rounded-lg text-xs">
                           <span className="text-slate-700 dark:text-slate-300 font-medium">{cr.descricao}</span>
-                          <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded text-[10px] font-bold">
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                            cr.status === 'Conforme' ? 'bg-emerald-100 text-emerald-800' :
+                            cr.status === 'Não Conforme' ? 'bg-rose-100 text-rose-800' :
+                            cr.status === 'Dispensado' ? 'bg-slate-200 text-slate-700' :
+                            'bg-amber-100 text-amber-800'
+                          }`}>
                             {cr.status}
                           </span>
                         </div>
                       ))}
                     </div>
+                  </div>
+                ) : (
+                  <div className="p-3 bg-slate-50 dark:bg-slate-800/40 rounded-lg text-xs text-slate-500">
+                    <p className="font-medium text-slate-700 dark:text-slate-300">Nenhum checklist de homologação inicial anexado.</p>
+                    <p className="text-[11px] text-slate-400 mt-0.5">Os requisitos são validados conforme a criticidade ({fornecedor.criticidade}) e inspeções de recebimento na fábrica.</p>
                   </div>
                 )}
               </div>
@@ -466,21 +500,51 @@ export const FornecedorModalDetalhes: React.FC<FornecedorModalDetalhesProps> = (
 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   {(fornecedor.fluxoAprovacao || [
-                    { id: 'f-1', etapa: 'Qualidade' as const, responsavelNome: 'Vicky (Qualidade)', data: '2026-01-14', status: 'Aprovado' as const, justificativa: 'Laudos técnicos aprovados.' },
-                    { id: 'f-2', etapa: 'Compras' as const, responsavelNome: 'Suprimentos Vickytex', data: '2026-01-15', status: 'Aprovado' as const, justificativa: 'Condições comerciais validadas.' },
-                    { id: 'f-3', etapa: 'Diretoria' as const, responsavelNome: 'Diretoria Industrial', data: '2026-01-15', status: 'Aprovado' as const, justificativa: 'Homologação confirmada.' }
+                    { 
+                      id: 'f-1', 
+                      etapa: 'Qualidade' as const, 
+                      responsavelNome: fornecedor.statusQualificacao === 'Qualificado' ? 'Qualidade Vickytex' : 'Aguardando validação', 
+                      data: fornecedor.dataQualificacao || undefined, 
+                      status: (fornecedor.statusQualificacao === 'Qualificado' ? 'Aprovado' : fornecedor.statusQualificacao === 'Bloqueado' ? 'Reprovado' : 'Pendente') as any, 
+                      justificativa: fornecedor.statusQualificacao === 'Qualificado' ? 'Homologação técnica aprovada.' : 'Aguardando conferência documental e técnica.' 
+                    },
+                    { 
+                      id: 'f-2', 
+                      etapa: 'Compras' as const, 
+                      responsavelNome: fornecedor.statusQualificacao === 'Qualificado' ? 'Suprimentos Vickytex' : 'Aguardando validação', 
+                      data: fornecedor.dataQualificacao || undefined, 
+                      status: (fornecedor.statusQualificacao === 'Qualificado' ? 'Aprovado' : fornecedor.statusQualificacao === 'Bloqueado' ? 'Reprovado' : 'Pendente') as any, 
+                      justificativa: fornecedor.statusQualificacao === 'Qualificado' ? 'Condições comerciais acordadas.' : 'Análise de cadastro e preços pendente.' 
+                    },
+                    { 
+                      id: 'f-3', 
+                      etapa: 'Diretoria' as const, 
+                      responsavelNome: fornecedor.statusQualificacao === 'Qualificado' ? 'Diretoria Industrial' : 'Aguardando parecer final', 
+                      data: fornecedor.dataQualificacao || undefined, 
+                      status: (fornecedor.statusQualificacao === 'Qualificado' ? 'Aprovado' : fornecedor.statusQualificacao === 'Bloqueado' ? 'Reprovado' : 'Pendente') as any, 
+                      justificativa: fornecedor.statusQualificacao === 'Qualificado' ? 'Homologação corporativa autorizada.' : 'Liberação para compras sujeita à aprovação das etapas anteriores.' 
+                    }
                   ]).map(etapa => (
                     <div key={etapa.id} className="p-3.5 bg-slate-50 dark:bg-slate-800/40 rounded-xl border border-slate-150 dark:border-slate-700 text-xs space-y-1.5">
                       <div className="flex items-center justify-between">
                         <span className="font-extrabold text-slate-800 dark:text-slate-200 uppercase">{etapa.etapa}</span>
-                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800">
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                          etapa.status === 'Aprovado' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300' :
+                          etapa.status === 'Reprovado' ? 'bg-rose-100 text-rose-800 dark:bg-rose-950/40 dark:text-rose-300' :
+                          etapa.status === 'Aprovado Condicional' ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300' :
+                          'bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-300'
+                        }`}>
                           {etapa.status}
                         </span>
                       </div>
                       <p className="text-slate-600 dark:text-slate-400">Por: <strong>{etapa.responsavelNome}</strong></p>
                       {etapa.data && <p className="text-[10px] font-mono text-slate-400">Em {etapa.data}</p>}
                       {etapa.justificativa && (
-                        <p className="text-[11px] text-slate-500 italic border-l-2 border-emerald-500 pl-2">
+                        <p className={`text-[11px] italic border-l-2 pl-2 ${
+                          etapa.status === 'Aprovado' ? 'border-emerald-500 text-slate-500' :
+                          etapa.status === 'Reprovado' ? 'border-rose-500 text-rose-600' :
+                          'border-slate-400 text-slate-500'
+                        }`}>
                           {etapa.justificativa}
                         </p>
                       )}
@@ -569,64 +633,129 @@ export const FornecedorModalDetalhes: React.FC<FornecedorModalDetalhesProps> = (
           )}
 
           {/* ======================================================== */}
-          {/* ABA 5: INSPEÇÕES DE LOTES TÊXTEIS (DADOS REAIS VICKYTEX) */}
+          {/* ABA 5: CONTROLE TÉCNICO UNIFICADO (INSPEÇÕES + AUDITORIAS) */}
           {/* ======================================================== */}
           {activeTab === 5 && (
             <div className="space-y-4 animate-fade-in">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
                   <h3 className="text-xs font-extrabold uppercase tracking-wider text-slate-700 dark:text-slate-300 flex items-center">
                     <ClipboardCheck className="w-4 h-4 mr-1.5 text-blue-600" />
-                    Histórico de Inspeções de Recebimento Têxtil (Alimentação Automática)
+                    Controle Técnico Unificado: Inspeções de Lotes & Auditorias de Fábrica
                   </h3>
                   <p className="text-xs text-slate-500 mt-0.5">
-                    Dados reais de qualidade: tonalidade Delta E, gramatura g/m², largura, costuras e defeitos.
+                    Verificação física de materiais têxteis no recebimento e auditorias de processo/planta do parceiro (ISO 9001: 8.4).
                   </p>
                 </div>
-                <button
-                  onClick={() => onOpenNovaInspecao(fornecedor)}
-                  className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg transition-colors cursor-pointer flex items-center shadow-xs"
-                >
-                  <PlusCircle className="w-3.5 h-3.5 mr-1.5" />
-                  Nova Inspeção de Lote
-                </button>
+                <div className="flex items-center space-x-2 shrink-0">
+                  <button
+                    onClick={() => onOpenNovaInspecao(fornecedor)}
+                    className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg transition-colors cursor-pointer flex items-center shadow-xs"
+                  >
+                    <PlusCircle className="w-3.5 h-3.5 mr-1.5" />
+                    Nova Inspeção de Lote
+                  </button>
+                  <button
+                    onClick={() => onOpenNovaAuditoria(fornecedor)}
+                    className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg transition-colors cursor-pointer flex items-center shadow-xs"
+                  >
+                    <CheckSquare className="w-3.5 h-3.5 mr-1.5" />
+                    Agendar Auditoria
+                  </button>
+                </div>
               </div>
 
-              {/* Cards de Resumo Rápido das Inspeções */}
+              {/* Cards de Resumo Integrado das Verificações */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700 text-xs text-center">
-                  <span className="text-[10px] text-slate-400 block uppercase font-semibold">Total de Lotes</span>
-                  <span className="text-lg font-black font-mono text-slate-800 dark:text-slate-100">{stats.totalLotes}</span>
+                  <span className="text-[10px] text-slate-400 block uppercase font-semibold">Total Verificações</span>
+                  <span className="text-lg font-black font-mono text-slate-800 dark:text-slate-100">{totalVerificacoes}</span>
+                  <span className="text-[9px] text-slate-400 block">{totalInspecoes} lotes • {totalAuditorias} auditorias</span>
                 </div>
                 <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700 text-xs text-center">
-                  <span className="text-[10px] text-slate-400 block uppercase font-semibold">Taxa Aprovação</span>
+                  <span className="text-[10px] text-slate-400 block uppercase font-semibold">Aprovação Lotes</span>
                   <span className="text-lg font-black font-mono text-emerald-600">{stats.taxaAprovacao}%</span>
+                  <span className="text-[9px] text-slate-400 block">{stats.lotesAprovados} de {stats.totalLotes} aprovados</span>
                 </div>
                 <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700 text-xs text-center">
-                  <span className="text-[10px] text-slate-400 block uppercase font-semibold">Defeito Médio</span>
-                  <span className="text-lg font-black font-mono text-amber-600">{stats.taxaDefeitoMedia}%</span>
+                  <span className="text-[10px] text-slate-400 block uppercase font-semibold">Média Auditorias</span>
+                  <span className={`text-lg font-black font-mono ${mediaAuditorias >= 80 ? 'text-indigo-600' : mediaAuditorias > 0 ? 'text-amber-600' : 'text-slate-400'}`}>
+                    {totalAuditorias > 0 ? `${mediaAuditorias}%` : 'Sem dados'}
+                  </span>
+                  <span className="text-[9px] text-slate-400 block">{totalAuditorias} auditoria(s) na fábrica</span>
                 </div>
                 <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700 text-xs text-center">
                   <span className="text-[10px] text-slate-400 block uppercase font-semibold">Pontualidade (OTIF)</span>
                   <span className="text-lg font-black font-mono text-blue-600">{stats.taxaPontualidade}%</span>
+                  <span className="text-[9px] text-slate-400 block">Defeito Médio: {stats.taxaDefeitoMedia}%</span>
                 </div>
               </div>
 
-              {/* Lista Detalhada de Inspeções */}
-              {(!fornecedor.historicoInspecoes || fornecedor.historicoInspecoes.length === 0) ? (
-                <div className="p-8 text-center border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-xl space-y-2">
+              {/* Filtro de Visão Unificada / Específica */}
+              <div className="flex items-center space-x-2 border-b border-slate-200 dark:border-slate-800 pb-2">
+                <button
+                  onClick={() => setFiltroVerificacao('todos')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                    filtroVerificacao === 'todos'
+                      ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-900 shadow-xs'
+                      : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+                  }`}
+                >
+                  Todas as Verificações ({totalVerificacoes})
+                </button>
+                <button
+                  onClick={() => setFiltroVerificacao('inspecoes')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center space-x-1.5 ${
+                    filtroVerificacao === 'inspecoes'
+                      ? 'bg-blue-600 text-white shadow-xs'
+                      : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+                  }`}
+                >
+                  <ClipboardCheck className="w-3.5 h-3.5" />
+                  <span>Inspeções de Lotes ({totalInspecoes})</span>
+                </button>
+                <button
+                  onClick={() => setFiltroVerificacao('auditorias')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center space-x-1.5 ${
+                    filtroVerificacao === 'auditorias'
+                      ? 'bg-indigo-600 text-white shadow-xs'
+                      : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+                  }`}
+                >
+                  <CheckSquare className="w-3.5 h-3.5" />
+                  <span>Auditorias de Fábrica ({totalAuditorias})</span>
+                </button>
+              </div>
+
+              {/* Lista Unificada: Inspeções e Auditorias */}
+              {totalVerificacoes === 0 ? (
+                <div className="p-8 text-center border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-xl space-y-3">
                   <ClipboardCheck className="w-8 h-8 mx-auto text-slate-400" />
-                  <p className="text-xs text-slate-500">Nenhum lote inspecionado ainda para este fornecedor.</p>
-                  <button
-                    onClick={() => onOpenNovaInspecao(fornecedor)}
-                    className="text-xs font-bold text-blue-600 hover:underline cursor-pointer"
-                  >
-                    Registrar a primeira inspeção
-                  </button>
+                  <div>
+                    <p className="text-xs font-bold text-slate-700 dark:text-slate-300">Nenhuma verificação registrada ainda</p>
+                    <p className="text-[11px] text-slate-400 mt-0.5">
+                      Você pode registrar inspeções de recebimento têxtil ou auditorias presenciais de fábrica.
+                    </p>
+                  </div>
+                  <div className="flex justify-center space-x-2 pt-1">
+                    <button
+                      onClick={() => onOpenNovaInspecao(fornecedor)}
+                      className="px-3 py-1.5 bg-blue-600 text-white text-xs font-bold rounded-lg hover:bg-blue-700 transition cursor-pointer"
+                    >
+                      + Nova Inspeção de Lote
+                    </button>
+                    <button
+                      onClick={() => onOpenNovaAuditoria(fornecedor)}
+                      className="px-3 py-1.5 bg-indigo-600 text-white text-xs font-bold rounded-lg hover:bg-indigo-700 transition cursor-pointer"
+                    >
+                      + Agendar Auditoria
+                    </button>
+                  </div>
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {fornecedor.historicoInspecoes.map(insp => (
+                  {/* Inspeções de Lote (se filtro for 'todos' ou 'inspecoes') */}
+                  {filtroVerificacao !== 'auditorias' && fornecedor.historicoInspecoes && fornecedor.historicoInspecoes.map(insp => (
                     <div key={insp.id} className="p-4 bg-white dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-800 space-y-3">
                       <div className="flex items-start justify-between flex-wrap gap-2">
                         <div>
@@ -662,8 +791,81 @@ export const FornecedorModalDetalhes: React.FC<FornecedorModalDetalhesProps> = (
                         </div>
                       </div>
 
-                      {/* Parâmetros Têxteis Específicos se existirem */}
-                      {insp.parametrosTexteis && (
+                      {/* Parâmetros Técnicos Estruturados (Resultado X Padrão, Unidade, Tolerâncias Mín/Máx) */}
+                      {insp.parametrosTexteis?.itensParametros && insp.parametrosTexteis.itensParametros.length > 0 ? (
+                        <div className="space-y-1.5 bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl border border-slate-200 dark:border-slate-800">
+                          <div className="flex items-center justify-between pb-1.5 border-b border-slate-200 dark:border-slate-800 text-[11px] font-bold text-slate-700 dark:text-slate-300">
+                            <span className="flex items-center">
+                              <ClipboardCheck className="w-3.5 h-3.5 mr-1 text-indigo-600" />
+                              Parâmetros Inspecionados no Lote ({insp.parametrosTexteis.itensParametros.length} itens)
+                            </span>
+                            <span className="text-[10px] text-slate-500 font-normal">
+                              Critérios ISO 9001: Resultado X Padrão com Tolerâncias
+                            </span>
+                          </div>
+
+                          <div className="overflow-x-auto">
+                            <table className="w-full text-left text-[11px] font-mono border-collapse">
+                              <thead>
+                                <tr className="text-slate-400 border-b border-slate-200 dark:border-slate-800 text-[10px] uppercase">
+                                  <th className="py-1 px-1.5">Item / Parâmetro</th>
+                                  <th className="py-1 px-1.5">Resultado X Padrão</th>
+                                  <th className="py-1 px-1.5">Unidade</th>
+                                  <th className="py-1 px-1.5">Tolerância (Mín - Máx)</th>
+                                  <th className="py-1 px-1.5 text-right">Status</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-slate-150 dark:divide-slate-800">
+                                {insp.parametrosTexteis.itensParametros.map((item, pIdx) => {
+                                  const numRes = typeof item.valorResultado === 'number' ? item.valorResultado : parseFloat(String(item.valorResultado).replace(',', '.'));
+                                  const numPad = typeof item.valorPadrao === 'number' ? item.valorPadrao : parseFloat(String(item.valorPadrao).replace(',', '.'));
+                                  const diff = (!isNaN(numRes) && !isNaN(numPad)) ? Number((numRes - numPad).toFixed(2)) : 0;
+                                  
+                                  return (
+                                    <tr key={item.id || pIdx} className="hover:bg-white/60 dark:hover:bg-slate-800/40 transition-colors">
+                                      <td className="py-1.5 px-1.5 font-bold text-slate-800 dark:text-slate-200 font-sans">
+                                        {item.nome}
+                                      </td>
+                                      <td className="py-1.5 px-1.5 whitespace-nowrap">
+                                        <span className="font-bold text-slate-900 dark:text-white">
+                                          {item.valorResultado}
+                                        </span>
+                                        <span className="text-slate-400 mx-1">vs</span>
+                                        <span className="text-slate-500">
+                                          {item.valorPadrao}
+                                        </span>
+                                        <span className={`ml-1 text-[10px] font-bold ${
+                                          diff === 0 ? 'text-slate-400' :
+                                          diff > 0 ? 'text-indigo-600' : 'text-amber-600'
+                                        }`}>
+                                          (Δ {diff > 0 ? `+${diff}` : diff})
+                                        </span>
+                                      </td>
+                                      <td className="py-1.5 px-1.5 text-slate-600 dark:text-slate-400 font-semibold">
+                                        {item.unidadeMedida}
+                                      </td>
+                                      <td className="py-1.5 px-1.5 text-slate-600 dark:text-slate-400 whitespace-nowrap">
+                                        {item.toleranciaMin !== undefined && item.toleranciaMin !== '' ? item.toleranciaMin : '-∞'} até {item.toleranciaMax !== undefined && item.toleranciaMax !== '' ? item.toleranciaMax : '+∞'} {item.unidadeMedida}
+                                      </td>
+                                      <td className="py-1.5 px-1.5 text-right whitespace-nowrap">
+                                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                          item.statusConformidade === 'Conforme'
+                                            ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+                                            : item.statusConformidade === 'Alerta'
+                                            ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
+                                            : 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300'
+                                        }`}>
+                                          {item.statusConformidade}
+                                        </span>
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      ) : insp.parametrosTexteis ? (
                         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 bg-slate-50 dark:bg-slate-900/50 p-2.5 rounded-lg text-[11px] font-mono border border-slate-150 dark:border-slate-800">
                           {insp.parametrosTexteis.deltaE !== undefined && (
                             <div>
@@ -722,7 +924,7 @@ export const FornecedorModalDetalhes: React.FC<FornecedorModalDetalhesProps> = (
                             </div>
                           )}
                         </div>
-                      )}
+                      ) : null}
 
                       {insp.observacoes && (
                         <p className="text-xs text-slate-600 dark:text-slate-300 italic bg-slate-50/50 dark:bg-slate-900/30 p-2 rounded border-l-2 border-slate-300">
@@ -731,6 +933,69 @@ export const FornecedorModalDetalhes: React.FC<FornecedorModalDetalhesProps> = (
                       )}
                     </div>
                   ))}
+
+                  {/* Auditorias de Fábrica (se filtro for 'todos' ou 'auditorias') */}
+                  {filtroVerificacao !== 'inspecoes' && fornecedor.auditorias && fornecedor.auditorias.map(aud => (
+                    <div 
+                      key={aud.id} 
+                      className="p-4 bg-white dark:bg-slate-800/60 rounded-xl border border-indigo-200 dark:border-indigo-950/60 space-y-2.5 shadow-xs hover:border-indigo-400 transition-colors"
+                    >
+                      <div className="flex items-start justify-between flex-wrap gap-2">
+                        <div>
+                          <div className="flex items-center space-x-2 flex-wrap">
+                            <span className="px-2 py-0.5 rounded text-[10px] font-extrabold bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 flex items-center">
+                              <CheckSquare className="w-3 h-3 mr-1 text-indigo-600" />
+                              Auditoria Técnica (Fábrica / Processo)
+                            </span>
+                            <span className="font-extrabold text-xs font-mono text-indigo-700 dark:text-indigo-400">
+                              {aud.codigo}
+                            </span>
+                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                              {aud.tipoAuditoria}
+                            </span>
+                          </div>
+                          <span className="text-[10px] text-slate-400 font-mono block mt-1">
+                            Realizada em: {aud.dataRealizada || aud.dataPlanejada} • Auditor Responsável: {aud.auditor}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center space-x-2.5">
+                          <div className="text-right">
+                            <span className="text-xs font-black text-slate-800 dark:text-slate-100 font-mono">
+                              Nota: {aud.notaChecklist}%
+                            </span>
+                            <span className={`block text-[10px] font-bold ${
+                              aud.resultado === 'Aprovado' ? 'text-emerald-600' : 'text-amber-600'
+                            }`}>
+                              {aud.resultado}
+                            </span>
+                          </div>
+                          <div className="w-12 bg-slate-200 dark:bg-slate-700 h-2 rounded-full overflow-hidden hidden sm:block">
+                            <div 
+                              className={`h-full ${aud.notaChecklist >= 80 ? 'bg-indigo-600' : aud.notaChecklist >= 60 ? 'bg-amber-500' : 'bg-rose-500'}`}
+                              style={{ width: `${Math.min(100, aud.notaChecklist || 0)}%` }}
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      <p className="text-xs text-slate-600 dark:text-slate-300 bg-indigo-50/40 dark:bg-indigo-950/20 p-2.5 rounded-lg border border-indigo-100 dark:border-indigo-900/40">
+                        <strong className="text-indigo-900 dark:text-indigo-300 font-semibold">Escopo Auditado:</strong> {aud.escopo}
+                      </p>
+                    </div>
+                  ))}
+
+                  {/* Avisos se filtro selecionado estiver sem registros */}
+                  {filtroVerificacao === 'inspecoes' && (!fornecedor.historicoInspecoes || fornecedor.historicoInspecoes.length === 0) && (
+                    <div className="p-6 text-center border border-dashed border-slate-200 dark:border-slate-800 rounded-xl text-slate-500 text-xs">
+                      Nenhuma inspeção de lote têxtil registrada para este fornecedor.
+                    </div>
+                  )}
+                  {filtroVerificacao === 'auditorias' && (!fornecedor.auditorias || fornecedor.auditorias.length === 0) && (
+                    <div className="p-6 text-center border border-dashed border-slate-200 dark:border-slate-800 rounded-xl text-slate-500 text-xs">
+                      Nenhuma auditoria presencial de fábrica registrada para este fornecedor.
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -965,84 +1230,9 @@ export const FornecedorModalDetalhes: React.FC<FornecedorModalDetalhesProps> = (
           )}
 
           {/* ======================================================== */}
-          {/* ABA 8: AUDITORIAS DE 2ª PARTE */}
+          {/* ABA 8: RASTREABILIDADE & HISTÓRICO COMPLETO */}
           {/* ======================================================== */}
           {activeTab === 8 && (
-            <div className="space-y-4 animate-fade-in">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="text-xs font-extrabold uppercase tracking-wider text-slate-700 dark:text-slate-300 flex items-center">
-                    <CheckSquare className="w-4 h-4 mr-1.5 text-indigo-600" />
-                    Auditorias de Fornecedores (2ª Parte - ISO 8.4)
-                  </h3>
-                  <p className="text-xs text-slate-500 mt-0.5">
-                    Planejamento de auditorias in loco na fábrica, checklists e relatórios de conformidade.
-                  </p>
-                </div>
-                <button
-                  onClick={() => onOpenNovaAuditoria(fornecedor)}
-                  className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg transition-colors cursor-pointer flex items-center shadow-xs"
-                >
-                  <PlusCircle className="w-3.5 h-3.5 mr-1.5" />
-                  Agendar / Registrar Auditoria
-                </button>
-              </div>
-
-              {(!fornecedor.auditorias || fornecedor.auditorias.length === 0) ? (
-                <div className="p-8 text-center border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-xl space-y-2">
-                  <CheckSquare className="w-8 h-8 mx-auto text-slate-400" />
-                  <p className="text-xs text-slate-500">Nenhuma auditoria realizada ainda para este fornecedor.</p>
-                  <button
-                    onClick={() => onOpenNovaAuditoria(fornecedor)}
-                    className="text-xs font-bold text-indigo-600 hover:underline cursor-pointer"
-                  >
-                    Agendar auditoria inicial de fábrica
-                  </button>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {fornecedor.auditorias.map(aud => (
-                    <div key={aud.id} className="p-4 bg-white dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-800 space-y-2.5">
-                      <div className="flex items-start justify-between">
-                        <div>
-                          <div className="flex items-center space-x-2">
-                            <span className="font-extrabold text-xs font-mono text-indigo-700 dark:text-indigo-400">
-                              {aud.codigo}
-                            </span>
-                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-100 text-indigo-800">
-                              {aud.tipoAuditoria}
-                            </span>
-                          </div>
-                          <span className="text-[10px] text-slate-400 font-mono block mt-0.5">
-                            Realizada em: {aud.dataRealizada || aud.dataPlanejada} • Auditor: {aud.auditor}
-                          </span>
-                        </div>
-                        <div className="text-right">
-                          <span className="text-xs font-bold text-slate-700 dark:text-slate-300 font-mono">
-                            Nota: {aud.notaChecklist}%
-                          </span>
-                          <span className={`block text-[10px] font-bold ${
-                            aud.resultado === 'Aprovado' ? 'text-emerald-600' : 'text-amber-600'
-                          }`}>
-                            {aud.resultado}
-                          </span>
-                        </div>
-                      </div>
-
-                      <p className="text-xs text-slate-600 dark:text-slate-300 bg-slate-50 dark:bg-slate-900/50 p-2.5 rounded-lg border border-slate-150">
-                        <strong>Escopo:</strong> {aud.escopo}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* ======================================================== */}
-          {/* ABA 9: RASTREABILIDADE & HISTÓRICO COMPLETO */}
-          {/* ======================================================== */}
-          {activeTab === 9 && (
             <div className="space-y-4 animate-fade-in">
               <h3 className="text-xs font-extrabold uppercase tracking-wider text-slate-700 dark:text-slate-300 flex items-center">
                 <History className="w-4 h-4 mr-1.5 text-blue-600" />
