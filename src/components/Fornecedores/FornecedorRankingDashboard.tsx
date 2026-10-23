@@ -50,14 +50,16 @@ export const FornecedorRankingDashboard: React.FC<FornecedorRankingDashboardProp
   // Categorias únicas
   const categorias = Array.from(new Set(fornecedores.map(f => f.categoria)));
 
-  // Médias Gerais
-  const mediaIQF = fornecedoresComMetricas.length > 0
-    ? Math.round(fornecedoresComMetricas.reduce((acc, it) => acc + it.stats.iqfGeral, 0) / fornecedoresComMetricas.length)
+  // Médias Gerais (calculadas somente com fornecedores com dados reais/avaliação)
+  const fornecedoresComDados = fornecedoresComMetricas.filter(it => it.stats.temHistoricoValido);
+  const mediaIQF = fornecedoresComDados.length > 0
+    ? Math.round(fornecedoresComDados.reduce((acc, it) => acc + it.stats.iqfGeral, 0) / fornecedoresComDados.length)
     : 0;
 
   const totalLotesBase = fornecedoresComMetricas.reduce((acc, it) => acc + it.stats.totalLotes, 0);
-  const mediaAprovacao = fornecedoresComMetricas.length > 0
-    ? Math.round(fornecedoresComMetricas.reduce((acc, it) => acc + it.stats.taxaAprovacao, 0) / fornecedoresComMetricas.length)
+  const fornecedoresComLotes = fornecedoresComMetricas.filter(it => it.stats.totalLotes > 0);
+  const mediaAprovacao = fornecedoresComLotes.length > 0
+    ? Math.round(fornecedoresComLotes.reduce((acc, it) => acc + it.stats.taxaAprovacao, 0) / fornecedoresComLotes.length)
     : 0;
 
   return (
@@ -232,40 +234,51 @@ export const FornecedorRankingDashboard: React.FC<FornecedorRankingDashboardProp
 
                   {/* Barra visual de IQF */}
                   <td className="p-3.5 text-center">
-                    <div className="w-24 mx-auto space-y-1">
-                      <span className="font-mono font-black text-xs text-slate-900 dark:text-white">
-                        {item.stats.iqfGeral}%
-                      </span>
-                      <div className="h-1.5 w-full bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
-                        <div 
-                          className={`h-full rounded-full ${
-                            item.stats.iqfGeral >= 90 ? 'bg-emerald-500' :
-                            item.stats.iqfGeral >= 75 ? 'bg-blue-500' :
-                            item.stats.iqfGeral >= 60 ? 'bg-amber-500' : 'bg-rose-500'
-                          }`}
-                          style={{ width: `${item.stats.iqfGeral}%` }}
-                        />
+                    {item.stats.temHistoricoValido ? (
+                      <div className="w-24 mx-auto space-y-1">
+                        <span className="font-mono font-black text-xs text-slate-900 dark:text-white">
+                          {item.stats.iqfGeral}%
+                        </span>
+                        <div className="h-1.5 w-full bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+                          <div 
+                            className={`h-full rounded-full ${
+                              item.stats.iqfGeral >= 90 ? 'bg-emerald-500' :
+                              item.stats.iqfGeral >= 75 ? 'bg-blue-500' :
+                              item.stats.iqfGeral >= 60 ? 'bg-amber-500' : 'bg-rose-500'
+                            }`}
+                            style={{ width: `${item.stats.iqfGeral}%` }}
+                          />
+                        </div>
                       </div>
-                    </div>
+                    ) : (
+                      <span className="text-slate-400 font-mono text-xs">—</span>
+                    )}
                   </td>
 
                   <td className="p-3.5 text-center">
                     <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
                       item.stats.faixaIQF === 'A - Excelente' ? 'bg-emerald-100 text-emerald-800' :
                       item.stats.faixaIQF === 'B - Bom' ? 'bg-blue-100 text-blue-800' :
-                      item.stats.faixaIQF === 'C - Regular' ? 'bg-amber-100 text-amber-800' : 'bg-rose-100 text-rose-800'
+                      item.stats.faixaIQF === 'C - Regular' ? 'bg-amber-100 text-amber-800' :
+                      item.stats.faixaIQF === 'D - Crítico' ? 'bg-rose-100 text-rose-800' : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'
                     }`}>
-                      {item.stats.faixaIQF.split(' - ')[0]}
+                      {item.stats.faixaIQF === 'Sem Avaliação' ? 'Sem Avaliação' : item.stats.faixaIQF.split(' - ')[0]}
                     </span>
                   </td>
 
                   <td className="p-3.5 text-center font-mono font-semibold text-slate-700 dark:text-slate-300">
-                    {item.stats.taxaAprovacao}%
-                    <span className="text-[10px] text-slate-400 block font-normal">({item.stats.lotesAprovados}/{item.stats.totalLotes})</span>
+                    {item.stats.totalLotes > 0 ? (
+                      <>
+                        {item.stats.taxaAprovacao}%
+                        <span className="text-[10px] text-slate-400 block font-normal">({item.stats.lotesAprovados}/{item.stats.totalLotes})</span>
+                      </>
+                    ) : (
+                      <span className="text-slate-400 font-normal text-[11px]">Sem lotes</span>
+                    )}
                   </td>
 
                   <td className="p-3.5 text-center font-mono font-semibold text-slate-700 dark:text-slate-300">
-                    {item.stats.taxaPontualidade}%
+                    {item.stats.totalEntregas > 0 ? `${item.stats.taxaPontualidade}%` : <span className="text-slate-400 font-normal">—</span>}
                   </td>
 
                   <td className="p-3.5 text-center font-mono">

@@ -230,8 +230,8 @@ export interface AvaliacaoFornecedor {
   criterioAcoesCorretivas?: number; // 0-100 (resolução de RNCs)
   
   notaGeral: number; // IQF Ponderado (0-100)
-  classificacaoFaixa?: 'A - Excelente' | 'B - Bom' | 'C - Regular' | 'D - Crítico';
-  resultado: 'Aprovado' | 'Aprovado com Restrições' | 'Reprovado';
+  classificacaoFaixa?: 'A - Excelente' | 'B - Bom' | 'C - Regular' | 'D - Crítico' | 'Sem Avaliação';
+  resultado: 'Aprovado' | 'Aprovado com Restrições' | 'Reprovado' | 'Em Avaliação';
   
   alimentadoPorDadosReais?: boolean; // Se foi calculado pelos dados de inspeção
   estatisticasCalculadas?: {

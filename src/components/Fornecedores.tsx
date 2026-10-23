@@ -108,10 +108,32 @@ export const Fornecedores: React.FC<FornecedoresProps> = ({ onAddLog, personaliz
   // Carregar e sincronizar com SupplierRepository
   useEffect(() => {
     let isSubscribed = true;
+    const sanitizeSupplier = (f: Fornecedor): Fornecedor => {
+      const totalLotes = (f.historicoInspecoes || []).length;
+      const temAvaliacaoManual = (f.historicoAvaliacoes || []).some(a => !a.alimentadoPorDadosReais);
+      const foiHomologadoManualmente = f.qualificacaoInicial?.statusFinal === 'Aprovado';
+      
+      // Se não possui nenhum lote inspecionado e nunca foi qualificado por homologação manual,
+      // limpa notas espúrias e avaliações auto-geradas indevidamente sem lotes
+      if (totalLotes === 0 && !temAvaliacaoManual && !foiHomologadoManualmente) {
+        const historicoLimpo = (f.historicoAvaliacoes || []).filter(
+          a => !a.alimentadoPorDadosReais || (a.estatisticasCalculadas?.totalLotesInspecionados || 0) > 0
+        );
+        const statusCorrigido = f.statusQualificacao === 'Bloqueado' ? 'Bloqueado' : 'Em Avaliação';
+        return {
+          ...f,
+          notaAvaliacao: undefined,
+          statusQualificacao: statusCorrigido,
+          historicoAvaliacoes: historicoLimpo
+        };
+      }
+      return f;
+    };
+
     const deduplicateSuppliers = (list: Fornecedor[]): Fornecedor[] => {
       const seenIds = new Set<string>();
       const seenCnpjs = new Set<string>();
-      return list.filter(f => {
+      return list.map(sanitizeSupplier).filter(f => {
         if (!f || !f.id || seenIds.has(f.id)) return false;
         const cleanCnpj = f.cnpj?.replace(/\D/g, '');
         if (cleanCnpj && seenCnpjs.has(cleanCnpj)) return false;
@@ -508,9 +530,48 @@ export const Fornecedores: React.FC<FornecedoresProps> = ({ onAddLog, personaliz
   // 8. Recalcular IQF com 1 clique usando dados reais de inspeções
   const handleRecalcularIQF = async (fornecedorAlvo: Fornecedor) => {
     try {
+      const totalLotes = (fornecedorAlvo.historicoInspecoes || []).length;
+
+      // Se o fornecedor possui 0 lotes inspecionados:
+      if (totalLotes === 0) {
+        // Limpar avaliações automáticas espúrias criadas sem lotes
+        const historicoLimpo = (fornecedorAlvo.historicoAvaliacoes || []).filter(
+          a => !a.alimentadoPorDadosReais || (a.estatisticasCalculadas?.totalLotesInspecionados || 0) > 0
+        );
+
+        const statusCorrigido = fornecedorAlvo.statusQualificacao === 'Bloqueado'
+          ? 'Bloqueado'
+          : (fornecedorAlvo.qualificacaoInicial?.statusFinal === 'Aprovado' ? 'Qualificado' : 'Em Avaliação');
+
+        const atualizado: Fornecedor = {
+          ...fornecedorAlvo,
+          notaAvaliacao: undefined,
+          statusQualificacao: statusCorrigido,
+          historicoAvaliacoes: historicoLimpo,
+          atualizadoEm: new Date().toISOString()
+        };
+
+        await SupplierRepository.update(atualizado.id, atualizado);
+        setFornecedores(prev => prev.map(f => f.id === atualizado.id ? atualizado : f));
+        if (selectedSupplier?.id === atualizado.id) setSelectedSupplier(atualizado);
+
+        onAddLog(
+          'Recálculo de IQF - Sem Lotes',
+          `Fornecedor ${fornecedorAlvo.nomeFantasia} possui 0 lotes inspecionados. IQF mantido como "Sem Avaliação" e status "${statusCorrigido}".`
+        );
+        showToast(
+          `Fornecedor "${fornecedorAlvo.nomeFantasia}" possui 0 lotes inspecionados. O cálculo do IQF real exige inspeções de lotes têxteis. Status: ${statusCorrigido}.`,
+          'error'
+        );
+        return;
+      }
+
+      // Se possui lotes inspecionados reais:
       const stats = calcularEstatisticasReaisFornecedor(fornecedorAlvo);
       const evalAuto = criarAvaliacaoAutomaticaPorDadosReais(fornecedorAlvo);
-      const historicoEvals = [evalAuto, ...(fornecedorAlvo.historicoAvaliacoes || [])];
+      const historicoEvals = [evalAuto, ...(fornecedorAlvo.historicoAvaliacoes || []).filter(
+        a => !a.alimentadoPorDadosReais || (a.estatisticasCalculadas?.totalLotesInspecionados || 0) > 0
+      )];
 
       let statusQual = fornecedorAlvo.statusQualificacao;
       if (fornecedorAlvo.statusQualificacao !== 'Bloqueado') {
@@ -531,8 +592,14 @@ export const Fornecedores: React.FC<FornecedoresProps> = ({ onAddLog, personaliz
       setFornecedores(prev => prev.map(f => f.id === atualizado.id ? atualizado : f));
       if (selectedSupplier?.id === atualizado.id) setSelectedSupplier(atualizado);
 
-      onAddLog('Recálculo de IQF Automatizado', `Recalculou IQF real de ${fornecedorAlvo.nomeFantasia} para ${stats.iqfGeral}% (${stats.faixaIQF})`);
-      showToast(`IQF recalculado com dados reais: ${stats.iqfGeral}% (${stats.faixaIQF})`, 'success');
+      onAddLog(
+        'Recálculo de IQF Automatizado',
+        `Recalculou IQF real de ${fornecedorAlvo.nomeFantasia} para ${stats.iqfGeral}% (${stats.faixaIQF}) baseado em ${stats.totalLotes} lote(s) inspecionado(s).`
+      );
+      showToast(
+        `IQF recalculado com ${stats.totalLotes} lote(s) real(is): ${stats.iqfGeral}% (${stats.faixaIQF})`,
+        'success'
+      );
     } catch (err) {
       console.error('Erro ao recalcular IQF:', err);
       showToast('Erro ao recalcular IQF.', 'error');
@@ -825,16 +892,30 @@ export const Fornecedores: React.FC<FornecedoresProps> = ({ onAddLog, personaliz
 
                           {/* IQF Score */}
                           <td className="p-3.5 text-center">
-                            <span className="font-mono font-extrabold text-sm text-slate-900 dark:text-white">
-                              {stats.iqfGeral}%
-                            </span>
-                            <span className={`text-[10px] font-bold block ${
-                              stats.faixaIQF === 'A - Excelente' ? 'text-emerald-600' :
-                              stats.faixaIQF === 'B - Bom' ? 'text-blue-600' :
-                              stats.faixaIQF === 'C - Regular' ? 'text-amber-600' : 'text-rose-600'
-                            }`}>
-                              Faixa {stats.faixaIQF.split(' - ')[0]}
-                            </span>
+                            {stats.temHistoricoValido ? (
+                              <>
+                                <span className="font-mono font-extrabold text-sm text-slate-900 dark:text-white">
+                                  {stats.iqfGeral}%
+                                </span>
+                                <span className={`text-[10px] font-bold block ${
+                                  stats.faixaIQF === 'A - Excelente' ? 'text-emerald-600' :
+                                  stats.faixaIQF === 'B - Bom' ? 'text-blue-600' :
+                                  stats.faixaIQF === 'C - Regular' ? 'text-amber-600' :
+                                  stats.faixaIQF === 'D - Crítico' ? 'text-rose-600' : 'text-slate-400'
+                                }`}>
+                                  {stats.faixaIQF === 'Sem Avaliação' ? 'Sem Avaliação' : `Faixa ${stats.faixaIQF.split(' - ')[0]}`}
+                                </span>
+                              </>
+                            ) : (
+                              <>
+                                <span className="font-mono font-bold text-xs text-slate-400 dark:text-slate-500">
+                                  —
+                                </span>
+                                <span className="text-[10px] font-medium text-slate-400 dark:text-slate-500 block">
+                                  Sem Avaliação
+                                </span>
+                              </>
+                            )}
                           </td>
 
                           {/* Status */}
@@ -843,11 +924,14 @@ export const Fornecedores: React.FC<FornecedoresProps> = ({ onAddLog, personaliz
                               f.statusQualificacao === 'Qualificado' ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' :
                               f.statusQualificacao === 'Qualificado com Restrições' ? 'bg-amber-100 text-amber-800 border border-amber-300' :
                               f.statusQualificacao === 'Bloqueado' ? 'bg-rose-100 text-rose-800 border border-rose-300' :
+                              f.statusQualificacao === 'Não Qualificado' ? 'bg-rose-100 text-rose-800 border border-rose-300' :
                               'bg-blue-100 text-blue-800 border border-blue-300'
                             }`}>
                               {f.statusQualificacao === 'Qualificado' && <CheckCircle2 className="w-3 h-3 mr-1" />}
                               {f.statusQualificacao === 'Qualificado com Restrições' && <AlertTriangle className="w-3 h-3 mr-1" />}
                               {f.statusQualificacao === 'Bloqueado' && <XCircle className="w-3 h-3 mr-1" />}
+                              {f.statusQualificacao === 'Não Qualificado' && <XCircle className="w-3 h-3 mr-1" />}
+                              {f.statusQualificacao === 'Em Avaliação' && <Clock className="w-3 h-3 mr-1" />}
                               {f.statusQualificacao}
                             </span>
                           </td>
@@ -858,7 +942,7 @@ export const Fornecedores: React.FC<FornecedoresProps> = ({ onAddLog, personaliz
                               {stats.totalLotes}
                             </span>
                             <span className="text-[10px] text-slate-400 block font-normal">
-                              {stats.taxaAprovacao}% aprov.
+                              {stats.totalLotes > 0 ? `${stats.taxaAprovacao}% aprov.` : 'Sem lotes'}
                             </span>
                           </td>
 

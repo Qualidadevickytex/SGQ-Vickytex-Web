@@ -54,6 +54,18 @@ export const FornecedorModalAvaliacao: React.FC<FornecedorModalAvaliacaoProps> =
   // Preenchimento com dados estatísticos reais
   const handlePreencherAutomatico = () => {
     const s = calcularEstatisticasReaisFornecedor(fornecedor);
+    if (s.totalLotes === 0) {
+      setCriterioQualidade(70);
+      setCriterioPrazo(70);
+      setCriterioEspecificacoes(70);
+      setCriterioAtendimento(70);
+      setCriterioAcoesCorretivas(70);
+      setFoiAlimentadoAuto(false);
+      setParecerTecnico(
+        `Avaliação manual preliminar. Fornecedor sem lotes inspecionados registrados. Pontuações atribuídas manualmente com base na homologação cadastral/auditoria inicial.`
+      );
+      return;
+    }
     setCriterioQualidade(s.scoreQualidadeLotes);
     setCriterioPrazo(s.scorePontualidade);
     setCriterioEspecificacoes(s.scoreEspecificacoes);
@@ -78,8 +90,8 @@ export const FornecedorModalAvaliacao: React.FC<FornecedorModalAvaliacaoProps> =
     (criterioAcoesCorretivas * 0.15)
   );
 
-  let faixaIQF: 'A - Excelente' | 'B - Bom' | 'C - Regular' | 'D - Crítico' = 'A - Excelente';
-  let resultado: 'Aprovado' | 'Aprovado com Restrições' | 'Reprovado' = 'Aprovado';
+  let faixaIQF: 'A - Excelente' | 'B - Bom' | 'C - Regular' | 'D - Crítico' | 'Sem Avaliação' = 'Sem Avaliação';
+  let resultado: 'Aprovado' | 'Aprovado com Restrições' | 'Reprovado' | 'Em Avaliação' = 'Em Avaliação';
 
   if (notaGeral >= 90) {
     faixaIQF = 'A - Excelente';
@@ -90,9 +102,12 @@ export const FornecedorModalAvaliacao: React.FC<FornecedorModalAvaliacaoProps> =
   } else if (notaGeral >= 60) {
     faixaIQF = 'C - Regular';
     resultado = 'Aprovado com Restrições';
-  } else {
+  } else if (notaGeral > 0) {
     faixaIQF = 'D - Crítico';
     resultado = 'Reprovado';
+  } else {
+    faixaIQF = 'Sem Avaliação';
+    resultado = 'Em Avaliação';
   }
 
   const handleSubmit = (e: React.FormEvent) => {

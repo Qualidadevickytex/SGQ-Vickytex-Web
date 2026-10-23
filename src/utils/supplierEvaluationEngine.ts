@@ -39,14 +39,18 @@ export interface ResumoEstatisticasFornecedor {
   scoreAtendimento: number;
   scoreAcoesCorretivas: number;
   iqfGeral: number;
-  faixaIQF: 'A - Excelente' | 'B - Bom' | 'C - Regular' | 'D - Crítico';
-  resultadoSugerido: 'Aprovado' | 'Aprovado com Restrições' | 'Reprovado';
+  faixaIQF: 'A - Excelente' | 'B - Bom' | 'C - Regular' | 'D - Crítico' | 'Sem Avaliação';
+  resultadoSugerido: 'Aprovado' | 'Aprovado com Restrições' | 'Reprovado' | 'Em Avaliação';
+  temHistoricoValido: boolean;
 }
 
 /**
  * Motor de Cálculo Estatístico Automatizado ISO 9001 (Cláusula 8.4)
  * Alimenta a nota real do fornecedor a partir das inspeções e RNCs registradas,
  * eliminando a subjetividade e retrabalho manual.
+ * 
+ * Se o fornecedor tiver 0 lotes inspecionados e nenhuma avaliação manual,
+ * o IQF retorna 0 / "Sem Avaliação", impedindo falsas qualificações no SGQ.
  */
 export function calcularEstatisticasReaisFornecedor(f: Fornecedor): ResumoEstatisticasFornecedor {
   const inspecoes = Array.isArray(f.historicoInspecoes) ? f.historicoInspecoes : [];
@@ -61,13 +65,14 @@ export function calcularEstatisticasReaisFornecedor(f: Fornecedor): ResumoEstati
   const lotesReprovados = inspecoes.filter(i => i.resultado === 'Reprovado').length;
 
   // Taxa de aprovação ponderada: aprovado vale 100%, com restrição vale 60%
+  // Se não há lotes inspecionados, a taxa de aprovação é 0% (nunca usar valor fictício)
   const taxaAprovacao = totalLotes > 0 
     ? Math.round(((lotesAprovados + (lotesComRestricao * 0.6)) / totalLotes) * 100)
-    : (f.notaAvaliacao || 90);
+    : 0;
 
   const taxaDefeitoMedia = totalLotes > 0
     ? Number((inspecoes.reduce((acc, i) => acc + (i.taxaDefeitoPercentual || 0), 0) / totalLotes).toFixed(1))
-    : 0.5;
+    : 0;
 
   const totalRetrabalho = inspecoes.filter(i => i.gerouRetrabalho).length;
   const custoTotalRetrabalho = inspecoes.reduce((acc, i) => acc + (i.custoRetrabalho || 0), 0);
@@ -77,7 +82,7 @@ export function calcularEstatisticasReaisFornecedor(f: Fornecedor): ResumoEstati
   const entregasNoPrazo = inspecoes.filter(i => i.entregaNoPrazo).length;
   const taxaPontualidade = totalEntregas > 0
     ? Math.round((entregasNoPrazo / totalEntregas) * 100)
-    : 95;
+    : 0;
 
   // 3. Não Conformidades
   const totalRNCs = rncs.length;
@@ -103,22 +108,28 @@ export function calcularEstatisticasReaisFornecedor(f: Fornecedor): ResumoEstati
     else if (diffDays <= 30) documentosVencendo++;
   });
 
+  // Filtrar avaliações válidas (ignorar avaliações automáticas espúrias geradas com 0 lotes)
+  const avaliacoesValidas = (f.historicoAvaliacoes || []).filter(a => {
+    if (a.alimentadoPorDadosReais) {
+      return (a.estatisticasCalculadas?.totalLotesInspecionados || 0) > 0;
+    }
+    return true; // Avaliação manual feita pelo usuário
+  });
+
+  // Um fornecedor só tem histórico estatístico se possui lotes inspecionados OU avaliação manual válida
+  const temHistoricoValido = totalLotes > 0 || avaliacoesValidas.length > 0;
+
   // 6. Cálculo dos Scores dos 5 Critérios (0 a 100)
-  // Score Qualidade de Lotes: começa na taxa de aprovação, com desconto por retrabalho e defeito médio
-  let scoreQualidadeLotes = Math.max(0, Math.min(100, Math.round(taxaAprovacao - (taxaDefeitoMedia * 2))));
-  if (totalLotes === 0 && f.historicoAvaliacoes && f.historicoAvaliacoes.length > 0) {
-    scoreQualidadeLotes = f.historicoAvaliacoes[0].criterioQualidade || 90;
-  }
+  let scoreQualidadeLotes = 0;
+  let scorePontualidade = 0;
+  let scoreEspecificacoes = 0;
+  let scoreAtendimento = 0;
+  let scoreAcoesCorretivas = 0;
 
-  // Score Pontualidade
-  let scorePontualidade = Math.max(0, Math.min(100, taxaPontualidade));
-  if (totalLotes === 0 && f.historicoAvaliacoes && f.historicoAvaliacoes.length > 0) {
-    scorePontualidade = f.historicoAvaliacoes[0].criterioPrazo || 90;
-  }
-
-  // Score Especificações Técnicas (impactado por parâmetros têxteis fora da tolerância)
-  let scoreEspecificacoes = 95;
   if (totalLotes > 0) {
+    scoreQualidadeLotes = Math.max(0, Math.min(100, Math.round(taxaAprovacao - (taxaDefeitoMedia * 2))));
+    scorePontualidade = Math.max(0, Math.min(100, taxaPontualidade));
+
     let desviosTecnicos = 0;
     inspecoes.forEach(insp => {
       const p = insp.parametrosTexteis;
@@ -135,29 +146,26 @@ export function calcularEstatisticasReaisFornecedor(f: Fornecedor): ResumoEstati
       }
     });
     scoreEspecificacoes = Math.max(40, Math.min(100, 100 - (desviosTecnicos * 12)));
+    scoreAtendimento = 90;
+    const penalidadeRNC = (rncsCriticas * 12) + (rncsAbertas * 6);
+    scoreAcoesCorretivas = Math.max(20, Math.min(100, Math.round(taxaEficaciaPlanos - penalidadeRNC)));
+  } else if (avaliacoesValidas.length > 0) {
+    const ultimaManual = avaliacoesValidas[0];
+    scoreQualidadeLotes = ultimaManual.criterioQualidade || 0;
+    scorePontualidade = ultimaManual.criterioPrazo || 0;
+    scoreEspecificacoes = ultimaManual.criterioEspecificacoes || 0;
+    scoreAtendimento = ultimaManual.criterioAtendimento || 0;
+    scoreAcoesCorretivas = ultimaManual.criterioAcoesCorretivas || 0;
   }
-
-  // Score Atendimento & Suporte
-  let scoreAtendimento = 92;
-  if (f.historicoAvaliacoes && f.historicoAvaliacoes.length > 0) {
-    scoreAtendimento = f.historicoAvaliacoes[0].criterioAtendimento || 90;
-  }
-
-  // Score Ações Corretivas & RNCs
-  // Penalidade direta de 15 pts por RNC crítica e 8 pts por RNC grave aberta
-  const penalidadeRNC = (rncsCriticas * 12) + (rncsAbertas * 6);
-  let scoreAcoesCorretivas = Math.max(20, Math.min(100, Math.round(taxaEficaciaPlanos - penalidadeRNC)));
 
   // Penalidade documental se houver doc vencido
-  if (documentosVencidos > 0) {
-    scoreEspecificacoes = Math.max(30, scoreEspecificacoes - (documentosVencidos * 10));
+  if (documentosVencidos > 0 && scoreEspecificacoes > 0) {
+    scoreEspecificacoes = Math.max(20, scoreEspecificacoes - (documentosVencidos * 10));
   }
 
   // 7. IQF Geral Ponderado (ISO 9001 Vickytex):
   // 40% Qualidade de Lotes + 20% Pontualidade + 15% Especificações + 10% Atendimento + 15% RNCs/Ações
-  const temHistorico = totalLotes > 0 || (f.historicoAvaliacoes && f.historicoAvaliacoes.length > 0) || typeof f.notaAvaliacao === 'number';
-  
-  const iqfGeral = !temHistorico ? 0 : Math.max(0, Math.min(100, Math.round(
+  const iqfGeral = !temHistoricoValido ? 0 : Math.max(0, Math.min(100, Math.round(
     (scoreQualidadeLotes * 0.40) +
     (scorePontualidade * 0.20) +
     (scoreEspecificacoes * 0.15) +
@@ -165,12 +173,12 @@ export function calcularEstatisticasReaisFornecedor(f: Fornecedor): ResumoEstati
     (scoreAcoesCorretivas * 0.15)
   )));
 
-  let faixaIQF: 'A - Excelente' | 'B - Bom' | 'C - Regular' | 'D - Crítico' = 'A - Excelente';
-  let resultadoSugerido: 'Aprovado' | 'Aprovado com Restrições' | 'Reprovado' = 'Aprovado';
+  let faixaIQF: 'A - Excelente' | 'B - Bom' | 'C - Regular' | 'D - Crítico' | 'Sem Avaliação' = 'Sem Avaliação';
+  let resultadoSugerido: 'Aprovado' | 'Aprovado com Restrições' | 'Reprovado' | 'Em Avaliação' = 'Em Avaliação';
 
-  if (!temHistorico) {
-    faixaIQF = 'C - Regular';
-    resultadoSugerido = 'Aprovado com Restrições';
+  if (!temHistoricoValido) {
+    faixaIQF = 'Sem Avaliação';
+    resultadoSugerido = 'Em Avaliação';
   } else if (iqfGeral >= 90) {
     faixaIQF = 'A - Excelente';
     resultadoSugerido = 'Aprovado';
@@ -212,7 +220,8 @@ export function calcularEstatisticasReaisFornecedor(f: Fornecedor): ResumoEstati
     scoreAcoesCorretivas,
     iqfGeral,
     faixaIQF,
-    resultadoSugerido
+    resultadoSugerido,
+    temHistoricoValido
   };
 }
 
@@ -225,6 +234,10 @@ export function criarAvaliacaoAutomaticaPorDadosReais(
 ): AvaliacaoFornecedor {
   const stats = calcularEstatisticasReaisFornecedor(fornecedor);
   const dataHoje = new Date().toISOString().split('T')[0];
+
+  const parecerTecnico = stats.totalLotes > 0
+    ? `Avaliação gerada automaticamente com base em ${stats.totalLotes} lote(s) inspecionado(s) e ${stats.totalRNCs} RNC(s) registrada(s). Taxa de aprovação de lotes: ${stats.taxaAprovacao}%, Pontualidade de entrega: ${stats.taxaPontualidade}%. Classificação IQF: ${stats.faixaIQF} (${stats.iqfGeral}%).`
+    : `Fornecedor sem lotes inspecionados registrados. Status mantido em "Em Avaliação" até que inspeções de lotes têxteis sejam cadastradas.`;
 
   return {
     id: `eval-auto-${Date.now()}`,
@@ -249,7 +262,7 @@ export function criarAvaliacaoAutomaticaPorDadosReais(
       entregasNoPrazo: stats.entregasNoPrazo,
       taxaPontualidade: stats.taxaPontualidade
     },
-    parecerTecnico: `Avaliação gerada automaticamente com base em ${stats.totalLotes} lote(s) inspecionado(s) e ${stats.totalRNCs} RNC(s) registrada(s). Taxa de aprovação de lotes: ${stats.taxaAprovacao}%, Pontualidade de entrega: ${stats.taxaPontualidade}%. Classificação IQF: ${stats.faixaIQF} (${stats.iqfGeral}%).`
+    parecerTecnico
   };
 }
 

@@ -189,7 +189,7 @@ export const FornecedorModalDetalhes: React.FC<FornecedorModalDetalhesProps> = (
               { id: 4, label: `4. Documentação (${fornecedor.documentos?.length || 0})`, icon: FileCheck2 },
               { id: 5, label: `5. Inspeções & Auditorias (${totalVerificacoes})`, icon: ClipboardCheck },
               { id: 6, label: `6. Não Conformidades (${fornecedor.ocorrenciasRNC?.length || 0})`, icon: FileWarning, hasAlert: (fornecedor.ocorrenciasRNC?.filter(r => r.status === 'Aberta').length || 0) > 0 },
-              { id: 7, label: stats.totalLotes > 0 || (fornecedor.historicoAvaliacoes && fornecedor.historicoAvaliacoes.length > 0) ? `7. Avaliações (IQF ${stats.iqfGeral}%)` : `7. Avaliações (Sem lotes)`, icon: Award },
+              { id: 7, label: stats.temHistoricoValido ? `7. Avaliações (IQF ${stats.iqfGeral}%)` : `7. Avaliações (Sem lotes)`, icon: Award },
               { id: 8, label: '8. Histórico & Log', icon: History },
             ].map(tab => {
               const Icon = tab.icon;
@@ -1140,30 +1140,60 @@ export const FornecedorModalDetalhes: React.FC<FornecedorModalDetalhesProps> = (
                     Nota Atual Consolidada (IQF)
                   </span>
                   <div className="flex items-center space-x-3">
-                    <span className="text-3xl font-black font-mono text-emerald-400">
-                      {stats.iqfGeral}%
-                    </span>
-                    <span className="px-3 py-1 rounded-full text-xs font-extrabold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                      Faixa {stats.faixaIQF}
-                    </span>
+                    {stats.temHistoricoValido ? (
+                      <>
+                        <span className="text-3xl font-black font-mono text-emerald-400">
+                          {stats.iqfGeral}%
+                        </span>
+                        <span className="px-3 py-1 rounded-full text-xs font-extrabold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                          Faixa {stats.faixaIQF}
+                        </span>
+                      </>
+                    ) : (
+                      <>
+                        <span className="text-2xl font-bold font-mono text-slate-400">
+                          —
+                        </span>
+                        <span className="px-3 py-1 rounded-full text-xs font-bold bg-slate-800 text-slate-300 border border-slate-700">
+                          Sem Avaliação • Requer Lotes
+                        </span>
+                      </>
+                    )}
                   </div>
                 </div>
 
                 <div className="grid grid-cols-3 gap-3 text-center text-xs">
                   <div className="p-2.5 bg-white/5 rounded-xl border border-white/10">
                     <span className="text-[10px] text-slate-400 block uppercase">Qualidade Lotes</span>
-                    <span className="font-bold text-white font-mono">{stats.scoreQualidadeLotes}/100</span>
+                    <span className="font-bold text-white font-mono">
+                      {stats.totalLotes > 0 ? `${stats.scoreQualidadeLotes}/100` : '—'}
+                    </span>
                   </div>
                   <div className="p-2.5 bg-white/5 rounded-xl border border-white/10">
                     <span className="text-[10px] text-slate-400 block uppercase">Pontualidade</span>
-                    <span className="font-bold text-white font-mono">{stats.scorePontualidade}/100</span>
+                    <span className="font-bold text-white font-mono">
+                      {stats.totalEntregas > 0 ? `${stats.scorePontualidade}/100` : '—'}
+                    </span>
                   </div>
                   <div className="p-2.5 bg-white/5 rounded-xl border border-white/10">
                     <span className="text-[10px] text-slate-400 block uppercase">Resolução RNC</span>
-                    <span className="font-bold text-white font-mono">{stats.scoreAcoesCorretivas}/100</span>
+                    <span className="font-bold text-white font-mono">
+                      {stats.totalPlanos > 0 || stats.totalRNCs > 0 ? `${stats.scoreAcoesCorretivas}/100` : '—'}
+                    </span>
                   </div>
                 </div>
               </div>
+
+              {/* Aviso se não houver lotes inspecionados */}
+              {!stats.temHistoricoValido && (
+                <div className="p-4 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/60 rounded-xl flex items-center space-x-3 text-xs text-amber-800 dark:text-amber-200">
+                  <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0" />
+                  <div>
+                    <strong className="block font-bold">Nenhum lote têxtil inspecionado ainda</strong>
+                    <span>Para calcular o IQF estatístico real (ISO 9001:2015), acesse a Aba 5 e registre inspeções de lotes têxteis recebidos.</span>
+                  </div>
+                </div>
+              )}
 
               {/* Próxima Reavaliação Agendada */}
               <div className="p-4 bg-blue-50/50 dark:bg-blue-950/20 rounded-xl border border-blue-200 dark:border-blue-900/50 flex items-center justify-between text-xs">
