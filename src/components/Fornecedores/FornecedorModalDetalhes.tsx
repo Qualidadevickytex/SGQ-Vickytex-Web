@@ -660,7 +660,7 @@ export const FornecedorModalDetalhes: React.FC<FornecedorModalDetalhesProps> = (
                     className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg transition-colors cursor-pointer flex items-center shadow-xs"
                   >
                     <CheckSquare className="w-3.5 h-3.5 mr-1.5" />
-                    Agendar Auditoria
+                    Nova Auditoria de Fábrica
                   </button>
                 </div>
               </div>
@@ -748,7 +748,7 @@ export const FornecedorModalDetalhes: React.FC<FornecedorModalDetalhesProps> = (
                       onClick={() => onOpenNovaAuditoria(fornecedor)}
                       className="px-3 py-1.5 bg-indigo-600 text-white text-xs font-bold rounded-lg hover:bg-indigo-700 transition cursor-pointer"
                     >
-                      + Agendar Auditoria
+                      + Nova Auditoria de Fábrica
                     </button>
                   </div>
                 </div>
