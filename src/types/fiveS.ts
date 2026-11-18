@@ -127,6 +127,7 @@ export interface Auditoria5S {
   status: 'Rascunho' | 'Finalizada';
   planoAcaoId?: string; // Link para Plano de Ação se houver algum item com NC
   fotos?: string[]; // Mantido para compatibilidade (lista de URLs/base64)
+  fotosMapa?: { requisitoId: string; index: number; legenda?: string; fotoId?: string }[]; // Mapeamento de cada foto para seu requisito de origem
   linkDrive?: string;
 
   // Rich extensions para o novo modelo

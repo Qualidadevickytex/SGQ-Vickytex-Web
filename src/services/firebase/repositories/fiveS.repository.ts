@@ -38,7 +38,8 @@ class FiveSRepositoryClass extends BaseRepository<Auditoria5S> {
       totalPenalidades: rec.total_penalidades || rec.totalPenalidades,
       indiceConformidade: rec.indice_conformidade || rec.indiceConformidade,
       classificacaoId: rec.classificacao_id || rec.classificacaoId,
-      fotos: rec.fotos || []
+      fotos: rec.fotos || [],
+      fotosMapa: rec.fotos_mapa || rec.fotosMapa || undefined
     };
   }
 
@@ -63,7 +64,8 @@ class FiveSRepositoryClass extends BaseRepository<Auditoria5S> {
       total_penalidades: data.totalPenalidades,
       indice_conformidade: data.indiceConformidade,
       classificacao_id: data.classificacaoId,
-      fotos: data.fotos || []
+      fotos: data.fotos || [],
+      ...(data.fotosMapa ? { fotos_mapa: data.fotosMapa } : {})
     };
   }
 

@@ -20,7 +20,8 @@ import {
   User,
   Image as ImageIcon,
   Sparkles,
-  Printer
+  Printer,
+  ArrowRightLeft
 } from 'lucide-react';
 import { 
   Setor5S, 
@@ -122,6 +123,9 @@ export const FiveSAudits: React.FC<FiveSAuditsProps> = ({
 
   // Editing Audit ID
   const [editingAuditId, setEditingAuditId] = useState<string | null>(null);
+  const [photosEdited, setPhotosEdited] = useState(false);
+  const [loadedWithFallback, setLoadedWithFallback] = useState(false);
+  const [movingPhoto, setMovingPhoto] = useState<{ fromReqId: string; index: number } | null>(null);
 
   // Lightbox
   const [lightboxImage, setLightboxImage] = useState<string | null>(null);
@@ -150,6 +154,95 @@ export const FiveSAudits: React.FC<FiveSAuditsProps> = ({
     }
   }, [ciclos, setores]);
 
+  // Helper: resolve requirement ID reliably from a Fotografia5S record
+  const resolvePhotoReqId = (
+    p: Fotografia5S,
+    auditItens: ItemAuditado[]
+  ): string => {
+    if (p.requisitoId) {
+      const byIdOrCode = requisitos.find(
+        r => r.id === p.requisitoId || r.codigo === p.requisitoId
+      );
+      if (byIdOrCode) return byIdOrCode.id;
+    }
+    if (p.itemAuditadoId) {
+      const matchedItem = auditItens.find(it => it.id === p.itemAuditadoId);
+      if (matchedItem?.requisitoId) {
+        const byItemReq = requisitos.find(
+          r => r.id === matchedItem.requisitoId || r.codigo === matchedItem.requisitoId
+        );
+        return byItemReq ? byItemReq.id : matchedItem.requisitoId;
+      }
+    }
+    return p.requisitoId || '';
+  };
+
+  // Helper: build photo map per requirement for an audit
+  const buildPhotosMapForAudit = (editAudit: Auditoria5S, auditItens: ItemAuditado[]) => {
+    const auditPhotos = fotos.filter(
+      f => f.auditoriaId === editAudit.id || (editAudit.codigo && f.auditoriaId === editAudit.codigo)
+    );
+    const phtMap: Record<string, { file: string; legend: string }[]> = {};
+    const seenUrls = new Set<string>();
+
+    auditPhotos.forEach(p => {
+      const reqKey = resolvePhotoReqId(p, auditItens);
+      if (reqKey && p.url) {
+        if (!phtMap[reqKey]) phtMap[reqKey] = [];
+        phtMap[reqKey].push({ file: p.url, legend: p.legenda || 'Evidência fotográfica' });
+        seenUrls.add(p.url);
+      }
+    });
+
+    // Complementa com o mapa de requisitos salvo na própria auditoria (fotosMapa), caso exista
+    if (editAudit.fotosMapa && editAudit.fotosMapa.length > 0 && editAudit.fotos && editAudit.fotos.length > 0) {
+      editAudit.fotosMapa.forEach(entry => {
+        const url = editAudit.fotos?.[entry.index];
+        if (!url || seenUrls.has(url)) return;
+        const matchedReq = requisitos.find(r => r.id === entry.requisitoId || r.codigo === entry.requisitoId);
+        const reqKey = matchedReq ? matchedReq.id : entry.requisitoId;
+        if (reqKey) {
+          if (!phtMap[reqKey]) phtMap[reqKey] = [];
+          phtMap[reqKey].push({ file: url, legend: entry.legenda || 'Evidência fotográfica' });
+          seenUrls.add(url);
+        }
+      });
+    }
+
+    let usedFallback = false;
+    // Fallback legado: somente se não houver registros na coleção fives_photos nem em fotosMapa
+    if (Object.keys(phtMap).length === 0 && editAudit.fotos && editAudit.fotos.length > 0) {
+      const nonConfReq = auditItens.find(it => it.avaliacao !== 'Atende Totalmente' || it.observacoes?.trim());
+      const targetReqId = nonConfReq ? nonConfReq.requisitoId : (requisitos.find(r => r.ativo)?.id || '');
+      if (targetReqId) {
+        usedFallback = true;
+        phtMap[targetReqId] = editAudit.fotos.map((url, idx) => ({
+          file: url,
+          legend: `Evidência fotográfica ${idx + 1}`
+        }));
+      }
+    }
+
+    return { phtMap, usedFallback };
+  };
+
+  // Se o formulário abriu usando fallback antes do Firestore terminar de carregar 'fives_photos',
+  // redistribui automaticamente assim que os registros reais chegarem (se o usuário ainda não editou fotos)
+  useEffect(() => {
+    if (activeTab !== 'nova' || !editingAuditId || !loadedWithFallback || photosEdited) return;
+    const editAudit = auditorias.find(a => a.id === editingAuditId);
+    if (!editAudit) return;
+    const realPhotos = fotos.filter(
+      f => f.auditoriaId === editAudit.id || (editAudit.codigo && f.auditoriaId === editAudit.codigo)
+    );
+    if (realPhotos.length > 0) {
+      const auditItens = itens.filter(it => it.auditoriaId === editAudit.id);
+      const { phtMap, usedFallback } = buildPhotosMapForAudit(editAudit, auditItens);
+      setTempPhotos(phtMap);
+      setLoadedWithFallback(usedFallback);
+    }
+  }, [fotos, activeTab, editingAuditId, loadedWithFallback, photosEdited]);
+
   // Handle opening New Audit Form
   const handleStartNewAudit = (editAudit?: Auditoria5S) => {
     if (editAudit && !allowEdit) {
@@ -160,6 +253,9 @@ export const FiveSAudits: React.FC<FiveSAuditsProps> = ({
       showNotification("Você não possui permissão para iniciar novas auditorias.", "error");
       return;
     }
+
+    setPhotosEdited(false);
+    setMovingPhoto(null);
 
     if (editAudit) {
       setEditingAuditId(editAudit.id);
@@ -180,30 +276,10 @@ export const FiveSAudits: React.FC<FiveSAuditsProps> = ({
       setEvaluations(evals);
       setObsMap(obss);
 
-      // Extract photos
-      const auditPhotos = fotos.filter(f => f.auditoriaId === editAudit.id || f.auditoriaId === editAudit.codigo);
-      const phtMap: typeof tempPhotos = {};
-      auditPhotos.forEach(p => {
-        const reqKey = p.requisitoId || (requisitos.find(r => r.codigo === p.requisitoId)?.id) || p.requisitoId;
-        if (reqKey) {
-          if (!phtMap[reqKey]) phtMap[reqKey] = [];
-          phtMap[reqKey].push({ file: p.url, legend: p.legenda || 'Evidência fotográfica' });
-        }
-      });
-
-      // Fallback para fotos gravadas no array da auditoria
-      if (Object.keys(phtMap).length === 0 && editAudit.fotos && editAudit.fotos.length > 0) {
-        const nonConfReq = auditItens.find(it => it.avaliacao !== 'Atende Totalmente' || it.observacoes?.trim());
-        const targetReqId = nonConfReq ? nonConfReq.requisitoId : (requisitos.find(r => r.ativo)?.id || '');
-        if (targetReqId) {
-          phtMap[targetReqId] = editAudit.fotos.map((url, idx) => ({
-            file: url,
-            legend: `Evidência fotográfica ${idx + 1}`
-          }));
-        }
-      }
-
+      // Extract photos preserving each photo's exact requisitoId
+      const { phtMap, usedFallback } = buildPhotosMapForAudit(editAudit, auditItens);
       setTempPhotos(phtMap);
+      setLoadedWithFallback(usedFallback);
     } else {
       setEditingAuditId(null);
       setAuditorName(currentUserName);
@@ -219,6 +295,7 @@ export const FiveSAudits: React.FC<FiveSAuditsProps> = ({
       setEvaluations(defaultEvals);
       setObsMap({});
       setTempPhotos({});
+      setLoadedWithFallback(false);
     }
     setActiveTab('nova');
   };
@@ -227,6 +304,7 @@ export const FiveSAudits: React.FC<FiveSAuditsProps> = ({
   const handleCapturePhotoFromModal = (base64Image: string, legend: string) => {
     if (!cameraModal.reqId) return;
     const reqId = cameraModal.reqId;
+    setPhotosEdited(true);
     setTempPhotos(prev => {
       const currentList = prev[reqId] || [];
       return {
@@ -244,7 +322,7 @@ export const FiveSAudits: React.FC<FiveSAuditsProps> = ({
     try {
       // Comprime a foto no navegador/celular reduzindo de ~8MB para ~60-100KB com alta nitidez
       const compressedBase64 = await compressImage(file, 1200, 1200, 0.75);
-      
+      setPhotosEdited(true);
       setTempPhotos(prev => {
         const currentList = prev[reqId] || [];
         return {
@@ -262,6 +340,7 @@ export const FiveSAudits: React.FC<FiveSAuditsProps> = ({
 
   // Remove uploaded photo
   const handleRemovePhoto = (reqId: string, index: number) => {
+    setPhotosEdited(true);
     setTempPhotos(prev => {
       const currentList = [...(prev[reqId] || [])];
       currentList.splice(index, 1);
@@ -270,6 +349,29 @@ export const FiveSAudits: React.FC<FiveSAuditsProps> = ({
         [reqId]: currentList
       };
     });
+  };
+
+  // Move photo from one requirement item to another
+  const handleMovePhoto = (fromReqId: string, index: number, toReqId: string) => {
+    if (!toReqId || fromReqId === toReqId) {
+      setMovingPhoto(null);
+      return;
+    }
+    setPhotosEdited(true);
+    setTempPhotos(prev => {
+      const sourceList = [...(prev[fromReqId] || [])];
+      const [moved] = sourceList.splice(index, 1);
+      if (!moved) return prev;
+      const targetList = [...(prev[toReqId] || []), moved];
+      return {
+        ...prev,
+        [fromReqId]: sourceList,
+        [toReqId]: targetList
+      };
+    });
+    setMovingPhoto(null);
+    const destReq = requisitos.find(r => r.id === toReqId);
+    showNotification(`Evidência movida para ${destReq ? `${destReq.codigo} - ${destReq.nome}` : 'o item selecionado'}.`);
   };
 
   // Submit Audit Form
@@ -347,12 +449,30 @@ export const FiveSAudits: React.FC<FiveSAuditsProps> = ({
       uploadedTempPhotos = tempPhotos;
     }
 
-    // Coleta todas as fotos anexadas nesta auditoria
+    // Coleta fotos com mapeamento exato de requisito (respeitando limite seguro de ~650KB no doc da auditoria;
+    // 100% das fotos são persistidas individualmente na coleção 'fives_photos')
     const allAuditPhotoUrls: string[] = [];
-    Object.values(uploadedTempPhotos).forEach((rawList) => {
+    const fotosMapa: { requisitoId: string; index: number; legenda?: string; fotoId?: string }[] = [];
+    let embeddedBytes = 0;
+    const MAX_EMBEDDED_BYTES = 650_000;
+
+    Object.entries(uploadedTempPhotos).forEach(([reqId, rawList]) => {
       const pList = rawList as { file: string; legend: string }[];
-      pList.forEach(p => {
-        if (p && p.file) allAuditPhotoUrls.push(p.file);
+      pList.forEach((p, pIdx) => {
+        if (p && p.file) {
+          const approxBytes = p.file.length;
+          if (!p.file.startsWith('data:image/') || embeddedBytes + approxBytes <= MAX_EMBEDDED_BYTES) {
+            const index = allAuditPhotoUrls.length;
+            allAuditPhotoUrls.push(p.file);
+            embeddedBytes += approxBytes;
+            fotosMapa.push({
+              requisitoId: reqId,
+              index,
+              legenda: p.legend || 'Evidência fotográfica',
+              fotoId: `foto-${auditId}-${reqId}-${pIdx}`
+            });
+          }
+        }
       });
     });
 
@@ -377,12 +497,13 @@ export const FiveSAudits: React.FC<FiveSAuditsProps> = ({
       totalPenalidades: scores.totalPenalidades,
       indiceConformidade: scores.indiceConformidade,
       classificacaoId: classification.id,
-      fotos: allAuditPhotoUrls
+      fotos: allAuditPhotoUrls,
+      fotosMapa
     };
 
     // Save evaluated items
     let updatedItens = [...itens].filter(it => it.auditoriaId !== auditId);
-    let updatedFotos = [...fotos].filter(f => f.auditoriaId !== auditId);
+    let updatedFotos = [...fotos].filter(f => f.auditoriaId !== auditId && f.auditoriaId !== auditCode);
     let updatedPlanos = [...planos].filter(p => p.auditoriaId !== auditId);
 
     scores.calculatedItems.forEach(calcItem => {
@@ -643,9 +764,10 @@ export const FiveSAudits: React.FC<FiveSAuditsProps> = ({
 
           {/* Galeria de Fotos Geral da Auditoria */}
           {(() => {
+            const linkedPhotos = fotos.filter(f => f.auditoriaId === viewingAudit.id || f.auditoriaId === viewingAudit.codigo);
             const allAuditPhotos = [
-              ...fotos.filter(f => f.auditoriaId === viewingAudit.id),
-              ...(viewingAudit.fotos || []).filter(url => !fotos.some(f => f.auditoriaId === viewingAudit.id && f.url === url)).map((url, idx) => ({
+              ...linkedPhotos,
+              ...(viewingAudit.fotos || []).filter(url => !linkedPhotos.some(f => f.url === url)).map((url, idx) => ({
                 id: `audit-photo-${idx}`,
                 auditoriaId: viewingAudit.id,
                 requisitoId: '',
@@ -698,19 +820,50 @@ export const FiveSAudits: React.FC<FiveSAuditsProps> = ({
                   (f.requisitoId === req.id || f.requisitoId === req.codigo || (item && f.itemAuditadoId === item.id))
                 );
 
-                // Se não houver registro na tabela de fotos mas viewingAudit.fotos tiver fotos gravadas
-                if (reqPhotos.length === 0 && viewingAudit.fotos && viewingAudit.fotos.length > 0) {
+                // Se houver fotosMapa na auditoria, complementa sem duplicar
+                if (reqPhotos.length === 0 && viewingAudit.fotosMapa && viewingAudit.fotosMapa.length > 0 && viewingAudit.fotos) {
+                  const mappedEntries = viewingAudit.fotosMapa.filter(
+                    m => m.requisitoId === req.id || m.requisitoId === req.codigo
+                  );
+                  if (mappedEntries.length > 0) {
+                    reqPhotos = mappedEntries
+                      .map((m, idx) => {
+                        const url = viewingAudit.fotos?.[m.index];
+                        if (!url) return null;
+                        return {
+                          id: m.fotoId || `audit-map-photo-${viewingAudit.id}-${req.id}-${idx}`,
+                          itemAuditadoId: item?.id || '',
+                          requisitoId: req.id,
+                          auditoriaId: viewingAudit.id,
+                          url,
+                          legenda: m.legenda || 'Evidência fotográfica',
+                          data: viewingAudit.dataAuditoria,
+                          usuario: viewingAudit.auditor
+                        };
+                      })
+                      .filter(Boolean) as Fotografia5S[];
+                  }
+                }
+
+                // Fallback legado apenas se não houver registros na tabela de fotos nem fotosMapa
+                const anyAuditPhotosInTable = fotos.some(
+                  f => f.auditoriaId === viewingAudit.id || f.auditoriaId === viewingAudit.codigo
+                );
+                if (
+                  reqPhotos.length === 0 &&
+                  !anyAuditPhotosInTable &&
+                  (!viewingAudit.fotosMapa || viewingAudit.fotosMapa.length === 0) &&
+                  viewingAudit.fotos &&
+                  viewingAudit.fotos.length > 0
+                ) {
                   const auditActiveReqs = requisitos.filter(r => r.ativo && (r.setoresAplicaveis.includes("TODOS") || r.setoresAplicaveis.includes(viewingAudit.setorId)));
                   const nonConformingOrObsReqs = auditActiveReqs.filter(r => {
                     const itm = itens.find(i => (i.auditoriaId === viewingAudit.id || i.auditoriaId === viewingAudit.codigo) && (i.requisitoId === r.id || i.requisitoId === r.codigo));
                     return itm && (itm.observacoes?.trim() || itm.avaliacao !== 'Atende Totalmente');
                   });
+                  const reqNonConfIdx = nonConformingOrObsReqs.findIndex(r => r.id === req.id);
 
-                  // Se este requisito é o único ou um dos que possui observação/desvio, associa a foto a ele
-                  if (
-                    (nonConformingOrObsReqs.length <= 1 && (item?.observacoes?.trim() || item?.avaliacao !== 'Atende Totalmente')) ||
-                    (nonConformingOrObsReqs.some(r => r.id === req.id) && nonConformingOrObsReqs.length === viewingAudit.fotos.length)
-                  ) {
+                  if (nonConformingOrObsReqs.length <= 1 && (item?.observacoes?.trim() || item?.avaliacao !== 'Atende Totalmente')) {
                     reqPhotos = viewingAudit.fotos.map((url, pIdx) => ({
                       id: `audit-req-photo-${viewingAudit.id}-${req.id}-${pIdx}`,
                       itemAuditadoId: item?.id || '',
@@ -721,6 +874,18 @@ export const FiveSAudits: React.FC<FiveSAuditsProps> = ({
                       data: viewingAudit.dataAuditoria,
                       usuario: viewingAudit.auditor
                     }));
+                  } else if (reqNonConfIdx >= 0 && nonConformingOrObsReqs.length === viewingAudit.fotos.length) {
+                    const url = viewingAudit.fotos[reqNonConfIdx];
+                    reqPhotos = [{
+                      id: `audit-req-photo-${viewingAudit.id}-${req.id}-${reqNonConfIdx}`,
+                      itemAuditadoId: item?.id || '',
+                      requisitoId: req.id,
+                      auditoriaId: viewingAudit.id,
+                      url,
+                      legenda: 'Evidência fotográfica',
+                      data: viewingAudit.dataAuditoria,
+                      usuario: viewingAudit.auditor
+                    }];
                   }
                 }
                 
@@ -949,10 +1114,12 @@ export const FiveSAudits: React.FC<FiveSAuditsProps> = ({
                           <div className="flex flex-wrap gap-2 overflow-x-auto py-1">
                             {(tempPhotos[req.id] || []).map((pht, pIdx) => (
                               <div key={pIdx} className="relative group w-14 h-14 rounded-lg overflow-hidden border border-slate-300 dark:border-slate-700 bg-black shrink-0 shadow-xs">
-                                <img 
-                                  src={pht.file} 
-                                  className="w-full h-full object-cover cursor-pointer group-hover:scale-105 transition-all" 
-                                  alt="Temp"
+                                <DriveImage
+                                  url={pht.file}
+                                  accessToken={accessToken}
+                                  googleOAuthToken={googleOAuthToken}
+                                  className="w-full h-full object-cover cursor-pointer group-hover:scale-105 transition-all"
+                                  alt={pht.legend || 'Evidência'}
                                   onClick={() => setLightboxImage(pht.file)}
                                 />
                                 <div className="absolute bottom-0 inset-x-0 bg-black/75 text-[8px] text-white font-medium px-1 py-0.5 truncate text-center pointer-events-none">
@@ -962,9 +1129,20 @@ export const FiveSAudits: React.FC<FiveSAuditsProps> = ({
                                   type="button"
                                   onClick={(e) => {
                                     e.stopPropagation();
+                                    setMovingPhoto({ fromReqId: req.id, index: pIdx });
+                                  }}
+                                  className="absolute top-1 left-1 bg-blue-600/90 hover:bg-blue-700 text-white rounded-full p-1 shadow-md opacity-0 group-hover:opacity-100 transition-all cursor-pointer"
+                                  title="Mover foto para outro item"
+                                >
+                                  <ArrowRightLeft className="w-2.5 h-2.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
                                     handleRemovePhoto(req.id, pIdx);
                                   }}
-                                  className="absolute top-1 right-1 bg-rose-600 hover:bg-rose-700 text-white rounded-full p-1 shadow-md transition-all"
+                                  className="absolute top-1 right-1 bg-rose-600 hover:bg-rose-700 text-white rounded-full p-1 shadow-md transition-all cursor-pointer"
                                   title="Remover foto"
                                 >
                                   <X className="w-2.5 h-2.5" />
@@ -1102,7 +1280,7 @@ export const FiveSAudits: React.FC<FiveSAuditsProps> = ({
                   </tr>
                 ) : (
                     filteredAudits.map((item) => {
-                      const existingPhotos = fotos.filter(f => f.auditoriaId === item.id);
+                      const existingPhotos = fotos.filter(f => f.auditoriaId === item.id || (item.codigo && f.auditoriaId === item.codigo));
                       const fallbackUrls = (item.fotos || []).filter(url => !existingPhotos.some(f => f.url === url));
                       const photoCount = existingPhotos.length + fallbackUrls.length;
 
@@ -1229,6 +1407,49 @@ export const FiveSAudits: React.FC<FiveSAuditsProps> = ({
               >
                 Sim, Excluir
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* --- MOVE PHOTO TO ANOTHER ITEM MODAL --- */}
+      {movingPhoto && (
+        <div className="fixed inset-0 z-55 flex items-center justify-center p-4 bg-slate-950/75 backdrop-blur-xs no-print" onClick={() => setMovingPhoto(null)}>
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 max-w-md w-full shadow-2xl space-y-4" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+              <div className="flex items-center space-x-2">
+                <ArrowRightLeft className="w-4 h-4 text-blue-600" />
+                <h3 className="text-sm font-black text-slate-800 dark:text-slate-100">Mover Evidência para Outro Item</h3>
+              </div>
+              <button onClick={() => setMovingPhoto(null)} className="p-1 text-slate-400 hover:text-slate-600 rounded-lg cursor-pointer">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="max-h-72 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800 border border-slate-200 dark:border-slate-800 rounded-lg">
+              {requisitos
+                .filter(r => r.ativo && (r.setoresAplicaveis.includes("TODOS") || r.setoresAplicaveis.includes(selectedSectorId)))
+                .map(req => {
+                  const isCurrent = req.id === movingPhoto.fromReqId;
+                  return (
+                    <button
+                      key={req.id}
+                      type="button"
+                      disabled={isCurrent}
+                      onClick={() => handleMovePhoto(movingPhoto.fromReqId, movingPhoto.index, req.id)}
+                      className={`w-full text-left px-3 py-2.5 text-xs flex items-center justify-between transition-colors ${
+                        isCurrent
+                          ? 'bg-slate-50 dark:bg-slate-800/50 text-slate-400 cursor-not-allowed'
+                          : 'hover:bg-blue-50 dark:hover:bg-blue-950/30 text-slate-700 dark:text-slate-200 cursor-pointer'
+                      }`}
+                    >
+                      <span className="truncate pr-2">
+                        <strong className="font-mono mr-1.5">{req.codigo}</strong>
+                        {req.nome}
+                      </span>
+                      {isCurrent && <span className="text-[10px] font-bold text-slate-400 shrink-0">Atual</span>}
+                    </button>
+                  );
+                })}
             </div>
           </div>
         </div>

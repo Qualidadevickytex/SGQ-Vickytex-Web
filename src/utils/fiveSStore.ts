@@ -163,17 +163,37 @@ const inMemoryStore: Record<string, any> = {
 };
 
 let isSubscribed = false;
+const pendingPhotoCreates = new Map<string, Fotografia5S>();
+const pendingPhotoDeletes = new Set<string>();
+
+const mergePhotosWithPending = (remotePhotos: Fotografia5S[]): Fotografia5S[] => {
+  const map = new Map<string, Fotografia5S>();
+  remotePhotos.forEach(p => {
+    if (p && p.id && !pendingPhotoDeletes.has(p.id)) {
+      map.set(p.id, p);
+    }
+  });
+  pendingPhotoCreates.forEach((p, id) => {
+    if (!pendingPhotoDeletes.has(id)) {
+      map.set(id, p);
+    }
+  });
+  return Array.from(map.values());
+};
 
 export const initFiveSStoreSync = () => {
   if (isSubscribed) return;
   isSubscribed = true;
 
   // Carregar inicial do Firestore (Configurações e tabelas normalizadas)
+  // IMPORTANTE: 'sgq_5s_fotos' / 'fives_photos' vive exclusivamente na coleção 'fives_photos'
+  // e NUNCA deve ser sobrescrito por documentos legados/vazios em 'system_settings'.
   SystemSettingsRepository.findAll().then(res => {
     if (res.success && Array.isArray(res.data)) {
       res.data.forEach(rec => {
         if (rec.id.startsWith('sgq_5s_') || rec.id.startsWith('fives_')) {
           const key = rec.id.startsWith('fives_') ? `sgq_5s_${rec.id.replace('fives_', '')}` : rec.id;
+          if (key === 'sgq_5s_fotos' || key === 'sgq_5s_photos') return;
           let val = rec.items !== undefined ? rec.items : rec.data;
           if (val !== undefined) {
             if ((key === 'sgq_5s_configuracao' || key === 'fives_configuracao') && val && typeof val === 'object') {
@@ -194,6 +214,7 @@ export const initFiveSStoreSync = () => {
     records.forEach(rec => {
       if (rec.id.startsWith('sgq_5s_') || rec.id.startsWith('fives_')) {
         const key = rec.id.startsWith('fives_') ? `sgq_5s_${rec.id.replace('fives_', '')}` : rec.id;
+        if (key === 'sgq_5s_fotos' || key === 'sgq_5s_photos') return;
         const val = rec.items !== undefined ? rec.items : rec.data;
         if (val !== undefined) {
           inMemoryStore[key] = val;
@@ -205,28 +226,21 @@ export const initFiveSStoreSync = () => {
 
   // Carregar e sincronizar Fotos do 5S em tempo real da coleção dedicada 'fives_photos' no Firestore
   FiveSPhotosRepository.findAll().then(res => {
-    if (res.success && Array.isArray(res.data) && res.data.length > 0) {
-      const current = (inMemoryStore['sgq_5s_fotos'] || []) as Fotografia5S[];
-      const map = new Map<string, Fotografia5S>();
-      res.data.forEach(p => { if (p && p.id) map.set(p.id, p); });
-      current.forEach(p => { if (p && p.id && !map.has(p.id)) map.set(p.id, p); });
-      const merged = Array.from(map.values());
-      inMemoryStore['sgq_5s_fotos'] = merged;
-      try {
-        localStorage.setItem('sgq_5s_fotos', JSON.stringify(merged));
-      } catch {}
-      notifyListeners('sgq_5s_fotos', merged);
+    if (res.success && Array.isArray(res.data)) {
+      const merged = mergePhotosWithPending(res.data);
+      if (merged.length > 0 || (inMemoryStore['sgq_5s_fotos'] || []).length === 0) {
+        inMemoryStore['sgq_5s_fotos'] = merged;
+        try {
+          localStorage.setItem('sgq_5s_fotos', JSON.stringify(merged));
+        } catch {}
+        notifyListeners('sgq_5s_fotos', merged);
+      }
     }
   }).catch(err => console.error('[FiveSStore] Error loading 5S photos from Firestore:', err));
 
   FiveSPhotosRepository.subscribe((photos) => {
     if (Array.isArray(photos)) {
-      const current = (inMemoryStore['sgq_5s_fotos'] || []) as Fotografia5S[];
-      const map = new Map<string, Fotografia5S>();
-      photos.forEach(p => { if (p && p.id) map.set(p.id, p); });
-      // Keep any local photos that might still be syncing
-      current.forEach(p => { if (p && p.id && !map.has(p.id)) map.set(p.id, p); });
-      const merged = Array.from(map.values());
+      const merged = mergePhotosWithPending(photos);
       inMemoryStore['sgq_5s_fotos'] = merged;
       try {
         localStorage.setItem('sgq_5s_fotos', JSON.stringify(merged));
@@ -239,6 +253,8 @@ export const initFiveSStoreSync = () => {
 initFiveSStoreSync();
 
 export const clearFiveSMemoryStore = (): void => {
+  pendingPhotoCreates.clear();
+  pendingPhotoDeletes.clear();
   inMemoryStore['sgq_5s_itens'] = [];
   inMemoryStore['sgq_5s_fotos'] = [];
   inMemoryStore['sgq_5s_planos'] = [];
@@ -269,17 +285,40 @@ export const setStoreData = <T>(key: string, data: T): void => {
     }
 
     const prevList = (Array.isArray(prevData) ? prevData : []) as Fotografia5S[];
+    const prevMap = new Map<string, Fotografia5S>();
+    prevList.forEach(p => { if (p && p.id) prevMap.set(p.id, p); });
+
     const newIds = new Set(photoList.map(p => p.id));
     prevList.forEach(p => {
       if (p.id && !newIds.has(p.id)) {
-        FiveSPhotosRepository.delete(p.id).catch(() => {});
+        pendingPhotoCreates.delete(p.id);
+        pendingPhotoDeletes.add(p.id);
+        FiveSPhotosRepository.delete(p.id)
+          .catch(() => {})
+          .finally(() => { pendingPhotoDeletes.delete(p.id); });
       }
     });
     photoList.forEach(photo => {
       if (photo.id) {
-        FiveSPhotosRepository.create(photo).catch(err => {
-          console.error(`[FiveSStore] Error persisting photo ${photo.id} to Firestore:`, err);
-        });
+        const prev = prevMap.get(photo.id);
+        const changed = !prev ||
+          prev.url !== photo.url ||
+          prev.requisitoId !== photo.requisitoId ||
+          prev.itemAuditadoId !== photo.itemAuditadoId ||
+          prev.legenda !== photo.legenda ||
+          prev.auditoriaId !== photo.auditoriaId;
+
+        if (changed) {
+          pendingPhotoDeletes.delete(photo.id);
+          pendingPhotoCreates.set(photo.id, photo);
+          FiveSPhotosRepository.create(photo)
+            .catch(err => {
+              console.error(`[FiveSStore] Error persisting photo ${photo.id} to Firestore:`, err);
+            })
+            .finally(() => {
+              pendingPhotoCreates.delete(photo.id);
+            });
+        }
       }
     });
     return;

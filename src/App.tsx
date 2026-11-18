@@ -401,12 +401,12 @@ function AppContent() {
     // 4. Limpar sub-registros operacionais do 5S em system_settings sem tocar nos parâmetros de configuração
     const operationalSettingsDocsToClear = [
       'sgq_5s_itens',
-      'sgq_5s_fotos',
       'sgq_5s_planos'
     ];
     for (const docId of operationalSettingsDocsToClear) {
       SystemSettingsRepository.create({ id: docId, items: [] }).catch(() => {});
     }
+    SystemSettingsRepository.delete('sgq_5s_fotos').catch(() => {});
 
     handleAddLog('ZERAR_BANCO', 'Registros operacionais zerados. As tabelas de parâmetros e configurações foram integralmente preservadas.');
   };
