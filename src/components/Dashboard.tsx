@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   ResponsiveContainer,
   LineChart,
@@ -38,20 +38,50 @@ import {
   Truck
 } from 'lucide-react';
 import { Documento, ActivityLog, Auditoria, NaoConformidade, PlanoAcao, RiscoOportunidade, Auditoria5S, Equipamento, ColaboradorCompetencia } from '../types';
+import { Classificacao5S } from '../types/fiveS';
+import { getClassificacoes, getClassificationForIndex, subscribeStoreKey } from '../utils/fiveSStore';
 import { PersonalizacaoGeral } from '../utils/mockData';
+
+const get5SClassificationVisual = (cor?: string) => {
+  switch (cor?.toLowerCase()) {
+    case 'emerald':
+    case 'green':
+      return { dotBg: 'bg-emerald-500', hex: '#10b981', textClass: 'text-emerald-400' };
+    case 'blue':
+      return { dotBg: 'bg-blue-500', hex: '#3b82f6', textClass: 'text-blue-400' };
+    case 'indigo':
+      return { dotBg: 'bg-indigo-500', hex: '#6366f1', textClass: 'text-indigo-400' };
+    case 'amber':
+    case 'yellow':
+      return { dotBg: 'bg-amber-400', hex: '#f59e0b', textClass: 'text-amber-400' };
+    case 'rose':
+    case 'red':
+      return { dotBg: 'bg-rose-500', hex: '#f43f5e', textClass: 'text-rose-400' };
+    default:
+      return { dotBg: 'bg-slate-500', hex: '#0284c7', textClass: 'text-sky-400' };
+  }
+};
 
 const CustomTooltip5S = ({ active, payload }: any) => {
   if (active && payload && payload.length) {
     const data = payload[0].payload;
     return (
       <div className="bg-slate-900/95 dark:bg-slate-950/95 text-white p-3 rounded-xl border border-slate-700/50 shadow-xl text-left backdrop-blur-md">
-        <p className="text-xs font-extrabold text-slate-300 font-mono mb-1">{data.code || 'AUD5S'}</p>
-        <p className="text-[11px] font-bold text-slate-100">{data.setor} — {data.date}</p>
+        <p className="text-xs font-extrabold text-slate-200 mb-0.5">{data.fullMonthLabel || data.name}</p>
+        <p className="text-[10px] font-medium text-slate-400">
+          {data.qtdAuditorias} {data.qtdAuditorias === 1 ? 'auditoria finalizada' : 'auditorias finalizadas'}
+        </p>
         <div className="h-px bg-slate-800 my-1.5" />
         <p className="text-xs font-extrabold flex items-center text-sky-400">
-          Média Geral: <span className="font-mono ml-1.5 text-sm">{typeof data.media === 'number' ? data.media.toFixed(0) : data.media}%</span>
+          Índice Médio 5S: <span className="font-mono ml-1.5 text-sm">{typeof data.media === 'number' ? data.media.toFixed(1) : data.media}%</span>
         </p>
-        <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-[10px] text-slate-400 mt-1 font-mono">
+        {data.classificationName && (
+          <p className="text-[10px] font-bold flex items-center gap-1.5 mt-1 text-slate-300">
+            <span className="inline-block w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: data.classificationHex || '#0284c7' }} />
+            <span>Faixa: {data.classificationName}</span>
+          </p>
+        )}
+        <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-[10px] text-slate-400 mt-1.5 font-mono">
           <span>Seiri: {data.seiri || 0}%</span>
           <span>Seiton: {data.seiton || 0}%</span>
           <span>Seiso: {data.seiso || 0}%</span>
@@ -125,6 +155,21 @@ export const Dashboard: React.FC<DashboardProps> = ({
   personalizacao
 }) => {
   const [selectedMonth, setSelectedMonth] = useState('Julho 2026');
+  const [classificacoes5S, setClassificacoes5S] = useState<Classificacao5S[]>(() => getClassificacoes());
+
+  useEffect(() => {
+    const unsubscribe = subscribeStoreKey<Classificacao5S[]>('sgq_5s_classificacoes', (data) => {
+      if (Array.isArray(data) && data.length > 0) {
+        setClassificacoes5S(data);
+      }
+    });
+    return () => unsubscribe();
+  }, []);
+
+  const sortedClassificacoes5S = useMemo(() => {
+    if (!classificacoes5S || classificacoes5S.length === 0) return [];
+    return [...classificacoes5S].sort((a, b) => b.min - a.min);
+  }, [classificacoes5S]);
 
   // Cálculos rápidos dos indicadores do SGQ
   const totalDocs = documents.length;
@@ -245,30 +290,113 @@ export const Dashboard: React.FC<DashboardProps> = ({
     return list;
   }, [audits, treinamentos]);
 
-  // 1. Evolução das Notas das Auditorias 5S (Recharts Line/Area Chart)
-  const sorted5s = [...finished5s].sort((a, b) => a.dataAuditoria.localeCompare(b.dataAuditoria));
+  // 1. Evolução Mensal do Índice Médio 5S (Recharts Area Chart)
+  const monthNamesShort = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+  const monthNamesFull = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
 
-  const data5s = sorted5s.length > 0 
-    ? sorted5s.map(audit => {
-        const d = new Date(audit.dataAuditoria + 'T12:00:00');
-        const formattedDate = !isNaN(d.getTime()) 
-          ? d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
-          : audit.dataAuditoria;
-        return {
-          name: formattedDate,
-          fullLabel: `${formattedDate} (${audit.setor})`,
-          date: formattedDate,
-          setor: audit.setor,
-          code: audit.codigo,
-          media: audit.mediaGeral <= 5 ? Math.round(audit.mediaGeral * 20) : audit.mediaGeral,
-          seiri: audit.seiri <= 5 ? Math.round(audit.seiri * 20) : audit.seiri,
-          seiton: audit.seiton <= 5 ? Math.round(audit.seiton * 20) : audit.seiton,
-          seiso: audit.seiso <= 5 ? Math.round(audit.seiso * 20) : audit.seiso,
-          seiketsu: audit.seiketsu <= 5 ? Math.round(audit.seiketsu * 20) : audit.seiketsu,
-          shitsuke: audit.shitsuke <= 5 ? Math.round(audit.shitsuke * 20) : audit.shitsuke,
-        };
-      })
-    : [];
+  const normalize5sScore = (val?: number) => {
+    const n = typeof val === 'number' ? val : 0;
+    return n <= 5 ? n * 20 : n;
+  };
+
+  const monthly5sMap = new Map<string, {
+    sumMedia: number;
+    sumSeiri: number;
+    sumSeiton: number;
+    sumSeiso: number;
+    sumSeiketsu: number;
+    sumShitsuke: number;
+    count: number;
+  }>();
+
+  finished5s.forEach(audit => {
+    if (!audit.dataAuditoria) return;
+    const ym = audit.dataAuditoria.slice(0, 7); // YYYY-MM
+    if (!/^\d{4}-\d{2}$/.test(ym)) return;
+
+    const rawIndex = audit.indiceConformidade !== undefined ? audit.indiceConformidade : audit.mediaGeral;
+    const entry = monthly5sMap.get(ym) || {
+      sumMedia: 0,
+      sumSeiri: 0,
+      sumSeiton: 0,
+      sumSeiso: 0,
+      sumSeiketsu: 0,
+      sumShitsuke: 0,
+      count: 0
+    };
+
+    entry.sumMedia += normalize5sScore(rawIndex);
+    entry.sumSeiri += normalize5sScore(audit.seiri);
+    entry.sumSeiton += normalize5sScore(audit.seiton);
+    entry.sumSeiso += normalize5sScore(audit.seiso);
+    entry.sumSeiketsu += normalize5sScore(audit.seiketsu);
+    entry.sumShitsuke += normalize5sScore(audit.shitsuke);
+    entry.count += 1;
+
+    monthly5sMap.set(ym, entry);
+  });
+
+  const data5s = Array.from(monthly5sMap.entries())
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([ym, agg]) => {
+      const [year, monthStr] = ym.split('-');
+      const monthIdx = parseInt(monthStr, 10) - 1;
+      const shortLabel = `${monthNamesShort[monthIdx] || monthStr}/${year.slice(-2)}`;
+      const fullMonthLabel = `${monthNamesFull[monthIdx] || monthStr} / ${year}`;
+      const media = Number((agg.sumMedia / agg.count).toFixed(1));
+      const matchedClassification = sortedClassificacoes5S.length > 0
+        ? getClassificationForIndex(media, [...sortedClassificacoes5S])
+        : undefined;
+      const visual = get5SClassificationVisual(matchedClassification?.cor);
+
+      return {
+        monthKey: ym,
+        name: shortLabel,
+        fullMonthLabel,
+        qtdAuditorias: agg.count,
+        media,
+        classificationName: matchedClassification?.nome,
+        classificationHex: visual.hex,
+        seiri: Number((agg.sumSeiri / agg.count).toFixed(1)),
+        seiton: Number((agg.sumSeiton / agg.count).toFixed(1)),
+        seiso: Number((agg.sumSeiso / agg.count).toFixed(1)),
+        seiketsu: Number((agg.sumSeiketsu / agg.count).toFixed(1)),
+        shitsuke: Number((agg.sumShitsuke / agg.count).toFixed(1)),
+      };
+    });
+
+  const render5SDot = (props: any) => {
+    const { cx, cy, payload, index } = props;
+    if (typeof cx !== 'number' || typeof cy !== 'number') return null;
+    const color = payload?.classificationHex || '#0284c7';
+    return (
+      <circle
+        key={`dot-5s-${index}`}
+        cx={cx}
+        cy={cy}
+        r={5}
+        fill={color}
+        stroke="#ffffff"
+        strokeWidth={2}
+      />
+    );
+  };
+
+  const render5SActiveDot = (props: any) => {
+    const { cx, cy, payload } = props;
+    if (typeof cx !== 'number' || typeof cy !== 'number') return null;
+    const color = payload?.classificationHex || '#0284c7';
+    return (
+      <circle
+        cx={cx}
+        cy={cy}
+        r={7}
+        fill={color}
+        stroke="#ffffff"
+        strokeWidth={2.5}
+      />
+    );
+  };
 
   // 2. Status dos Planos de Ação ao Longo do Tempo (Recharts Stacked Bar Chart)
   const monthNames = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
@@ -766,7 +894,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                 <h4 className="text-sm font-bold text-slate-800 dark:text-slate-200">
                   Evolução Histórica do Programa 5S
                 </h4>
-                <p className="text-xs text-slate-400">Pontuação média dos 5 sensos auditados no chão de fábrica</p>
+                <p className="text-xs text-slate-400">Índice médio mensal dos 5 sensos auditados no chão de fábrica</p>
               </div>
               <span className="text-xs font-mono font-bold bg-blue-50/80 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 px-2.5 py-1 rounded-lg">
                 Meta Mínima: {personalizacao?.auditorias5sMetaGrafico ?? 75}%
@@ -781,7 +909,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                 </div>
               ) : (
                 <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={data5s} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
+                  <AreaChart data={data5s} margin={{ top: 16, right: 20, left: -20, bottom: 0 }}>
                     <defs>
                       <linearGradient id="colorMedia" x1="0" y1="0" x2="0" y2="1">
                         <stop offset="5%" stopColor="#0ea5e9" stopOpacity={0.2}/>
@@ -791,6 +919,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                     <CartesianGrid strokeDasharray="3 3" stroke="rgba(148, 163, 184, 0.15)" vertical={false} />
                     <XAxis 
                       dataKey="name" 
+                      padding={{ left: 24, right: 24 }}
                       tick={{ fill: '#94a3b8', fontSize: 10 }}
                       axisLine={{ stroke: 'rgba(148, 163, 184, 0.3)' }}
                       tickLine={false}
@@ -816,19 +945,65 @@ export const Dashboard: React.FC<DashboardProps> = ({
                         fontWeight: 'bold' 
                       }} 
                     />
-                    <Area type="monotone" dataKey="media" stroke="#0284c7" strokeWidth={2.5} fillOpacity={1} fill="url(#colorMedia)" name="Média Geral" />
+                    <Area 
+                      type="monotone" 
+                      dataKey="media" 
+                      stroke="#0284c7" 
+                      strokeWidth={2.5} 
+                      fillOpacity={1} 
+                      fill="url(#colorMedia)" 
+                      name="Índice Médio 5S"
+                      dot={render5SDot}
+                      activeDot={render5SActiveDot}
+                    />
                   </AreaChart>
                 </ResponsiveContainer>
               )}
             </div>
           </div>
-          <div className="flex items-center justify-between mt-4 text-[10px] text-slate-400 font-mono border-t border-slate-100 dark:border-slate-800 pt-3">
-            <span>Nota 0% (Inaceitável)</span>
-            <div className="flex items-center space-x-2">
-              <span className="w-2.5 h-2.5 rounded-full bg-sky-500" />
-              <span>Média Geral Obtida (%)</span>
-            </div>
-            <span>Nota 100% (Excelência)</span>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 mt-4 text-[11px] font-medium text-slate-600 dark:text-slate-400 border-t border-slate-100 dark:border-slate-800 pt-3">
+            {sortedClassificacoes5S.length > 0 ? (
+              sortedClassificacoes5S.map((c) => {
+                const style = get5SClassificationVisual(c.cor);
+                let rangeLabel = '';
+                if (c.max >= 100) {
+                  rangeLabel = `≥${c.min}%`;
+                } else if (c.min <= 0) {
+                  rangeLabel = `<${Math.round(c.max + 0.1)}%`;
+                } else {
+                  rangeLabel = `${c.min}-${Math.floor(c.max)}%`;
+                }
+                return (
+                  <div key={c.id} className="flex items-center space-x-1.5">
+                    <span className={`inline-block w-2.5 h-2.5 ${style.dotBg} rounded-full shrink-0`} />
+                    <span className="whitespace-nowrap">{rangeLabel} {c.nome}</span>
+                  </div>
+                );
+              })
+            ) : (
+              <>
+                <div className="flex items-center space-x-1.5">
+                  <span className="inline-block w-2.5 h-2.5 bg-emerald-500 rounded-full shrink-0" />
+                  <span className="whitespace-nowrap">&ge;90% Excelência</span>
+                </div>
+                <div className="flex items-center space-x-1.5">
+                  <span className="inline-block w-2.5 h-2.5 bg-blue-500 rounded-full shrink-0" />
+                  <span className="whitespace-nowrap">80-89% Muito Bom</span>
+                </div>
+                <div className="flex items-center space-x-1.5">
+                  <span className="inline-block w-2.5 h-2.5 bg-indigo-500 rounded-full shrink-0" />
+                  <span className="whitespace-nowrap">70-79% Aceitável</span>
+                </div>
+                <div className="flex items-center space-x-1.5">
+                  <span className="inline-block w-2.5 h-2.5 bg-amber-400 rounded-full shrink-0" />
+                  <span className="whitespace-nowrap">60-69% Atenção</span>
+                </div>
+                <div className="flex items-center space-x-1.5">
+                  <span className="inline-block w-2.5 h-2.5 bg-rose-500 rounded-full shrink-0" />
+                  <span className="whitespace-nowrap">&lt;60% Crítico</span>
+                </div>
+              </>
+            )}
           </div>
         </div>
 
