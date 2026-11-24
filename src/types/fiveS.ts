@@ -97,7 +97,11 @@ export interface PlanoAcao5S {
   auditoriaId: string;
   requisitoId: string;
   descricao: string;
+  desvioApontado?: string;
+  acaoCorretiva?: string;
   responsavel: string;
+  responsavelId?: string;
+  responsavelEmail?: string;
   prazo: string;
   status: 'Pendente' | 'Em Andamento' | 'Concluído' | 'Atrasado';
   dataConclusao?: string;

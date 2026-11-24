@@ -14,17 +14,25 @@ import {
   YAxis, 
   CartesianGrid, 
   Tooltip, 
-  Legend
+  Legend,
+  PieChart,
+  Pie,
+  Cell
 } from 'recharts';
 import { 
   Trophy, 
   TrendingUp, 
   AlertTriangle, 
-  CheckCircle, 
+  CheckCircle2, 
   Activity,
   Award,
-  ChevronRight,
-  ShieldAlert
+  ShieldAlert,
+  Clock,
+  Layers,
+  ArrowRight,
+  UserX,
+  ClipboardList,
+  CalendarOff
 } from 'lucide-react';
 import { 
   Setor5S, 
@@ -33,10 +41,52 @@ import {
   Configuracao5S, 
   Auditoria5S,
   Senso5S,
-  Classificacao5S
+  Classificacao5S,
+  CicloAuditoria,
+  PlanoAcao5S
 } from '../../types/fiveS';
 import { getClassificationForIndex } from '../../utils/fiveSStore';
 import { PersonalizacaoGeral } from '../../utils/mockData';
+
+const ACTION_PLAN_COLORS = {
+  concluido: '#10B981',
+  emAndamento: '#3B82F6',
+  pendente: '#F59E0B',
+  atrasado: '#EF4444'
+};
+
+const CustomActionPlanTooltip = ({ active, payload, label }: any) => {
+  if (!active || !payload || !payload.length) return null;
+  const row = payload[0]?.payload || {};
+  const total = (row.Concluído || 0) + (row['Em Andamento'] || 0) + (row.Pendente || 0) + (row['Prazo Vencido'] || 0);
+  const completionRate = total > 0 ? Math.round(((row.Concluído || 0) / total) * 100) : 0;
+
+  return (
+    <div className="bg-slate-900/95 dark:bg-slate-950/95 text-white p-3 rounded-xl border border-slate-700/60 shadow-xl text-left text-xs backdrop-blur-md min-w-[190px]">
+      <p className="font-bold text-slate-100 mb-0.5">{row.fullLabel || label}</p>
+      <p className="text-[11px] text-slate-400 font-mono tabular-nums">
+        {total} {total === 1 ? 'plano' : 'planos'} · {completionRate}% concluído
+      </p>
+      <div className="h-px bg-slate-800 my-1.5" />
+      <div className="space-y-1 text-[11px]">
+        {payload.map((entry: any) => (
+          <div key={entry.dataKey} className="flex items-center justify-between gap-4">
+            <span className="flex items-center gap-1.5 text-slate-300">
+              <span className="w-2 h-2 rounded-xs shrink-0" style={{ backgroundColor: entry.color }} />
+              {entry.name}
+            </span>
+            <span className="font-mono font-bold tabular-nums text-white">{entry.value}</span>
+          </div>
+        ))}
+      </div>
+      {typeof row.semResponsavel === 'number' && row.semResponsavel > 0 && (
+        <div className="mt-1.5 pt-1.5 border-t border-slate-800 text-[10px] text-amber-300 font-mono tabular-nums">
+          Sem responsável definido: {row.semResponsavel}
+        </div>
+      )}
+    </div>
+  );
+};
 
 interface FiveSDashboardProps {
   auditorias: Auditoria5S[];
@@ -45,8 +95,11 @@ interface FiveSDashboardProps {
   requisitos: Requisito5S[];
   classificacoes: Classificacao5S[];
   config: Configuracao5S;
+  ciclos?: CicloAuditoria[];
   itens: ItemAuditado[];
+  planos?: PlanoAcao5S[];
   personalizacao?: PersonalizacaoGeral;
+  onNavigateToPlanos?: () => void;
 }
 
 export const FiveSDashboard: React.FC<FiveSDashboardProps> = ({
@@ -56,8 +109,11 @@ export const FiveSDashboard: React.FC<FiveSDashboardProps> = ({
   requisitos,
   classificacoes,
   config,
+  ciclos = [],
   itens,
-  personalizacao
+  planos = [],
+  personalizacao,
+  onNavigateToPlanos
 }) => {
   const normalizedAudits = auditorias.map(a => {
     // 1. Resolve sector ID dynamically if missing
@@ -464,6 +520,315 @@ export const FiveSDashboard: React.FC<FiveSDashboardProps> = ({
     return getClassificationColorStyle(classification?.cor).cellBg;
   };
 
+  // --- 6. INDICADORES DE PLANOS DE AÇÃO 5S (SETOR, MÊS, CICLO, PENDÊNCIAS E VENCIDOS) ---
+  const [selectedPlanCycle, setSelectedPlanCycle] = useState<string>('TODOS');
+  const [selectedPlanSector, setSelectedPlanSector] = useState<string>('TODOS');
+  const [planMonthBasis, setPlanMonthBasis] = useState<'auditoria' | 'prazo'>('auditoria');
+  const [planListTab, setPlanListTab] = useState<'vencidos' | 'pendentes' | 'vencendo' | 'abertos'>('vencidos');
+
+  const todayIso = useMemo(() => new Date().toISOString().split('T')[0], []);
+  const in7DaysIso = useMemo(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 7);
+    return d.toISOString().split('T')[0];
+  }, []);
+
+  type EffectivePlanStatus = 'Concluído' | 'Em Andamento' | 'Pendente' | 'Prazo Vencido';
+
+  const enrichedPlanRecords = useMemo(() => {
+    const auditMap = new Map<string, (typeof normalizedAudits)[number]>();
+    normalizedAudits.forEach(a => auditMap.set(a.id, a));
+
+    const sectorById = new Map<string, Setor5S>();
+    const sectorByName = new Map<string, Setor5S>();
+    setores.forEach(s => {
+      sectorById.set(s.id, s);
+      sectorByName.set(s.nome.trim().toLowerCase(), s);
+    });
+
+    const cycleById = new Map<string, CicloAuditoria>();
+    ciclos.forEach(c => cycleById.set(c.id, c));
+
+    const reqById = new Map<string, Requisito5S>();
+    requisitos.forEach(r => reqById.set(r.id, r));
+
+    return planos
+      .filter(p => auditMap.has(p.auditoriaId))
+      .map(plan => {
+        const audit = auditMap.get(plan.auditoriaId)!;
+        const sectorMatch = (audit.setorId && sectorById.get(audit.setorId)) ||
+          (audit.setor && sectorByName.get(audit.setor.trim().toLowerCase()));
+        const sectorId = sectorMatch?.id || audit.setorId || `raw-${audit.setor || 'geral'}`;
+        const sectorName = sectorMatch?.nome || audit.setor || 'Geral';
+
+        let cycleMatch = audit.cicloId ? cycleById.get(audit.cicloId) : undefined;
+        if (!cycleMatch && audit.dataAuditoria) {
+          cycleMatch = ciclos.find(c =>
+            c.dataInicio && c.dataFim &&
+            audit.dataAuditoria >= c.dataInicio &&
+            audit.dataAuditoria <= c.dataFim
+          );
+        }
+        const cycleId = cycleMatch?.id || audit.cicloId || 'sem-ciclo';
+        const cycleName = cycleMatch?.nome || (audit.cicloId === 'ciclo-1' ? 'Ciclo Padrão' : 'Sem Ciclo');
+
+        const isOverdue = plan.status !== 'Concluído' && (
+          plan.status === 'Atrasado' || (!!plan.prazo && plan.prazo < todayIso)
+        );
+        const effectiveStatus: EffectivePlanStatus =
+          plan.status === 'Concluído'
+            ? 'Concluído'
+            : isOverdue
+              ? 'Prazo Vencido'
+              : plan.status === 'Em Andamento'
+                ? 'Em Andamento'
+                : 'Pendente';
+
+        const isDueSoon = plan.status !== 'Concluído' && !isOverdue && !!plan.prazo && plan.prazo >= todayIso && plan.prazo <= in7DaysIso;
+        const hasOwner = !!plan.responsavel && plan.responsavel.trim().length > 0;
+
+        let daysDelta = 0;
+        if (plan.prazo) {
+          const deadlineMs = new Date(`${plan.prazo}T12:00:00`).getTime();
+          const todayMs = new Date(`${todayIso}T12:00:00`).getTime();
+          if (!isNaN(deadlineMs) && !isNaN(todayMs)) {
+            daysDelta = Math.round((deadlineMs - todayMs) / (1000 * 60 * 60 * 24));
+          }
+        }
+
+        const auditMonth = audit.dataAuditoria ? audit.dataAuditoria.slice(0, 7) : '';
+        const deadlineMonth = plan.prazo ? plan.prazo.slice(0, 7) : '';
+        const req = reqById.get(plan.requisitoId);
+
+        return {
+          plan,
+          audit,
+          req,
+          sectorId,
+          sectorName,
+          cycleId,
+          cycleName,
+          cycleStart: cycleMatch?.dataInicio || audit.dataAuditoria || '',
+          effectiveStatus,
+          isOverdue,
+          isDueSoon,
+          hasOwner,
+          daysDelta,
+          auditMonth,
+          deadlineMonth
+        };
+      });
+  }, [planos, normalizedAudits, setores, ciclos, requisitos, todayIso, in7DaysIso]);
+
+  const availablePlanCycles = useMemo(() => {
+    const map = new Map<string, { id: string; nome: string; start: string }>();
+    ciclos.forEach(c => map.set(c.id, { id: c.id, nome: c.nome, start: c.dataInicio || '' }));
+    enrichedPlanRecords.forEach(r => {
+      if (!map.has(r.cycleId)) {
+        map.set(r.cycleId, { id: r.cycleId, nome: r.cycleName, start: r.cycleStart });
+      }
+    });
+    return Array.from(map.values()).sort((a, b) => a.start.localeCompare(b.start));
+  }, [ciclos, enrichedPlanRecords]);
+
+  const availablePlanSectors = useMemo(() => {
+    const map = new Map<string, string>();
+    enrichedPlanRecords.forEach(r => map.set(r.sectorId, r.sectorName));
+    return Array.from(map.entries())
+      .map(([id, nome]) => ({ id, nome }))
+      .sort((a, b) => a.nome.localeCompare(b.nome));
+  }, [enrichedPlanRecords]);
+
+  const filteredPlanRecords = useMemo(() => {
+    return enrichedPlanRecords.filter(r => {
+      const matchCycle = selectedPlanCycle === 'TODOS' || r.cycleId === selectedPlanCycle;
+      const matchSector = selectedPlanSector === 'TODOS' || r.sectorId === selectedPlanSector;
+      return matchCycle && matchSector;
+    });
+  }, [enrichedPlanRecords, selectedPlanCycle, selectedPlanSector]);
+
+  const planMetrics = useMemo(() => {
+    const total = filteredPlanRecords.length;
+    let concluido = 0;
+    let emAndamento = 0;
+    let pendente = 0;
+    let atrasado = 0;
+    let semResponsavel = 0;
+    let semPrazo = 0;
+    let vencendo7Dias = 0;
+
+    filteredPlanRecords.forEach(r => {
+      if (r.effectiveStatus === 'Concluído') concluido += 1;
+      else if (r.effectiveStatus === 'Prazo Vencido') atrasado += 1;
+      else if (r.effectiveStatus === 'Em Andamento') emAndamento += 1;
+      else pendente += 1;
+
+      if (r.effectiveStatus !== 'Concluído' && !r.hasOwner) semResponsavel += 1;
+      if (r.effectiveStatus !== 'Concluído' && (!r.plan.prazo || !r.plan.prazo.trim())) semPrazo += 1;
+      if (r.isDueSoon) vencendo7Dias += 1;
+    });
+
+    const abertos = total - concluido;
+    const taxaConclusao = total > 0 ? Math.round((concluido / total) * 100) : 0;
+
+    return {
+      total,
+      concluido,
+      emAndamento,
+      pendente,
+      atrasado,
+      abertos,
+      semResponsavel,
+      semPrazo,
+      vencendo7Dias,
+      taxaConclusao
+    };
+  }, [filteredPlanRecords]);
+
+  const plansStatusPieData = useMemo(() => {
+    return [
+      { name: 'Concluído', value: planMetrics.concluido, color: ACTION_PLAN_COLORS.concluido },
+      { name: 'Em Andamento', value: planMetrics.emAndamento, color: ACTION_PLAN_COLORS.emAndamento },
+      { name: 'Pendente de Tratamento', value: planMetrics.pendente, color: ACTION_PLAN_COLORS.pendente },
+      { name: 'Prazo Vencido', value: planMetrics.atrasado, color: ACTION_PLAN_COLORS.atrasado }
+    ].filter(item => item.value > 0);
+  }, [planMetrics]);
+
+  const plansBySectorData = useMemo(() => {
+    const map = new Map<string, {
+      setor: string;
+      fullLabel: string;
+      Concluído: number;
+      'Em Andamento': number;
+      Pendente: number;
+      'Prazo Vencido': number;
+      semResponsavel: number;
+      total: number;
+    }>();
+
+    filteredPlanRecords.forEach(r => {
+      const current = map.get(r.sectorName) || {
+        setor: r.sectorName.length > 14 ? `${r.sectorName.slice(0, 13)}…` : r.sectorName,
+        fullLabel: r.sectorName,
+        Concluído: 0,
+        'Em Andamento': 0,
+        Pendente: 0,
+        'Prazo Vencido': 0,
+        semResponsavel: 0,
+        total: 0
+      };
+      current[r.effectiveStatus] += 1;
+      current.total += 1;
+      if (r.effectiveStatus !== 'Concluído' && !r.hasOwner) current.semResponsavel += 1;
+      map.set(r.sectorName, current);
+    });
+
+    return Array.from(map.values()).sort((a, b) => {
+      const openA = a.total - a.Concluído;
+      const openB = b.total - b.Concluído;
+      if (openB !== openA) return openB - openA;
+      return b.total - a.total;
+    });
+  }, [filteredPlanRecords]);
+
+  const plansByMonthData = useMemo(() => {
+    const map = new Map<string, {
+      monthKey: string;
+      mes: string;
+      fullLabel: string;
+      Concluído: number;
+      'Em Andamento': number;
+      Pendente: number;
+      'Prazo Vencido': number;
+      semResponsavel: number;
+    }>();
+
+    filteredPlanRecords.forEach(r => {
+      const ym = planMonthBasis === 'auditoria' ? r.auditMonth : r.deadlineMonth;
+      if (!ym || !/^\d{4}-\d{2}$/.test(ym)) return;
+
+      const label = formatMonth(ym);
+      const current = map.get(ym) || {
+        monthKey: ym,
+        mes: label,
+        fullLabel: `${label} (${planMonthBasis === 'auditoria' ? 'Mês da Auditoria' : 'Mês de Vencimento'})`,
+        Concluído: 0,
+        'Em Andamento': 0,
+        Pendente: 0,
+        'Prazo Vencido': 0,
+        semResponsavel: 0
+      };
+      current[r.effectiveStatus] += 1;
+      if (r.effectiveStatus !== 'Concluído' && !r.hasOwner) current.semResponsavel += 1;
+      map.set(ym, current);
+    });
+
+    return Array.from(map.values()).sort((a, b) => a.monthKey.localeCompare(b.monthKey));
+  }, [filteredPlanRecords, planMonthBasis]);
+
+  const plansByCycleData = useMemo(() => {
+    const map = new Map<string, {
+      cycleId: string;
+      ciclo: string;
+      fullLabel: string;
+      start: string;
+      Concluído: number;
+      'Em Andamento': number;
+      Pendente: number;
+      'Prazo Vencido': number;
+      semResponsavel: number;
+    }>();
+
+    filteredPlanRecords.forEach(r => {
+      const current = map.get(r.cycleId) || {
+        cycleId: r.cycleId,
+        ciclo: r.cycleName.length > 16 ? `${r.cycleName.slice(0, 15)}…` : r.cycleName,
+        fullLabel: r.cycleName,
+        start: r.cycleStart,
+        Concluído: 0,
+        'Em Andamento': 0,
+        Pendente: 0,
+        'Prazo Vencido': 0,
+        semResponsavel: 0
+      };
+      current[r.effectiveStatus] += 1;
+      if (r.effectiveStatus !== 'Concluído' && !r.hasOwner) current.semResponsavel += 1;
+      map.set(r.cycleId, current);
+    });
+
+    return Array.from(map.values()).sort((a, b) => a.start.localeCompare(b.start));
+  }, [filteredPlanRecords]);
+
+  const actionablePlanRows = useMemo(() => {
+    const overdueRows = filteredPlanRecords
+      .filter(r => r.effectiveStatus === 'Prazo Vencido')
+      .sort((a, b) => a.daysDelta - b.daysDelta);
+    const pendingRows = filteredPlanRecords
+      .filter(r => r.effectiveStatus === 'Pendente')
+      .sort((a, b) => (a.plan.prazo || '9999').localeCompare(b.plan.prazo || '9999'));
+    const dueSoonRows = filteredPlanRecords
+      .filter(r => r.isDueSoon)
+      .sort((a, b) => a.daysDelta - b.daysDelta);
+    const allOpenRows = filteredPlanRecords
+      .filter(r => r.effectiveStatus !== 'Concluído')
+      .sort((a, b) => a.daysDelta - b.daysDelta);
+
+    return {
+      vencidos: overdueRows,
+      pendentes: pendingRows,
+      vencendo: dueSoonRows,
+      abertos: allOpenRows
+    };
+  }, [filteredPlanRecords]);
+
+  const displayedActionRows = actionablePlanRows[planListTab];
+
+  const formatDateBr = (isoDate?: string) => {
+    if (!isoDate || !isoDate.includes('-')) return isoDate || '—';
+    const [y, m, d] = isoDate.split('-');
+    return `${d}/${m}/${y}`;
+  };
+
   return (
     <div className="space-y-6">
       
@@ -867,7 +1232,560 @@ export const FiveSDashboard: React.FC<FiveSDashboardProps> = ({
         </div>
       </div>
 
-      {/* 4. META & FAQ INFO BANNERS */}
+      {/* 4. INDICADORES DOS PLANOS DE AÇÃO 5S */}
+      <div className="space-y-6 pt-2">
+        {/* Cabeçalho e Filtros da Seção de Planos de Ação */}
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+          <div>
+            <h3 className="text-sm font-bold text-[#0B3A63] dark:text-sky-400 tracking-tight">
+              Indicadores dos Planos de Ação 5S
+            </h3>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+              Acompanhamento de tratativas por setor, mês, ciclo de auditoria e prazos vencidos
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <select
+              aria-label="Filtrar planos por ciclo"
+              value={selectedPlanCycle}
+              onChange={(e) => setSelectedPlanCycle(e.target.value)}
+              className="px-3 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-semibold text-slate-700 dark:text-slate-200 cursor-pointer"
+            >
+              <option value="TODOS">Todos os Ciclos</option>
+              {availablePlanCycles.map(c => (
+                <option key={c.id} value={c.id}>{c.nome}</option>
+              ))}
+            </select>
+
+            <select
+              aria-label="Filtrar planos por setor"
+              value={selectedPlanSector}
+              onChange={(e) => setSelectedPlanSector(e.target.value)}
+              className="px-3 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-semibold text-slate-700 dark:text-slate-200 cursor-pointer"
+            >
+              <option value="TODOS">Todos os Setores</option>
+              {availablePlanSectors.map(s => (
+                <option key={s.id} value={s.id}>{s.nome}</option>
+              ))}
+            </select>
+
+            {(selectedPlanCycle !== 'TODOS' || selectedPlanSector !== 'TODOS') && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedPlanCycle('TODOS');
+                  setSelectedPlanSector('TODOS');
+                }}
+                className="px-3 py-1.5 text-xs font-semibold text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+              >
+                Limpar Filtros
+              </button>
+            )}
+
+            {onNavigateToPlanos && (
+              <button
+                type="button"
+                onClick={onNavigateToPlanos}
+                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-[#0B3A63] hover:bg-[#144d7e] text-white text-xs font-semibold rounded-lg transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+              >
+                <span>Gerenciar Planos</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* KPIs Executivos de Planos de Ação */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 flex items-center gap-3.5">
+            <div className="p-2.5 bg-slate-100 dark:bg-slate-800 rounded-lg text-[#0B3A63] dark:text-sky-400 shrink-0">
+              <ClipboardList className="w-5 h-5" />
+            </div>
+            <div className="min-w-0">
+              <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 block truncate">Total de Planos</span>
+              <p className="text-xl font-black text-slate-800 dark:text-slate-100 font-mono tabular-nums mt-0.5">{planMetrics.total}</p>
+              <span className="text-[11px] text-slate-500 dark:text-slate-400 font-mono tabular-nums">{planMetrics.abertos} em aberto</span>
+            </div>
+          </div>
+
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 flex items-center gap-3.5">
+            <div className="p-2.5 bg-amber-50 dark:bg-amber-950/30 rounded-lg text-amber-600 dark:text-amber-400 shrink-0">
+              <Clock className="w-5 h-5" />
+            </div>
+            <div className="min-w-0">
+              <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 block truncate">Pendentes de Tratamento</span>
+              <p className="text-xl font-black text-amber-600 dark:text-amber-400 font-mono tabular-nums mt-0.5">{planMetrics.pendente}</p>
+              <span className="text-[11px] text-slate-500 dark:text-slate-400 font-mono tabular-nums">{planMetrics.semResponsavel} sem responsável</span>
+            </div>
+          </div>
+
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 flex items-center gap-3.5">
+            <div className="p-2.5 bg-blue-50 dark:bg-blue-950/30 rounded-lg text-blue-600 dark:text-blue-400 shrink-0">
+              <Layers className="w-5 h-5" />
+            </div>
+            <div className="min-w-0">
+              <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 block truncate">Em Andamento</span>
+              <p className="text-xl font-black text-blue-600 dark:text-blue-400 font-mono tabular-nums mt-0.5">{planMetrics.emAndamento}</p>
+              <span className="text-[11px] text-slate-500 dark:text-slate-400 font-mono tabular-nums">{planMetrics.vencendo7Dias} vencem em 7d</span>
+            </div>
+          </div>
+
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 flex items-center gap-3.5">
+            <div className="p-2.5 bg-rose-50 dark:bg-rose-950/30 rounded-lg text-rose-600 dark:text-rose-400 shrink-0">
+              <AlertTriangle className="w-5 h-5" />
+            </div>
+            <div className="min-w-0">
+              <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 block truncate">Prazos Vencidos</span>
+              <p className={`text-xl font-black font-mono tabular-nums mt-0.5 ${planMetrics.atrasado > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-slate-800 dark:text-slate-100'}`}>
+                {planMetrics.atrasado}
+              </p>
+              <span className="text-[11px] text-slate-500 dark:text-slate-400 font-mono tabular-nums">
+                {planMetrics.total > 0 ? Math.round((planMetrics.atrasado / planMetrics.total) * 100) : 0}% do total
+              </span>
+            </div>
+          </div>
+
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 flex items-center gap-3.5 col-span-2 sm:col-span-1">
+            <div className="p-2.5 bg-emerald-50 dark:bg-emerald-950/30 rounded-lg text-emerald-600 dark:text-emerald-400 shrink-0">
+              <CheckCircle2 className="w-5 h-5" />
+            </div>
+            <div className="min-w-0">
+              <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 block truncate">Concluídos</span>
+              <p className="text-xl font-black text-emerald-600 dark:text-emerald-400 font-mono tabular-nums mt-0.5">{planMetrics.concluido}</p>
+              <span className="text-[11px] text-slate-500 dark:text-slate-400 font-mono tabular-nums">{planMetrics.taxaConclusao}% de eficácia</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Gráficos: Linha 1 (Por Setor + Distribuição por Status) */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          {/* Status por Setor */}
+          <div className="lg:col-span-7 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 flex flex-col justify-between space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800 pb-3">
+              <div>
+                <h4 className="text-xs font-black text-[#0B3A63] dark:text-sky-400 uppercase tracking-wider">
+                  Status dos Planos de Ação por Setor
+                </h4>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                  Volume de tratativas concluídas, em andamento, pendentes e vencidas por área
+                </p>
+              </div>
+              <span className="text-[11px] font-mono tabular-nums text-slate-500 dark:text-slate-400">
+                {plansBySectorData.length} {plansBySectorData.length === 1 ? 'setor' : 'setores'}
+              </span>
+            </div>
+
+            <div className="h-68">
+              {plansBySectorData.length === 0 ? (
+                <div className="w-full h-full flex flex-col items-center justify-center text-center px-4 space-y-2">
+                  <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+                    Nenhum plano de ação registrado para os filtros selecionados.
+                  </p>
+                  <p className="text-[11px] text-slate-400">
+                    Finalize auditorias 5S com desvios para acompanhar a evolução por setor.
+                  </p>
+                </div>
+              ) : (
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={plansBySectorData} margin={{ top: 10, right: 12, left: -18, bottom: 8 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(148, 163, 184, 0.2)" />
+                    <XAxis
+                      dataKey="setor"
+                      tick={{ fontSize: 10, fontWeight: 600, fill: '#64748b' }}
+                      axisLine={{ stroke: 'rgba(148, 163, 184, 0.3)' }}
+                      tickLine={false}
+                      interval={0}
+                      angle={plansBySectorData.length > 5 ? -20 : 0}
+                      textAnchor={plansBySectorData.length > 5 ? 'end' : 'middle'}
+                      height={plansBySectorData.length > 5 ? 48 : 30}
+                    />
+                    <YAxis
+                      allowDecimals={false}
+                      tick={{ fontSize: 10, fontWeight: 600, fill: '#64748b' }}
+                      axisLine={false}
+                      tickLine={false}
+                    />
+                    <Tooltip content={<CustomActionPlanTooltip />} />
+                    <Legend wrapperStyle={{ fontSize: 11, paddingTop: 6 }} />
+                    <Bar dataKey="Concluído" stackId="a" fill={ACTION_PLAN_COLORS.concluido} radius={[0, 0, 0, 0]} />
+                    <Bar dataKey="Em Andamento" stackId="a" fill={ACTION_PLAN_COLORS.emAndamento} radius={[0, 0, 0, 0]} />
+                    <Bar dataKey="Pendente" stackId="a" fill={ACTION_PLAN_COLORS.pendente} radius={[0, 0, 0, 0]} />
+                    <Bar dataKey="Prazo Vencido" stackId="a" fill={ACTION_PLAN_COLORS.atrasado} radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
+            </div>
+          </div>
+
+          {/* Distribuição Geral & Alertas Operacionais */}
+          <div className="lg:col-span-5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 flex flex-col justify-between space-y-4">
+            <div className="border-b border-slate-100 dark:border-slate-800 pb-3">
+              <h4 className="text-xs font-black text-[#0B3A63] dark:text-sky-400 uppercase tracking-wider">
+                Distribuição por Status &amp; Pendências
+              </h4>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                Proporção atual de resolução e gargalos de responsabilidade
+              </p>
+            </div>
+
+            {planMetrics.total === 0 ? (
+              <div className="h-56 flex items-center justify-center text-xs text-slate-400 italic">
+                Sem planos de ação para exibir a distribuição.
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-12 gap-4 items-center">
+                <div className="sm:col-span-6 h-52 relative">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={plansStatusPieData}
+                        dataKey="value"
+                        nameKey="name"
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={52}
+                        outerRadius={76}
+                        paddingAngle={2}
+                      >
+                        {plansStatusPieData.map((entry, idx) => (
+                          <Cell key={`pie-cell-${idx}`} fill={entry.color} stroke="none" />
+                        ))}
+                      </Pie>
+                      <Tooltip
+                        formatter={(value: any, name: any) => [`${value} (${Math.round((Number(value) / planMetrics.total) * 100)}%)`, name]}
+                        contentStyle={{
+                          backgroundColor: '#0f172a',
+                          border: '1px solid rgba(100,116,139,0.4)',
+                          borderRadius: '10px',
+                          fontSize: '11px',
+                          color: '#f8fafc'
+                        }}
+                        itemStyle={{ color: '#f8fafc' }}
+                      />
+                    </PieChart>
+                  </ResponsiveContainer>
+                  <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                    <span className="text-2xl font-black text-slate-800 dark:text-slate-100 font-mono tabular-nums">
+                      {planMetrics.taxaConclusao}%
+                    </span>
+                    <span className="text-[10px] font-semibold text-slate-500 dark:text-slate-400">
+                      Concluídos
+                    </span>
+                  </div>
+                </div>
+
+                <div className="sm:col-span-6 space-y-2.5 text-xs">
+                  {[
+                    { label: 'Concluído', count: planMetrics.concluido, color: ACTION_PLAN_COLORS.concluido },
+                    { label: 'Em Andamento', count: planMetrics.emAndamento, color: ACTION_PLAN_COLORS.emAndamento },
+                    { label: 'Pendente', count: planMetrics.pendente, color: ACTION_PLAN_COLORS.pendente },
+                    { label: 'Prazo Vencido', count: planMetrics.atrasado, color: ACTION_PLAN_COLORS.atrasado }
+                  ].map(item => {
+                    const pct = planMetrics.total > 0 ? Math.round((item.count / planMetrics.total) * 100) : 0;
+                    return (
+                      <div key={item.label} className="flex items-center justify-between gap-2">
+                        <span className="flex items-center gap-2 text-slate-600 dark:text-slate-300 font-medium">
+                          <span className="w-2.5 h-2.5 rounded-xs shrink-0" style={{ backgroundColor: item.color }} />
+                          <span>{item.label}</span>
+                        </span>
+                        <span className="font-mono font-bold tabular-nums text-slate-800 dark:text-slate-100">
+                          {item.count} <span className="text-[11px] font-normal text-slate-400">({pct}%)</span>
+                        </span>
+                      </div>
+                    );
+                  })}
+
+                  <div className="pt-2.5 mt-2.5 border-t border-slate-100 dark:border-slate-800 space-y-1.5 text-[11px]">
+                    <div className="flex items-center justify-between text-slate-600 dark:text-slate-300">
+                      <span className="flex items-center gap-1.5">
+                        <UserX className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                        <span>Sem responsável</span>
+                      </span>
+                      <span className="font-mono font-bold tabular-nums text-amber-600 dark:text-amber-400">
+                        {planMetrics.semResponsavel}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between text-slate-600 dark:text-slate-300">
+                      <span className="flex items-center gap-1.5">
+                        <CalendarOff className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                        <span>Sem prazo definido</span>
+                      </span>
+                      <span className="font-mono font-bold tabular-nums text-amber-600 dark:text-amber-400">
+                        {planMetrics.semPrazo}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between text-slate-600 dark:text-slate-300">
+                      <span className="flex items-center gap-1.5">
+                        <Clock className="w-3.5 h-3.5 text-blue-500 shrink-0" />
+                        <span>Vencem em até 7 dias</span>
+                      </span>
+                      <span className="font-mono font-bold tabular-nums text-blue-600 dark:text-blue-400">
+                        {planMetrics.vencendo7Dias}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Gráficos: Linha 2 (Por Mês + Por Ciclo) */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          {/* Status por Mês */}
+          <div className="lg:col-span-6 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800 pb-3">
+              <div>
+                <h4 className="text-xs font-black text-[#0B3A63] dark:text-sky-400 uppercase tracking-wider">
+                  Status dos Planos por Mês
+                </h4>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                  Evolução mensal por {planMonthBasis === 'auditoria' ? 'data da auditoria' : 'prazo de vencimento'}
+                </p>
+              </div>
+
+              <div className="flex items-center gap-1 p-0.5 bg-slate-100 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setPlanMonthBasis('auditoria')}
+                  className={`px-2.5 py-1 text-[11px] font-semibold rounded-md transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                    planMonthBasis === 'auditoria'
+                      ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-2xs'
+                      : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
+                  }`}
+                >
+                  Mês Auditoria
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPlanMonthBasis('prazo')}
+                  className={`px-2.5 py-1 text-[11px] font-semibold rounded-md transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                    planMonthBasis === 'prazo'
+                      ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-2xs'
+                      : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
+                  }`}
+                >
+                  Mês Prazo
+                </button>
+              </div>
+            </div>
+
+            <div className="h-64">
+              {plansByMonthData.length === 0 ? (
+                <div className="w-full h-full flex items-center justify-center text-xs text-slate-400 italic">
+                  Sem dados mensais para exibir.
+                </div>
+              ) : (
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={plansByMonthData} margin={{ top: 10, right: 12, left: -18, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(148, 163, 184, 0.2)" />
+                    <XAxis
+                      dataKey="mes"
+                      tick={{ fontSize: 10, fontWeight: 600, fill: '#64748b' }}
+                      axisLine={{ stroke: 'rgba(148, 163, 184, 0.3)' }}
+                      tickLine={false}
+                    />
+                    <YAxis
+                      allowDecimals={false}
+                      tick={{ fontSize: 10, fontWeight: 600, fill: '#64748b' }}
+                      axisLine={false}
+                      tickLine={false}
+                    />
+                    <Tooltip content={<CustomActionPlanTooltip />} />
+                    <Legend wrapperStyle={{ fontSize: 11, paddingTop: 6 }} />
+                    <Bar dataKey="Concluído" stackId="m" fill={ACTION_PLAN_COLORS.concluido} />
+                    <Bar dataKey="Em Andamento" stackId="m" fill={ACTION_PLAN_COLORS.emAndamento} />
+                    <Bar dataKey="Pendente" stackId="m" fill={ACTION_PLAN_COLORS.pendente} />
+                    <Bar dataKey="Prazo Vencido" stackId="m" fill={ACTION_PLAN_COLORS.atrasado} radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
+            </div>
+          </div>
+
+          {/* Status por Ciclo de Auditoria */}
+          <div className="lg:col-span-6 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+              <div>
+                <h4 className="text-xs font-black text-[#0B3A63] dark:text-sky-400 uppercase tracking-wider">
+                  Status dos Planos por Ciclo 5S
+                </h4>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                  Comparativo de pendências e resoluções por ciclo de auditoria
+                </p>
+              </div>
+              <span className="text-[11px] font-mono tabular-nums text-slate-500 dark:text-slate-400">
+                {plansByCycleData.length} {plansByCycleData.length === 1 ? 'ciclo' : 'ciclos'}
+              </span>
+            </div>
+
+            <div className="h-64">
+              {plansByCycleData.length === 0 ? (
+                <div className="w-full h-full flex items-center justify-center text-xs text-slate-400 italic">
+                  Sem dados de ciclos para exibir.
+                </div>
+              ) : (
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={plansByCycleData} margin={{ top: 10, right: 12, left: -18, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(148, 163, 184, 0.2)" />
+                    <XAxis
+                      dataKey="ciclo"
+                      tick={{ fontSize: 10, fontWeight: 600, fill: '#64748b' }}
+                      axisLine={{ stroke: 'rgba(148, 163, 184, 0.3)' }}
+                      tickLine={false}
+                    />
+                    <YAxis
+                      allowDecimals={false}
+                      tick={{ fontSize: 10, fontWeight: 600, fill: '#64748b' }}
+                      axisLine={false}
+                      tickLine={false}
+                    />
+                    <Tooltip content={<CustomActionPlanTooltip />} />
+                    <Legend wrapperStyle={{ fontSize: 11, paddingTop: 6 }} />
+                    <Bar dataKey="Concluído" stackId="c" fill={ACTION_PLAN_COLORS.concluido} />
+                    <Bar dataKey="Em Andamento" stackId="c" fill={ACTION_PLAN_COLORS.emAndamento} />
+                    <Bar dataKey="Pendente" stackId="c" fill={ACTION_PLAN_COLORS.pendente} />
+                    <Bar dataKey="Prazo Vencido" stackId="c" fill={ACTION_PLAN_COLORS.atrasado} radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Lista de Acompanhamento: Prazos Vencidos & Pendentes de Tratamento */}
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 space-y-4">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-3">
+            <div>
+              <h4 className="text-xs font-black text-[#0B3A63] dark:text-sky-400 uppercase tracking-wider">
+                Ações com Prazo Vencido e Pendentes de Tratamento
+              </h4>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                Priorização das pendências abertas para cobrança dos responsáveis
+              </p>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-1 p-1 bg-slate-100 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700">
+              {[
+                { id: 'vencidos', label: `Prazos Vencidos (${actionablePlanRows.vencidos.length})` },
+                { id: 'pendentes', label: `Pendentes (${actionablePlanRows.pendentes.length})` },
+                { id: 'vencendo', label: `Vencem em 7d (${actionablePlanRows.vencendo.length})` },
+                { id: 'abertos', label: `Todos em Aberto (${actionablePlanRows.abertos.length})` }
+              ].map(tab => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setPlanListTab(tab.id as any)}
+                  className={`px-2.5 py-1 text-[11px] font-semibold rounded-md transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                    planListTab === tab.id
+                      ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-2xs'
+                      : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="overflow-x-auto max-h-72 overflow-y-auto rounded-lg border border-slate-100 dark:border-slate-800">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-slate-50 dark:bg-slate-950 text-slate-500 dark:text-slate-400 font-bold border-b border-slate-100 dark:border-slate-800 sticky top-0 z-10">
+                <tr>
+                  <th className="py-2.5 px-3">Requisito</th>
+                  <th className="py-2.5 px-3">Setor / Ciclo</th>
+                  <th className="py-2.5 px-3">Descrição do Desvio</th>
+                  <th className="py-2.5 px-3">Responsável</th>
+                  <th className="py-2.5 px-3 text-right">Prazo</th>
+                  <th className="py-2.5 px-3 text-right">Situação</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                {displayedActionRows.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="py-8 px-4 text-center text-xs text-slate-400">
+                      Nenhum plano de ação encontrado nesta categoria para os filtros aplicados.
+                    </td>
+                  </tr>
+                ) : (
+                  displayedActionRows.map(({ plan, req, sectorName, cycleName, effectiveStatus, hasOwner, daysDelta }) => {
+                    const statusColor =
+                      effectiveStatus === 'Prazo Vencido'
+                        ? 'text-rose-600 dark:text-rose-400'
+                        : effectiveStatus === 'Pendente'
+                          ? 'text-amber-600 dark:text-amber-400'
+                          : 'text-blue-600 dark:text-blue-400';
+
+                    const delayText = !plan.prazo
+                      ? 'Sem prazo definido'
+                      : daysDelta < 0
+                        ? `${Math.abs(daysDelta)}d em atraso`
+                        : daysDelta === 0
+                          ? 'Vence hoje'
+                          : `${daysDelta}d restantes`;
+
+                    return (
+                      <tr key={plan.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/30 transition-colors">
+                        <td className="py-2.5 px-3 whitespace-nowrap">
+                          <span className="font-mono font-bold text-[#0B3A63] dark:text-sky-400">
+                            {req?.codigo || '5S'}
+                          </span>
+                        </td>
+                        <td className="py-2.5 px-3">
+                          <div className="font-semibold text-slate-800 dark:text-slate-200 whitespace-nowrap">{sectorName}</div>
+                          <div className="text-[11px] text-slate-400 whitespace-nowrap">{cycleName}</div>
+                        </td>
+                        <td className="py-2.5 px-3 max-w-[320px]">
+                          {(() => {
+                            const desvioText = plan.desvioApontado || plan.descricao;
+                            const acaoText = plan.acaoCorretiva?.trim();
+                            return (
+                              <>
+                                <p className="text-slate-700 dark:text-slate-300 line-clamp-1" title={desvioText}>
+                                  {desvioText}
+                                </p>
+                                {acaoText && (
+                                  <p className="text-[11px] text-emerald-700 dark:text-emerald-400 line-clamp-1 mt-0.5" title={acaoText}>
+                                    <span className="font-semibold">Ação:</span> {acaoText}
+                                  </p>
+                                )}
+                              </>
+                            );
+                          })()}
+                        </td>
+                        <td className="py-2.5 px-3 whitespace-nowrap">
+                          {hasOwner ? (
+                            <div>
+                              <span className="text-slate-700 dark:text-slate-200 font-medium block">{plan.responsavel}</span>
+                              {plan.responsavelEmail && plan.responsavelEmail.toLowerCase() !== plan.responsavel.trim().toLowerCase() && (
+                                <span className="text-[10px] text-slate-400 font-mono block">{plan.responsavelEmail}</span>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="text-amber-600 dark:text-amber-400 font-semibold">Não definido</span>
+                          )}
+                        </td>
+                        <td className="py-2.5 px-3 text-right font-mono tabular-nums whitespace-nowrap">
+                          <div className="font-semibold text-slate-800 dark:text-slate-200">{formatDateBr(plan.prazo)}</div>
+                          <div className={`text-[11px] ${daysDelta < 0 ? 'text-rose-600 dark:text-rose-400 font-semibold' : 'text-slate-400'}`}>
+                            {delayText}
+                          </div>
+                        </td>
+                        <td className={`py-2.5 px-3 text-right font-semibold whitespace-nowrap ${statusColor}`}>
+                          {effectiveStatus}
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      {/* 5. META & FAQ INFO BANNERS */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* Meta Card */}
         <div className="bg-gradient-to-br from-emerald-500/10 to-teal-500/5 dark:from-emerald-950/20 dark:to-transparent border border-emerald-500/20 dark:border-emerald-900/50 rounded-xl p-5 space-y-3">

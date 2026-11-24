@@ -502,6 +502,7 @@ export const FiveSAudits: React.FC<FiveSAuditsProps> = ({
     };
 
     // Save evaluated items
+    const existingPlansById = new Map(planos.filter(p => p.auditoriaId === auditId).map(p => [p.id, p]));
     let updatedItens = [...itens].filter(it => it.auditoriaId !== auditId);
     let updatedFotos = [...fotos].filter(f => f.auditoriaId !== auditId && f.auditoriaId !== auditCode);
     let updatedPlanos = [...planos].filter(p => p.auditoriaId !== auditId);
@@ -541,21 +542,29 @@ export const FiveSAudits: React.FC<FiveSAuditsProps> = ({
         const planoId = `plano5s-${auditId}-${calcItem.requisitoId}`;
         itemToSave.planoAcaoId = planoId;
 
-        // Find if plan already exists or create new
-        updatedPlanos.push({
-          id: planoId,
-          auditoriaId: auditId,
-          requisitoId: calcItem.requisitoId!,
-          descricao: `Desvio identificado no requisito ${requisitos.find(r => r.id === calcItem.requisitoId)?.codigo}: ${requisitos.find(r => r.id === calcItem.requisitoId)?.descricao}. Observação: ${itemToSave.observacoes || 'Sem observações'}`,
-          responsavel: '',
-          prazo: new Date(new Date(auditDate).getTime() + 15 * 24 * 3600 * 1000).toISOString().split('T')[0], // 15 days later
-          status: 'Pendente',
-          fotosCorrecao: [],
-          comentarios: ["Plano de ação corretivo gerado automaticamente pelo sistema de auditoria 5S."],
-          historico: [
-            { data: auditDate, usuario: auditorName, acao: "Criação", detalhes: "Criado automaticamente por desvio em auditoria" }
-          ]
-        });
+        const existingPlan = existingPlansById.get(planoId);
+        if (existingPlan) {
+          updatedPlanos.push(existingPlan);
+        } else {
+          const reqMatched = requisitos.find(r => r.id === calcItem.requisitoId);
+          const findingText = `Desvio identificado no requisito ${reqMatched?.codigo}: ${reqMatched?.descricao}. Observação: ${itemToSave.observacoes || 'Sem observações'}`;
+          updatedPlanos.push({
+            id: planoId,
+            auditoriaId: auditId,
+            requisitoId: calcItem.requisitoId!,
+            descricao: findingText,
+            desvioApontado: findingText,
+            acaoCorretiva: '',
+            responsavel: '',
+            prazo: '',
+            status: 'Pendente',
+            fotosCorrecao: [],
+            comentarios: ["Plano de ação corretivo gerado automaticamente pelo sistema de auditoria 5S."],
+            historico: [
+              { data: auditDate, usuario: auditorName, acao: "Criação", detalhes: "Criado automaticamente por desvio em auditoria" }
+            ]
+          });
+        }
       }
 
       updatedItens.push(itemToSave);

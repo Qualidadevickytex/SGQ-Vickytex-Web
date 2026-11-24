@@ -351,8 +351,11 @@ export const Auditorias5SComponent: React.FC<Auditorias5SProps> = ({
               requisitos={requisitos}
               classificacoes={classificacoes}
               config={config}
+              ciclos={ciclos}
               itens={itens}
+              planos={planos5S}
               personalizacao={personalizacao}
+              onNavigateToPlanos={() => setMenu('planos')}
             />
           )}
 

@@ -181,6 +181,24 @@ const mergePhotosWithPending = (remotePhotos: Fotografia5S[]): Fotografia5S[] =>
   return Array.from(map.values());
 };
 
+const sanitizeLegacyAutoDeadlines = (plans: PlanoAcao5S[]): { cleaned: PlanoAcao5S[]; changed: boolean } => {
+  let changed = false;
+  const cleaned = plans.map(p => {
+    if (!p || typeof p !== 'object') return p;
+    const hasDeadline = typeof p.prazo === 'string' && p.prazo.trim() !== '';
+    const hasOwner = typeof p.responsavel === 'string' && p.responsavel.trim() !== '';
+    const onlyCreationHistory = !Array.isArray(p.historico) || p.historico.length === 0 || p.historico.every(h => h.acao === 'Criação');
+    const hasPhotos = Array.isArray(p.fotosCorrecao) && p.fotosCorrecao.length > 0;
+
+    if (hasDeadline && !hasOwner && p.status === 'Pendente' && onlyCreationHistory && !hasPhotos) {
+      changed = true;
+      return { ...p, prazo: '' };
+    }
+    return p;
+  });
+  return { cleaned, changed };
+};
+
 export const initFiveSStoreSync = () => {
   if (isSubscribed) return;
   isSubscribed = true;
@@ -202,6 +220,13 @@ export const initFiveSStoreSync = () => {
                 SystemSettingsRepository.create({ id: key, data: val }).catch(() => {});
               }
             }
+            if (key === 'sgq_5s_planos' && Array.isArray(val)) {
+              const { cleaned, changed } = sanitizeLegacyAutoDeadlines(val);
+              if (changed) {
+                val = cleaned;
+                SystemSettingsRepository.create({ id: rec.id, items: cleaned }).catch(() => {});
+              }
+            }
             inMemoryStore[key] = val;
             notifyListeners(key, val);
           }
@@ -215,8 +240,15 @@ export const initFiveSStoreSync = () => {
       if (rec.id.startsWith('sgq_5s_') || rec.id.startsWith('fives_')) {
         const key = rec.id.startsWith('fives_') ? `sgq_5s_${rec.id.replace('fives_', '')}` : rec.id;
         if (key === 'sgq_5s_fotos' || key === 'sgq_5s_photos') return;
-        const val = rec.items !== undefined ? rec.items : rec.data;
+        let val = rec.items !== undefined ? rec.items : rec.data;
         if (val !== undefined) {
+          if (key === 'sgq_5s_planos' && Array.isArray(val)) {
+            const { cleaned, changed } = sanitizeLegacyAutoDeadlines(val);
+            if (changed) {
+              val = cleaned;
+              SystemSettingsRepository.create({ id: rec.id, items: cleaned }).catch(() => {});
+            }
+          }
           inMemoryStore[key] = val;
           notifyListeners(key, val);
         }

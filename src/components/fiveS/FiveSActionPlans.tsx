@@ -1,5 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
+import { UserRepository } from '../../services/database/repositories/user.repository';
+import { UserAccount } from '../../types/user';
 import { 
   Search, 
   X, 
@@ -67,15 +69,89 @@ export const FiveSActionPlans: React.FC<FiveSActionPlansProps> = ({
   const [viewMode, setViewMode] = useState<'lista' | 'cards'>('lista');
 
   // Editing Action Plan modal
+  const [registeredUsers, setRegisteredUsers] = useState<UserAccount[]>([]);
   const [editingPlan, setEditingPlan] = useState<PlanoAcao5S | null>(null);
-  const [planDesc, setPlanDesc] = useState('');
+  const [planDesvio, setPlanDesvio] = useState('');
+  const [planAction, setPlanAction] = useState('');
   const [planResp, setPlanResp] = useState('');
+  const [planRespId, setPlanRespId] = useState('');
+  const [planRespEmail, setPlanRespEmail] = useState('');
   const [planDeadline, setPlanDeadline] = useState('');
   const [planStatus, setPlanStatus] = useState<'Pendente' | 'Em Andamento' | 'Concluído' | 'Atrasado'>('Pendente');
   const [planConclusionDate, setPlanConclusionDate] = useState('');
   const [newComment, setNewComment] = useState('');
   const [correctionPhotos, setCorrectionPhotos] = useState<string[]>([]);
   const [isLiveCameraOpen, setIsLiveCameraOpen] = useState(false);
+
+  useEffect(() => {
+    UserRepository.findAll().then((res) => {
+      if (res.success && Array.isArray(res.data)) {
+        setRegisteredUsers(res.data);
+      }
+    }).catch(() => {});
+
+    const unsub = UserRepository.subscribe((items) => {
+      if (Array.isArray(items)) {
+        setRegisteredUsers(items);
+      }
+    });
+    return () => unsub();
+  }, []);
+
+  const selectableUsers = useMemo(() => {
+    return [...registeredUsers]
+      .filter(u => u && u.status !== 'Inativo' && (u.name || u.email))
+      .sort((a, b) => (a.name || a.email).localeCompare(b.name || b.email, 'pt-BR'));
+  }, [registeredUsers]);
+
+  const findMatchedUser = (plan: PlanoAcao5S): UserAccount | undefined => {
+    const respLower = (plan.responsavel || '').trim().toLowerCase();
+    const emailLower = (plan.responsavelEmail || '').trim().toLowerCase();
+    return registeredUsers.find(u =>
+      (plan.responsavelId && u.id === plan.responsavelId) ||
+      (emailLower && u.email?.trim().toLowerCase() === emailLower) ||
+      (respLower && (u.email?.trim().toLowerCase() === respLower || u.name?.trim().toLowerCase() === respLower))
+    );
+  };
+
+  const resolvePlanOwnerDisplay = (plan: PlanoAcao5S) => {
+    const matched = findMatchedUser(plan);
+    const name = matched?.name || plan.responsavel || '';
+    const email = plan.responsavelEmail || matched?.email || (plan.responsavel?.includes('@') ? plan.responsavel : '');
+    return {
+      name,
+      email: email && email.toLowerCase() !== name.toLowerCase() ? email : ''
+    };
+  };
+
+  const resolvePlanTexts = (plan: PlanoAcao5S) => {
+    const autoPrefix = 'Desvio identificado no requisito ';
+    if (plan.desvioApontado !== undefined || plan.acaoCorretiva !== undefined) {
+      return {
+        desvio: plan.desvioApontado || plan.descricao,
+        acao: plan.acaoCorretiva ?? ''
+      };
+    }
+    if ((plan.descricao || '').startsWith(autoPrefix)) {
+      return {
+        desvio: plan.descricao,
+        acao: ''
+      };
+    }
+    const req = requisitos.find(r => r.id === plan.requisitoId);
+    const auditItem = itens.find(it => it.auditoriaId === plan.auditoriaId && it.requisitoId === plan.requisitoId);
+    if (req) {
+      const reconstructed = `Desvio identificado no requisito ${req.codigo}: ${req.descricao}. Observação: ${auditItem?.observacoes || 'Sem observações'}`;
+      return {
+        desvio: reconstructed,
+        acao: plan.descricao || ''
+      };
+    }
+    return {
+      desvio: plan.descricao,
+      acao: ''
+    };
+  };
 
   // Setores atrelados ao usuário logado (setor primário, setores adicionais e matriz de acessos 5S)
   const userTiedSectors = React.useMemo(() => {
@@ -151,10 +227,27 @@ export const FiveSActionPlans: React.FC<FiveSActionPlansProps> = ({
   const [confirmDeleteCommentIdx, setConfirmDeleteCommentIdx] = useState<number | null>(null);
 
   const handleOpenPlanModal = (plan: PlanoAcao5S) => {
+    const { desvio, acao } = resolvePlanTexts(plan);
     setEditingPlan(plan);
-    setPlanDesc(plan.descricao);
-    setPlanResp(plan.responsavel);
-    setPlanDeadline(plan.prazo);
+    setPlanDesvio(desvio);
+    setPlanAction(acao);
+
+    const matched = findMatchedUser(plan);
+    if (matched) {
+      setPlanRespId(matched.id || matched.email);
+      setPlanResp(matched.name || plan.responsavel);
+      setPlanRespEmail(matched.email || plan.responsavelEmail || '');
+    } else if (plan.responsavel?.trim()) {
+      setPlanRespId(`legacy:${plan.responsavel}`);
+      setPlanResp(plan.responsavel);
+      setPlanRespEmail(plan.responsavelEmail || (plan.responsavel.includes('@') ? plan.responsavel : ''));
+    } else {
+      setPlanRespId('');
+      setPlanResp('');
+      setPlanRespEmail('');
+    }
+
+    setPlanDeadline(plan.prazo || '');
     setPlanStatus(plan.status);
     setPlanConclusionDate(plan.dataConclusao || '');
     setCorrectionPhotos(plan.fotosCorrecao || []);
@@ -212,21 +305,28 @@ export const FiveSActionPlans: React.FC<FiveSActionPlansProps> = ({
       return;
     }
 
-    if (!planResp.trim()) {
-      alert("Por favor, preencha o campo obrigatório 'E-mail do Responsável'.");
+    if (planStatus === 'Concluído' && !planAction.trim()) {
+      alert("Por favor, preencha a Ação Corretiva Descrita antes de concluir o plano.");
       return;
     }
 
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(planResp.trim())) {
-      alert("Por favor, informe um endereço de e-mail válido para o responsável.");
+    if (!planResp.trim()) {
+      alert("Por favor, selecione o responsável pela ação.");
       return;
     }
+
+    const trimmedEmail = planRespEmail.trim();
+    const resolvedUserId = planRespId && !planRespId.startsWith('legacy:') ? planRespId : undefined;
+    const fixedDesvio = planDesvio || resolvePlanTexts(editingPlan).desvio;
 
     const updatedPlan: PlanoAcao5S = {
       ...editingPlan,
-      descricao: planDesc.trim(),
+      descricao: fixedDesvio,
+      desvioApontado: fixedDesvio,
+      acaoCorretiva: planAction.trim(),
       responsavel: planResp.trim(),
+      responsavelId: resolvedUserId,
+      responsavelEmail: trimmedEmail || undefined,
       prazo: planDeadline,
       status: planStatus,
       dataConclusao: planStatus === 'Concluído' ? (planConclusionDate || new Date().toISOString().split('T')[0]) : undefined,
@@ -260,9 +360,14 @@ export const FiveSActionPlans: React.FC<FiveSActionPlansProps> = ({
     const req = requisitos.find(r => r.id === p.requisitoId);
     const reqCode = req?.codigo || '';
     const sectorName = audit.setor || '';
+    const owner = resolvePlanOwnerDisplay(p);
+    const texts = resolvePlanTexts(p);
 
-    const matchSearch = p.descricao.toLowerCase().includes(searchTerm.toLowerCase()) || 
+    const matchSearch = texts.desvio.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                        texts.acao.toLowerCase().includes(searchTerm.toLowerCase()) ||
                         p.responsavel.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                        owner.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                        owner.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
                         reqCode.toLowerCase().includes(searchTerm.toLowerCase()) ||
                         sectorName.toLowerCase().includes(searchTerm.toLowerCase());
     
@@ -447,7 +552,7 @@ export const FiveSActionPlans: React.FC<FiveSActionPlansProps> = ({
                 <thead className="bg-slate-50 dark:bg-slate-950 text-slate-500 font-bold border-b border-slate-100 dark:border-slate-800 uppercase text-[10px] tracking-wider">
                   <tr>
                     <th className="p-3">Requisito / Senso</th>
-                    <th className="p-3">Descrição da Ação</th>
+                    <th className="p-3">Desvio / Ação Corretiva</th>
                     <th className="p-3">Setor</th>
                     <th className="p-3">Responsável</th>
                     <th className="p-3">Prazo</th>
@@ -477,21 +582,49 @@ export const FiveSActionPlans: React.FC<FiveSActionPlansProps> = ({
                             <span className="block text-[10px] text-slate-400 mt-0.5 line-clamp-1">{req?.nome}</span>
                           </td>
                           <td className="p-3 max-w-[320px]">
-                            <p className="font-bold text-slate-800 dark:text-slate-200 line-clamp-2">{plan.descricao}</p>
-                            <span className="text-[10px] text-slate-400 font-mono">Ref: {audit?.codigo}</span>
+                            {(() => {
+                              const texts = resolvePlanTexts(plan);
+                              return (
+                                <>
+                                  <p className="font-bold text-slate-800 dark:text-slate-200 line-clamp-2">{texts.desvio}</p>
+                                  {texts.acao ? (
+                                    <p className="text-[11px] text-emerald-700 dark:text-emerald-400 font-medium line-clamp-1 mt-0.5">
+                                      <span className="font-bold">Ação:</span> {texts.acao}
+                                    </p>
+                                  ) : (
+                                    <p className="text-[10px] text-amber-600 dark:text-amber-400 italic mt-0.5">
+                                      Ação corretiva pendente de preenchimento
+                                    </p>
+                                  )}
+                                  <span className="text-[10px] text-slate-400 font-mono block mt-0.5">Ref: {audit?.codigo}</span>
+                                </>
+                              );
+                            })()}
                           </td>
                           <td className="p-3 font-semibold text-slate-700 dark:text-slate-300">
                             {audit?.setor || 'Geral'}
                           </td>
                           <td className="p-3">
-                            {plan.responsavel ? (
-                              <span className="font-semibold text-slate-800 dark:text-slate-200">{plan.responsavel}</span>
-                            ) : (
-                              <span className="text-amber-500 font-bold italic text-[11px]">Não definido</span>
-                            )}
+                            {(() => {
+                              const owner = resolvePlanOwnerDisplay(plan);
+                              return owner.name ? (
+                                <div>
+                                  <span className="font-semibold text-slate-800 dark:text-slate-200 block">{owner.name}</span>
+                                  {owner.email && (
+                                    <span className="text-[10px] text-slate-400 font-mono block">{owner.email}</span>
+                                  )}
+                                </div>
+                              ) : (
+                                <span className="text-amber-500 font-bold italic text-[11px]">Não definido</span>
+                              );
+                            })()}
                           </td>
                           <td className="p-3 font-mono font-bold text-slate-700 dark:text-slate-300">
-                            {plan.prazo}
+                            {plan.prazo ? (
+                              plan.prazo.includes('-') ? plan.prazo.split('-').reverse().join('/') : plan.prazo
+                            ) : (
+                              <span className="font-sans text-amber-500 font-bold italic text-[11px]">Não definido</span>
+                            )}
                           </td>
                           <td className="p-3">
                             <div className="flex items-center gap-1.5 flex-wrap">
@@ -569,18 +702,45 @@ export const FiveSActionPlans: React.FC<FiveSActionPlansProps> = ({
                         </div>
                       </div>
 
-                      <h4 className="text-xs font-bold text-slate-800 dark:text-slate-100 line-clamp-2">
-                        {plan.descricao}
-                      </h4>
+                      {(() => {
+                        const texts = resolvePlanTexts(plan);
+                        return (
+                          <div className="space-y-1.5">
+                            <h4 className="text-xs font-bold text-slate-800 dark:text-slate-100 line-clamp-2">
+                              {texts.desvio}
+                            </h4>
+                            {texts.acao ? (
+                              <p className="text-[11px] text-emerald-700 dark:text-emerald-400 bg-emerald-50/70 dark:bg-emerald-950/25 border border-emerald-100 dark:border-emerald-900/40 rounded-md px-2 py-1 line-clamp-2">
+                                <span className="font-bold">Ação:</span> {texts.acao}
+                              </p>
+                            ) : (
+                              <p className="text-[10px] text-amber-600 dark:text-amber-400 italic">
+                                Ação corretiva pendente de preenchimento
+                              </p>
+                            )}
+                          </div>
+                        );
+                      })()}
 
                       <div className="text-[11px] text-slate-400 space-y-1 font-sans">
                         <p>Setor: <span className="font-semibold text-slate-600 dark:text-slate-300">{audit?.setor || 'Geral'}</span></p>
-                        <p>Responsável: {plan.responsavel ? (
-                          <span className="font-semibold text-slate-600 dark:text-slate-300">{plan.responsavel}</span>
+                        <p>Responsável: {(() => {
+                          const owner = resolvePlanOwnerDisplay(plan);
+                          return owner.name ? (
+                            <span className="font-semibold text-slate-600 dark:text-slate-300">
+                              {owner.name}{owner.email ? ` (${owner.email})` : ''}
+                            </span>
+                          ) : (
+                            <span className="text-amber-500 font-bold italic">Não definido</span>
+                          );
+                        })()}</p>
+                        <p>Prazo Limite: {plan.prazo ? (
+                          <span className="font-semibold text-slate-600 dark:text-slate-300 font-mono">
+                            {plan.prazo.includes('-') ? plan.prazo.split('-').reverse().join('/') : plan.prazo}
+                          </span>
                         ) : (
-                          <span className="text-amber-500 font-bold italic">Não definido (Obrigatório)</span>
+                          <span className="text-amber-500 font-bold italic">Não definido</span>
                         )}</p>
-                        <p>Prazo Limite: <span className="font-semibold text-slate-600 dark:text-slate-300 font-mono">{plan.prazo}</span></p>
                       </div>
                     </div>
 
@@ -776,44 +936,80 @@ export const FiveSActionPlans: React.FC<FiveSActionPlansProps> = ({
               )}
 
               <div className="space-y-1 bg-slate-50 dark:bg-slate-950 p-3 rounded-lg border border-slate-100 dark:border-slate-850">
-                <span className="text-[9px] uppercase font-bold text-slate-400 block">Desvio Apontado</span>
-                <p className="font-bold text-slate-700 dark:text-slate-300 leading-relaxed mt-0.5">{editingPlan.descricao}</p>
+                <span className="text-[9px] uppercase font-bold text-slate-400 block">Desvio Apontado (Auditoria)</span>
+                <p className="font-bold text-slate-700 dark:text-slate-300 leading-relaxed mt-0.5">{planDesvio}</p>
               </div>
 
               <div className="space-y-1">
-                <label className="block text-[10px] font-black text-slate-400 uppercase">Ação Corretiva Descrita</label>
+                <label className="block text-[10px] font-black text-slate-400 uppercase">
+                  Ação Corretiva Descrita {planStatus === 'Concluído' && <span className="text-rose-500">*</span>}
+                </label>
                 <textarea
-                  required
-                  placeholder="Descreva detalhadamente a ação corretiva que será tomada..."
-                  value={planDesc}
-                  onChange={(e) => setPlanDesc(e.target.value)}
+                  required={planStatus === 'Concluído'}
+                  placeholder="Descreva detalhadamente a ação corretiva que será tomada pelo responsável..."
+                  value={planAction}
+                  onChange={(e) => setPlanAction(e.target.value)}
                   disabled={!hasAccessToFillEditingPlan}
                   rows={3}
                   className="w-full bg-slate-50 dark:bg-slate-800 leading-relaxed border border-slate-200 dark:border-slate-700 rounded-lg p-2 disabled:opacity-60"
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-start">
                 <div className="space-y-1">
                   <label className="block text-[10px] font-black text-slate-400 uppercase">
-                    E-mail do Responsável <span className="text-rose-500">*</span>
+                    Responsável <span className="text-rose-500">*</span>
                   </label>
-                  <input
-                    type="email"
+                  <select
                     required
-                    placeholder="responsavel@vickytex.com.br"
-                    value={planResp}
-                    onChange={(e) => setPlanResp(e.target.value)}
+                    value={planRespId}
+                    onChange={(e) => {
+                      const selectedVal = e.target.value;
+                      setPlanRespId(selectedVal);
+                      const matched = selectableUsers.find(u => (u.id || u.email) === selectedVal);
+                      if (matched) {
+                        setPlanResp(matched.name || matched.email);
+                        setPlanRespEmail(matched.email || '');
+                      } else {
+                        setPlanResp('');
+                        setPlanRespEmail('');
+                      }
+                    }}
                     disabled={!hasAccessToFillEditingPlan}
-                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-2 font-semibold disabled:opacity-60 placeholder:text-slate-400 placeholder:font-normal"
-                  />
+                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-2 font-semibold text-slate-800 dark:text-slate-100 disabled:opacity-60 cursor-pointer"
+                  >
+                    <option value="">Selecionar usuário cadastrado...</option>
+                    {planRespId.startsWith('legacy:') && planResp && (
+                      <option value={planRespId}>{planResp} (Registro anterior)</option>
+                    )}
+                    {selectableUsers.map(u => (
+                      <option key={u.id || u.email} value={u.id || u.email}>
+                        {u.name || u.email}{u.sector ? ` · ${u.sector}` : ''}
+                      </option>
+                    ))}
+                  </select>
+                  {planRespId && (
+                    <p className="text-[10px] text-slate-500 dark:text-slate-400 truncate">
+                      E-mail vinculado: <span className="font-mono text-slate-600 dark:text-slate-300">{planRespEmail || 'Não cadastrado'}</span>
+                    </p>
+                  )}
                 </div>
 
                 <div className="space-y-1">
-                  <label className="block text-[10px] font-black text-slate-400 uppercase">Prazo Limite</label>
+                  <div className="flex items-center justify-between">
+                    <label className="block text-[10px] font-black text-slate-400 uppercase">Prazo Limite</label>
+                    {hasAccessToFillEditingPlan && planDeadline && (
+                      <button
+                        type="button"
+                        onClick={() => setPlanDeadline('')}
+                        className="text-[10px] font-bold text-slate-400 hover:text-rose-500 transition-colors cursor-pointer"
+                      >
+                        Limpar
+                      </button>
+                    )}
+                  </div>
                   <input
                     type="date"
-                    required
                     value={planDeadline}
                     onChange={(e) => setPlanDeadline(e.target.value)}
                     disabled={!hasAccessToFillEditingPlan}
