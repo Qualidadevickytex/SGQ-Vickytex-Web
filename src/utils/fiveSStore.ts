@@ -181,6 +181,60 @@ const mergePhotosWithPending = (remotePhotos: Fotografia5S[]): Fotografia5S[] =>
   return Array.from(map.values());
 };
 
+export const getLocalTodayIso = (offsetDays = 0): string => {
+  const d = new Date();
+  if (offsetDays !== 0) {
+    d.setDate(d.getDate() + offsetDays);
+  }
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+};
+
+export const isPlanOverdue = (plan: PlanoAcao5S, todayIso = getLocalTodayIso()): boolean => {
+  if (!plan || plan.status === 'Concluído') return false;
+  const deadline = typeof plan.prazo === 'string' ? plan.prazo.trim() : '';
+  return deadline !== '' && deadline < todayIso;
+};
+
+export const getEffectivePlanStatus = (
+  plan: PlanoAcao5S,
+  todayIso = getLocalTodayIso()
+): PlanoAcao5S['status'] => {
+  if (plan.status === 'Concluído') return 'Concluído';
+  if (isPlanOverdue(plan, todayIso)) return 'Atrasado';
+  return plan.status;
+};
+
+const syncOverduePlanStatuses = (
+  plans: PlanoAcao5S[],
+  todayIso = getLocalTodayIso()
+): { synced: PlanoAcao5S[]; changed: boolean } => {
+  let changed = false;
+  const synced = plans.map(p => {
+    if (!p || typeof p !== 'object') return p;
+    if (p.status !== 'Concluído' && p.status !== 'Atrasado' && isPlanOverdue(p, todayIso)) {
+      changed = true;
+      return {
+        ...p,
+        status: 'Atrasado' as const,
+        historico: [
+          ...(Array.isArray(p.historico) ? p.historico : []),
+          {
+            data: todayIso,
+            usuario: 'Sistema',
+            acao: 'Status Automático',
+            detalhes: `Status alterado automaticamente para Atrasado após vencimento do prazo limite (${p.prazo}).`
+          }
+        ]
+      };
+    }
+    return p;
+  });
+  return { synced, changed };
+};
+
 const sanitizeLegacyAutoDeadlines = (plans: PlanoAcao5S[]): { cleaned: PlanoAcao5S[]; changed: boolean } => {
   let changed = false;
   const cleaned = plans.map(p => {
@@ -221,10 +275,11 @@ export const initFiveSStoreSync = () => {
               }
             }
             if (key === 'sgq_5s_planos' && Array.isArray(val)) {
-              const { cleaned, changed } = sanitizeLegacyAutoDeadlines(val);
-              if (changed) {
-                val = cleaned;
-                SystemSettingsRepository.create({ id: rec.id, items: cleaned }).catch(() => {});
+              const { cleaned, changed: cleanedChanged } = sanitizeLegacyAutoDeadlines(val);
+              const { synced, changed: overdueChanged } = syncOverduePlanStatuses(cleaned);
+              if (cleanedChanged || overdueChanged) {
+                val = synced;
+                SystemSettingsRepository.create({ id: rec.id, items: synced }).catch(() => {});
               }
             }
             inMemoryStore[key] = val;
@@ -243,10 +298,11 @@ export const initFiveSStoreSync = () => {
         let val = rec.items !== undefined ? rec.items : rec.data;
         if (val !== undefined) {
           if (key === 'sgq_5s_planos' && Array.isArray(val)) {
-            const { cleaned, changed } = sanitizeLegacyAutoDeadlines(val);
-            if (changed) {
-              val = cleaned;
-              SystemSettingsRepository.create({ id: rec.id, items: cleaned }).catch(() => {});
+            const { cleaned, changed: cleanedChanged } = sanitizeLegacyAutoDeadlines(val);
+            const { synced, changed: overdueChanged } = syncOverduePlanStatuses(cleaned);
+            if (cleanedChanged || overdueChanged) {
+              val = synced;
+              SystemSettingsRepository.create({ id: rec.id, items: synced }).catch(() => {});
             }
           }
           inMemoryStore[key] = val;

@@ -45,7 +45,7 @@ import {
   CicloAuditoria,
   PlanoAcao5S
 } from '../../types/fiveS';
-import { getClassificationForIndex } from '../../utils/fiveSStore';
+import { getClassificationForIndex, getLocalTodayIso } from '../../utils/fiveSStore';
 import { PersonalizacaoGeral } from '../../utils/mockData';
 
 const ACTION_PLAN_COLORS = {
@@ -526,12 +526,8 @@ export const FiveSDashboard: React.FC<FiveSDashboardProps> = ({
   const [planMonthBasis, setPlanMonthBasis] = useState<'auditoria' | 'prazo'>('auditoria');
   const [planListTab, setPlanListTab] = useState<'vencidos' | 'pendentes' | 'vencendo' | 'abertos'>('vencidos');
 
-  const todayIso = useMemo(() => new Date().toISOString().split('T')[0], []);
-  const in7DaysIso = useMemo(() => {
-    const d = new Date();
-    d.setDate(d.getDate() + 7);
-    return d.toISOString().split('T')[0];
-  }, []);
+  const todayIso = getLocalTodayIso(0);
+  const in7DaysIso = getLocalTodayIso(7);
 
   type EffectivePlanStatus = 'Concluído' | 'Em Andamento' | 'Pendente' | 'Prazo Vencido';
 

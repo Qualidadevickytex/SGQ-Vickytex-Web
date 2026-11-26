@@ -21,7 +21,8 @@ import {
   MessageSquare,
   LayoutList,
   LayoutGrid,
-  Trash2
+  Trash2,
+  History
 } from 'lucide-react';
 import { 
   Setor5S, 
@@ -33,6 +34,7 @@ import {
   Senso5S
 } from '../../types/fiveS';
 import { compressImage } from '../../utils/imageCompressor';
+import { getEffectivePlanStatus, getLocalTodayIso } from '../../utils/fiveSStore';
 import { FiveSCameraModal } from './FiveSCameraModal';
 
 interface FiveSActionPlansProps {
@@ -153,6 +155,36 @@ export const FiveSActionPlans: React.FC<FiveSActionPlansProps> = ({
     };
   };
 
+  const getLocalDateTimeStamp = (): string => {
+    const now = new Date();
+    const yyyy = now.getFullYear();
+    const mm = String(now.getMonth() + 1).padStart(2, '0');
+    const dd = String(now.getDate()).padStart(2, '0');
+    const hh = String(now.getHours()).padStart(2, '0');
+    const min = String(now.getMinutes()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd} ${hh}:${min}`;
+  };
+
+  const formatLogDateDisplay = (raw: string): string => {
+    if (!raw) return '-';
+    const [datePart, timePart] = raw.trim().split(' ');
+    const formattedDate = datePart.includes('-') ? datePart.split('-').reverse().join('/') : datePart;
+    return timePart ? `${formattedDate} · ${timePart}` : formattedDate;
+  };
+
+  const formatDeadlineForLog = (raw?: string): string => {
+    if (!raw || !raw.trim()) return 'Sem prazo definido';
+    return raw.includes('-') ? raw.split('-').reverse().join('/') : raw;
+  };
+
+  const truncateForLog = (text: string, max = 120): string => {
+    const clean = text.trim();
+    if (clean.length <= max) return clean;
+    return `${clean.slice(0, max).trim()}...`;
+  };
+
+  const actorName = user?.name || user?.email || currentUserName;
+
   // Setores atrelados ao usuário logado (setor primário, setores adicionais e matriz de acessos 5S)
   const userTiedSectors = React.useMemo(() => {
     const list = new Set<string>();
@@ -247,27 +279,43 @@ export const FiveSActionPlans: React.FC<FiveSActionPlansProps> = ({
       setPlanRespEmail('');
     }
 
+    const todayIso = getLocalTodayIso();
     setPlanDeadline(plan.prazo || '');
-    setPlanStatus(plan.status);
+    setPlanStatus(getEffectivePlanStatus(plan, todayIso));
     setPlanConclusionDate(plan.dataConclusao || '');
     setCorrectionPhotos(plan.fotosCorrecao || []);
     setNewComment('');
     setConfirmDeleteCommentIdx(null);
   };
 
+  const handleDeadlineChange = (newDeadline: string) => {
+    setPlanDeadline(newDeadline);
+    const todayIso = getLocalTodayIso();
+    if (planStatus !== 'Concluído') {
+      if (newDeadline && newDeadline < todayIso) {
+        setPlanStatus('Atrasado');
+      } else if (planStatus === 'Atrasado' && (!newDeadline || newDeadline >= todayIso)) {
+        setPlanStatus(planAction.trim() ? 'Em Andamento' : 'Pendente');
+      }
+    }
+  };
+
   const handleDeleteComment = (idxToDelete: number) => {
     if (!editingPlan) return;
+    const removedComment = editingPlan.comentarios[idxToDelete];
     const updatedComentarios = editingPlan.comentarios.filter((_, i) => i !== idxToDelete);
     const updatedPlan: PlanoAcao5S = {
       ...editingPlan,
       comentarios: updatedComentarios,
       historico: [
-        ...editingPlan.historico,
+        ...(Array.isArray(editingPlan.historico) ? editingPlan.historico : []),
         {
-          data: new Date().toISOString().split('T')[0],
-          usuario: currentUserName,
+          data: getLocalDateTimeStamp(),
+          usuario: actorName,
           acao: "Exclusão de Comentário",
-          detalhes: "Comentário removido do histórico do plano de ação 5S."
+          detalhes: removedComment
+            ? `Comentário removido: "${truncateForLog(removedComment, 100)}"`
+            : "Comentário removido do histórico do plano de ação 5S."
         }
       ]
     };
@@ -305,7 +353,11 @@ export const FiveSActionPlans: React.FC<FiveSActionPlansProps> = ({
       return;
     }
 
-    if (planStatus === 'Concluído' && !planAction.trim()) {
+    const todayIso = getLocalTodayIso();
+    const isOverdueOnSave = planStatus !== 'Concluído' && !!planDeadline && planDeadline < todayIso;
+    const finalStatus: PlanoAcao5S['status'] = isOverdueOnSave ? 'Atrasado' : planStatus;
+
+    if (finalStatus === 'Concluído' && !planAction.trim()) {
       alert("Por favor, preencha a Ação Corretiva Descrita antes de concluir o plano.");
       return;
     }
@@ -317,28 +369,81 @@ export const FiveSActionPlans: React.FC<FiveSActionPlansProps> = ({
 
     const trimmedEmail = planRespEmail.trim();
     const resolvedUserId = planRespId && !planRespId.startsWith('legacy:') ? planRespId : undefined;
-    const fixedDesvio = planDesvio || resolvePlanTexts(editingPlan).desvio;
+    const prevTexts = resolvePlanTexts(editingPlan);
+    const fixedDesvio = planDesvio || prevTexts.desvio;
+    const nextAction = planAction.trim();
+    const nextResp = planResp.trim();
+    const nextConclusionDate = finalStatus === 'Concluído' ? (planConclusionDate || todayIso) : undefined;
+    const trimmedComment = newComment.trim();
+
+    const changeDetails: string[] = [];
+    if (prevTexts.acao.trim() !== nextAction) {
+      if (!prevTexts.acao.trim() && nextAction) {
+        changeDetails.push(`Ação corretiva descrita registrada: "${truncateForLog(nextAction)}"`);
+      } else if (prevTexts.acao.trim() && !nextAction) {
+        changeDetails.push('Ação corretiva descrita removida.');
+      } else {
+        changeDetails.push(`Ação corretiva descrita alterada para: "${truncateForLog(nextAction)}"`);
+      }
+    }
+
+    const prevOwnerDisplay = resolvePlanOwnerDisplay(editingPlan).name || editingPlan.responsavel || '';
+    if (prevOwnerDisplay.trim() !== nextResp) {
+      changeDetails.push(`Responsável alterado de "${prevOwnerDisplay || 'Não definido'}" para "${nextResp}".`);
+    }
+
+    if ((editingPlan.prazo || '') !== planDeadline) {
+      changeDetails.push(`Prazo limite alterado de "${formatDeadlineForLog(editingPlan.prazo)}" para "${formatDeadlineForLog(planDeadline)}".`);
+    }
+
+    const prevEffectiveStatus = getEffectivePlanStatus(editingPlan, todayIso);
+    if (editingPlan.status !== finalStatus || prevEffectiveStatus !== finalStatus) {
+      changeDetails.push(`Status alterado de "${editingPlan.status}" para "${finalStatus}".`);
+    }
+
+    if (finalStatus === 'Concluído' && (editingPlan.dataConclusao || '') !== (nextConclusionDate || '')) {
+      changeDetails.push(`Data de conclusão definida para ${formatDeadlineForLog(nextConclusionDate)}.`);
+    }
+
+    const prevPhotoCount = Array.isArray(editingPlan.fotosCorrecao) ? editingPlan.fotosCorrecao.length : 0;
+    const nextPhotoCount = correctionPhotos.length;
+    if (prevPhotoCount !== nextPhotoCount) {
+      const diff = nextPhotoCount - prevPhotoCount;
+      changeDetails.push(
+        diff > 0
+          ? `Adicionada(s) ${diff} foto(s) de evidência (total: ${nextPhotoCount}).`
+          : `Removida(s) ${Math.abs(diff)} foto(s) de evidência (total: ${nextPhotoCount}).`
+      );
+    }
+
+    if (trimmedComment) {
+      changeDetails.push(`Comentário adicionado: "${truncateForLog(trimmedComment, 100)}"`);
+    }
+
+    const logSummary = changeDetails.length > 0
+      ? changeDetails.map(d => `• ${d}`).join('\n')
+      : '• Registro conferido e salvo novamente sem alterações nos campos.';
 
     const updatedPlan: PlanoAcao5S = {
       ...editingPlan,
       descricao: fixedDesvio,
       desvioApontado: fixedDesvio,
-      acaoCorretiva: planAction.trim(),
-      responsavel: planResp.trim(),
+      acaoCorretiva: nextAction,
+      responsavel: nextResp,
       responsavelId: resolvedUserId,
       responsavelEmail: trimmedEmail || undefined,
       prazo: planDeadline,
-      status: planStatus,
-      dataConclusao: planStatus === 'Concluído' ? (planConclusionDate || new Date().toISOString().split('T')[0]) : undefined,
+      status: finalStatus,
+      dataConclusao: nextConclusionDate,
       fotosCorrecao: correctionPhotos,
-      comentarios: newComment.trim() ? [...editingPlan.comentarios, newComment.trim()] : editingPlan.comentarios,
+      comentarios: trimmedComment ? [...editingPlan.comentarios, trimmedComment] : editingPlan.comentarios,
       historico: [
-        ...editingPlan.historico,
+        ...(Array.isArray(editingPlan.historico) ? editingPlan.historico : []),
         {
-          data: new Date().toISOString().split('T')[0],
-          usuario: currentUserName,
-          acao: "Atualização",
-          detalhes: `Status alterado para ${planStatus}. ${newComment.trim() ? 'Novo comentário adicionado.' : ''}`
+          data: getLocalDateTimeStamp(),
+          usuario: actorName,
+          acao: changeDetails.length > 0 ? "Atualização" : "Revalidação",
+          detalhes: logSummary
         }
       ]
     };
@@ -346,7 +451,7 @@ export const FiveSActionPlans: React.FC<FiveSActionPlansProps> = ({
     const updatedList = planos.map(p => p.id === editingPlan.id ? updatedPlan : p);
     onUpdatePlanos(updatedList);
 
-    onAddLog('Plano de Ação 5S', `Atualizou plano de ação ${editingPlan.id} (${planStatus})`);
+    onAddLog('Plano de Ação 5S', `Atualizou plano de ação ${editingPlan.id} (${finalStatus})`);
     alert("Plano de Ação atualizado com sucesso!");
     setEditingPlan(null);
   };
@@ -371,7 +476,8 @@ export const FiveSActionPlans: React.FC<FiveSActionPlansProps> = ({
                         reqCode.toLowerCase().includes(searchTerm.toLowerCase()) ||
                         sectorName.toLowerCase().includes(searchTerm.toLowerCase());
     
-    const matchStatus = filterStatus === 'TODOS' || p.status === filterStatus;
+    const effectiveStatus = getEffectivePlanStatus(p);
+    const matchStatus = filterStatus === 'TODOS' || effectiveStatus === filterStatus;
     const matchSector = filterSector === 'TODOS' || 
                         audit.setorId === filterSector ||
                         audit.setor === filterSector ||
@@ -619,29 +725,37 @@ export const FiveSActionPlans: React.FC<FiveSActionPlansProps> = ({
                               );
                             })()}
                           </td>
-                          <td className="p-3 font-mono font-bold text-slate-700 dark:text-slate-300">
-                            {plan.prazo ? (
-                              plan.prazo.includes('-') ? plan.prazo.split('-').reverse().join('/') : plan.prazo
-                            ) : (
-                              <span className="font-sans text-amber-500 font-bold italic text-[11px]">Não definido</span>
-                            )}
-                          </td>
-                          <td className="p-3">
-                            <div className="flex items-center gap-1.5 flex-wrap">
-                              <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
-                                plan.status === 'Concluído' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' :
-                                plan.status === 'Em Andamento' ? 'bg-amber-50 text-amber-600 border-amber-100' :
-                                'bg-slate-100 text-slate-500 border-slate-200'
-                              }`}>
-                                {plan.status}
-                              </span>
-                              {isTied && (
-                                <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
-                                  Seu Setor
-                                </span>
-                              )}
-                            </div>
-                          </td>
+                          {(() => {
+                            const effectiveStatus = getEffectivePlanStatus(plan);
+                            return (
+                              <>
+                                <td className={`p-3 font-mono font-bold ${effectiveStatus === 'Atrasado' && plan.prazo ? 'text-rose-600 dark:text-rose-400' : 'text-slate-700 dark:text-slate-300'}`}>
+                                  {plan.prazo ? (
+                                    plan.prazo.includes('-') ? plan.prazo.split('-').reverse().join('/') : plan.prazo
+                                  ) : (
+                                    <span className="font-sans text-amber-500 font-bold italic text-[11px]">Não definido</span>
+                                  )}
+                                </td>
+                                <td className="p-3">
+                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                                      effectiveStatus === 'Concluído' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' :
+                                      effectiveStatus === 'Atrasado' ? 'bg-rose-50 text-rose-600 border-rose-200 dark:bg-rose-950/40 dark:text-rose-400 dark:border-rose-800' :
+                                      effectiveStatus === 'Em Andamento' ? 'bg-amber-50 text-amber-600 border-amber-100' :
+                                      'bg-slate-100 text-slate-500 border-slate-200'
+                                    }`}>
+                                      {effectiveStatus}
+                                    </span>
+                                    {isTied && (
+                                      <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                                        Seu Setor
+                                      </span>
+                                    )}
+                                  </div>
+                                </td>
+                              </>
+                            );
+                          })()}
                           <td className="p-3 text-right">
                             <button
                               onClick={() => handleOpenPlanModal(plan)}
@@ -692,13 +806,19 @@ export const FiveSActionPlans: React.FC<FiveSActionPlansProps> = ({
                               <span>Outro Setor</span>
                             </span>
                           )}
-                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
-                            plan.status === 'Concluído' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' :
-                            plan.status === 'Em Andamento' ? 'bg-amber-50 text-amber-600 border-amber-100' :
-                            'bg-slate-100 text-slate-500 border-slate-200'
-                          }`}>
-                            {plan.status}
-                          </span>
+                          {(() => {
+                            const effectiveStatus = getEffectivePlanStatus(plan);
+                            return (
+                              <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                                effectiveStatus === 'Concluído' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' :
+                                effectiveStatus === 'Atrasado' ? 'bg-rose-50 text-rose-600 border-rose-200 dark:bg-rose-950/40 dark:text-rose-400 dark:border-rose-800' :
+                                effectiveStatus === 'Em Andamento' ? 'bg-amber-50 text-amber-600 border-amber-100' :
+                                'bg-slate-100 text-slate-500 border-slate-200'
+                              }`}>
+                                {effectiveStatus}
+                              </span>
+                            );
+                          })()}
                         </div>
                       </div>
 
@@ -735,7 +855,7 @@ export const FiveSActionPlans: React.FC<FiveSActionPlansProps> = ({
                           );
                         })()}</p>
                         <p>Prazo Limite: {plan.prazo ? (
-                          <span className="font-semibold text-slate-600 dark:text-slate-300 font-mono">
+                          <span className={`font-semibold font-mono ${getEffectivePlanStatus(plan) === 'Atrasado' ? 'text-rose-600 dark:text-rose-400' : 'text-slate-600 dark:text-slate-300'}`}>
                             {plan.prazo.includes('-') ? plan.prazo.split('-').reverse().join('/') : plan.prazo}
                           </span>
                         ) : (
@@ -1001,7 +1121,7 @@ export const FiveSActionPlans: React.FC<FiveSActionPlansProps> = ({
                     {hasAccessToFillEditingPlan && planDeadline && (
                       <button
                         type="button"
-                        onClick={() => setPlanDeadline('')}
+                        onClick={() => handleDeadlineChange('')}
                         className="text-[10px] font-bold text-slate-400 hover:text-rose-500 transition-colors cursor-pointer"
                       >
                         Limpar
@@ -1011,7 +1131,7 @@ export const FiveSActionPlans: React.FC<FiveSActionPlansProps> = ({
                   <input
                     type="date"
                     value={planDeadline}
-                    onChange={(e) => setPlanDeadline(e.target.value)}
+                    onChange={(e) => handleDeadlineChange(e.target.value)}
                     disabled={!hasAccessToFillEditingPlan}
                     className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-2 font-mono font-semibold disabled:opacity-60"
                   />
@@ -1032,6 +1152,11 @@ export const FiveSActionPlans: React.FC<FiveSActionPlansProps> = ({
                     <option value="Concluído">Concluído</option>
                     <option value="Atrasado">Atrasado</option>
                   </select>
+                  {planStatus !== 'Concluído' && !!planDeadline && planDeadline < getLocalTodayIso() && (
+                    <p className="text-[10px] text-rose-600 dark:text-rose-400 font-medium">
+                      Prazo vencido: status atualizado automaticamente para Atrasado.
+                    </p>
+                  )}
                 </div>
 
                 {planStatus === 'Concluído' && (
@@ -1148,6 +1273,59 @@ export const FiveSActionPlans: React.FC<FiveSActionPlansProps> = ({
                   </div>
                 </div>
               )}
+
+              {/* Log de Registro de Alterações */}
+              <div className="space-y-2 pt-3 border-t border-slate-100 dark:border-slate-800">
+                <div className="flex items-center justify-between">
+                  <span className="flex items-center gap-1.5 text-[9px] uppercase font-bold text-slate-400">
+                    <History className="w-3 h-3 text-[#0B3A63] dark:text-sky-400" />
+                    <span>Log de Registro e Alterações ({Array.isArray(editingPlan.historico) ? editingPlan.historico.length : 0})</span>
+                  </span>
+                  <span className="text-[9px] text-slate-400">Mais recentes primeiro</span>
+                </div>
+                {(!Array.isArray(editingPlan.historico) || editingPlan.historico.length === 0) ? (
+                  <p className="text-[11px] text-slate-400 italic bg-slate-50 dark:bg-slate-950/40 p-2.5 rounded-lg border border-slate-100 dark:border-slate-800/80">
+                    Nenhum registro de alteração lançado até o momento.
+                  </p>
+                ) : (
+                  <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                    {[...editingPlan.historico].reverse().map((entry, hIdx) => {
+                      const badgeTone =
+                        entry.acao === 'Criação'
+                          ? 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-800'
+                          : entry.acao === 'Status Automático'
+                            ? 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800'
+                            : entry.acao === 'Exclusão de Comentário'
+                              ? 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800'
+                              : 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800';
+
+                      return (
+                        <div
+                          key={hIdx}
+                          className="bg-slate-50 dark:bg-slate-950/40 p-2.5 rounded-lg border border-slate-100 dark:border-slate-800/80 space-y-1.5"
+                        >
+                          <div className="flex items-center justify-between gap-2 flex-wrap">
+                            <div className="flex items-center gap-1.5 min-w-0">
+                              <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold border uppercase tracking-wide shrink-0 ${badgeTone}`}>
+                                {entry.acao}
+                              </span>
+                              <span className="text-[11px] font-bold text-slate-700 dark:text-slate-200 truncate">
+                                {entry.usuario || 'Sistema'}
+                              </span>
+                            </div>
+                            <span className="text-[10px] font-mono text-slate-400 shrink-0">
+                              {formatLogDateDisplay(entry.data)}
+                            </span>
+                          </div>
+                          <p className="text-[11px] leading-relaxed text-slate-600 dark:text-slate-300 whitespace-pre-line">
+                            {entry.detalhes}
+                          </p>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             </div>
 
             <div className="bg-slate-50 dark:bg-slate-950 p-4 flex justify-end space-x-2 border-t border-slate-150 dark:border-slate-850">
